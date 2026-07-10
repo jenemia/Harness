@@ -11,7 +11,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
     statusCounts[task.status] += 1;
   }
 
-  const readyTasks = overview.tasks.filter((task) => task.status === "Selected" || task.status === "Backlog").length;
+  const readyTasks = overview.tasks.filter((task) => task.status === "Selected").length;
   const blockedTasks = overview.tasks
     .filter((task) => task.status === "Blocked")
     .map((task) => ({ id: task.id, title: task.title, reason: task.blockedReason }));
@@ -71,7 +71,7 @@ function buildSchedulerIssues(overview: ProjectOverview): ProjectHealthReport["s
   }
 
   const readyTasks = overview.tasks
-    .filter((task) => task.status === "Selected" || task.status === "Backlog")
+    .filter((task) => task.status === "Selected")
     .sort((left, right) => left.taskOrder - right.taskOrder || left.createdAt.localeCompare(right.createdAt));
   const workerAgents = overview.agents
     .filter((agent) => agent.role !== "project-manager")

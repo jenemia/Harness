@@ -19,13 +19,14 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
 - Task-level decomposition for turning a parent task into parallel or sequential subtasks.
 - Workflow templates for reusable PM planning role chains.
-- Ready-task scheduler with agent `maxParallel` capacity checks.
+- Selected-task scheduler with agent `maxParallel` capacity checks; Backlog stays as a planning queue until promoted.
 - Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
 - Git worktree per executable task.
 - Harness workspace mode for non-code tasks that do not need Git worktrees.
 - Automatic workspace mode selection for common code, docs, planning, and research task signals.
 - Automatic PM-driven handoff with project-level handoff rules, dynamic fallback routing, and approval gates for risky handoffs, LLM CLI command execution, and merge.
 - PM completion evaluation events before automatic handoffs or Done transitions.
+- Automatic follow-up ticket creation when PM completion review detects next-step or TODO signals in agent output.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
 - Configurable run timeout for command-backed providers.
@@ -134,7 +135,7 @@ Provider commands are a provider-to-command map. Agent-specific `cliCommand` val
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. Dynamic handoffs with risk or error signals pause for human approval before the next agent starts. If no configured or dynamic handoff applies, the task moves to Done.
 
-The provider catalog exposes the active OS platform provider, workspace isolation provider, planning provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including planning and approval capabilities. Project health reports also flag command-backed model backends that do not have an agent override or matching provider command key configured, plus ready tasks that the scheduler cannot start because of dependency, project capacity, or agent capacity gaps.
+The provider catalog exposes the active OS platform provider, workspace isolation provider, planning provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including planning and approval capabilities. Project health reports also flag command-backed model backends that do not have an agent override or matching provider command key configured, plus Selected tasks that the scheduler cannot start because of dependency, project capacity, or agent capacity gaps.
 
 ## Project Templates
 
@@ -164,7 +165,7 @@ Planning mode can be `auto`, `sequential`, or `parallel`. In `auto` mode, the PM
 
 Select a workflow template to make PM planning follow a reusable role chain. Harness seeds `Plan, Build, Review` and `Build and Review` templates, and exposes `/api/workflow-templates` for custom templates.
 
-Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.
+Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start Selected tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.
 
 When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
 
@@ -172,7 +173,7 @@ After a successful run, the PM runtime inspects the latest output and changed fi
 
 Tasks can be paused from the board, task detail drawer, API, or CLI. Paused tasks stay out of scheduler runs until they are resumed back to `Selected`, and pause/resume events are recorded in the task timeline.
 
-Tasks can be moved up or down within their current board column from the board, task detail drawer, API, or `tasks:move`. The scheduler reads the same board order when choosing ready tasks.
+Tasks can be moved up or down within their current board column from the board, task detail drawer, API, or `tasks:move`. The scheduler reads the same board order when choosing Selected work.
 
 Task dependencies can be explicitly waived from the task detail drawer, API, or `tasks:update --waivedDependencies`. Waived dependencies stay visible on the task, but the scheduler no longer blocks on them.
 

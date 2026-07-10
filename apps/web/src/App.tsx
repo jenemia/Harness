@@ -518,7 +518,7 @@ function ProjectHealthPanel({
   const pendingMerges =
     healthReport?.pendingMerges ?? overview.tasks.filter((task) => task.mergeStatus === "pending" || task.mergeStatus === "conflict").length;
   const failedRuns = healthReport?.failedRuns ?? overview.runs.filter((run) => run.status === "failed").length;
-  const readyTasks = healthReport?.readyTasks ?? overview.tasks.filter((task) => task.status === "Selected" || task.status === "Backlog").length;
+  const readyTasks = healthReport?.readyTasks ?? overview.tasks.filter((task) => task.status === "Selected").length;
   const idleAgents = healthReport?.idleAgents ?? overview.agents.filter((agent) => agent.status === "idle").length;
   const unassignedTasks = healthReport?.unassignedTasks ?? overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
   const providerCommandIssues = healthReport?.providerCommandIssues || fallbackProviderCommandIssues;
@@ -613,7 +613,7 @@ function findSchedulerIssues(overview: Overview) {
   }
 
   const readyTasks = overview.tasks
-    .filter((task) => task.status === "Selected" || task.status === "Backlog")
+    .filter((task) => task.status === "Selected")
     .sort((left, right) => left.taskOrder - right.taskOrder || left.createdAt.localeCompare(right.createdAt));
   const workerAgents = overview.agents.filter((agent) => agent.role !== "project-manager");
   const issues: Array<{ taskId: string; title: string; reason: string }> = [];

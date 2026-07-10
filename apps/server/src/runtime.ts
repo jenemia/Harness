@@ -10,6 +10,7 @@ import {
   mapMemory,
   mapRun,
   mapTask,
+  nextTaskOrder,
   now,
   openProjectDb,
   projectHarnessDir
@@ -333,8 +334,8 @@ export async function startReadyTasks(project: ProjectRecord) {
   const db = openProjectDb(project.path);
   try {
     const tasks = db
-      .prepare("SELECT * FROM tasks WHERE status IN (?, ?) ORDER BY task_order ASC, created_at ASC")
-      .all("Selected", "Backlog")
+      .prepare("SELECT * FROM tasks WHERE status = ? ORDER BY task_order ASC, created_at ASC")
+      .all("Selected")
       .map(mapTask);
     const settings = getProjectSettingsFromDb(db);
     const started: string[] = [];
@@ -904,6 +905,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
     message: evaluation.summary,
     metadata: evaluation
   });
+  createAutomaticFollowUps(db, task, completedBy, evaluation);
   if (handoffDecision) {
     const nextAgent = findAgentForHandoff(db, handoffDecision.role, completedBy.id);
     if (!nextAgent) {
@@ -1107,6 +1109,132 @@ function evaluateCompletion(db: DatabaseSync, task: TaskRecord, completedBy: Age
     outputExcerpt: excerpt(output),
     summary: summaryParts.join(" ")
   };
+}
+
+function createAutomaticFollowUps(
+  db: DatabaseSync,
+  sourceTask: TaskRecord,
+  completedBy: AgentRecord,
+  evaluation: ReturnType<typeof evaluateCompletion>
+) {
+  if (!evaluation.runId || !evaluation.signals.includes("follow-up")) {
+    return [];
+  }
+
+  const runRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(evaluation.runId);
+  const run = runRow ? mapRun(runRow) : null;
+  const candidates = parseAutomaticFollowUpCandidates([run?.output, run?.error].filter(Boolean).join("\n"), sourceTask.title);
+  if (!candidates.length) {
+    return [];
+  }
+
+  const tasks = candidates.map((candidate) => insertFollowUpTask(db, sourceTask, candidate));
+  insertEvent(db, {
+    taskId: sourceTask.id,
+    agentId: completedBy.id,
+    type: "followups.created",
+    message: `PM created ${tasks.length} follow-up task(s) from completion output.`,
+    metadata: {
+      runId: evaluation.runId,
+      automatic: true,
+      followUpTaskIds: tasks.map((task) => task.id)
+    }
+  });
+  return tasks;
+}
+
+function insertFollowUpTask(
+  db: DatabaseSync,
+  sourceTask: TaskRecord,
+  candidate: { title: string; description: string }
+): TaskRecord {
+  const timestamp = now();
+  const task: TaskRecord = {
+    id: randomUUID(),
+    title: candidate.title,
+    description: candidate.description,
+    status: "Backlog",
+    priority: "Medium",
+    modelBackend: sourceTask.modelBackend,
+    assigneeAgentId: null,
+    reporter: "pm-agent",
+    parentTaskId: sourceTask.id,
+    dependencyTaskIds: [sourceTask.id],
+    waivedDependencyTaskIds: [],
+    labels: unique(["follow-up", ...sourceTask.labels.filter((label) => label.startsWith("role:"))]),
+    linkedFiles: sourceTask.linkedFiles,
+    acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale.",
+    workspaceMode: sourceTask.workspaceMode,
+    taskOrder: nextTaskOrder(db),
+    branchName: null,
+    worktreePath: null,
+    blockedReason: null,
+    mergeStatus: "none",
+    mergeError: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  db.prepare(`
+    INSERT INTO tasks (
+      id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
+      parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths, acceptance_criteria, workspace_mode,
+      task_order, branch_name, worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    task.id,
+    task.title,
+    task.description,
+    task.status,
+    task.priority,
+    task.modelBackend,
+    task.assigneeAgentId,
+    task.reporter,
+    task.parentTaskId,
+    JSON.stringify(task.dependencyTaskIds),
+    JSON.stringify(task.waivedDependencyTaskIds),
+    JSON.stringify(task.labels),
+    JSON.stringify(task.linkedFiles),
+    task.acceptanceCriteria,
+    task.workspaceMode,
+    task.taskOrder,
+    task.branchName,
+    task.worktreePath,
+    task.blockedReason,
+    task.mergeStatus,
+    task.mergeError,
+    task.createdAt,
+    task.updatedAt
+  );
+
+  insertEvent(db, {
+    taskId: task.id,
+    agentId: null,
+    type: "task.created",
+    message: `${task.title} was created as an automatic follow-up.`,
+    metadata: { sourceTaskId: sourceTask.id, status: task.status, priority: task.priority, automatic: true }
+  });
+  return task;
+}
+
+function parseAutomaticFollowUpCandidates(output: string, sourceTitle: string) {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const candidates = lines
+    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^(todo|follow[- ]?up|next(?: step)?|action item)\s*:\s*/i, "").trim())
+    .filter((line) => line.length >= 8 && /todo|follow|next|fix|add|implement|review|test|update|create|document|action item/i.test(line))
+    .slice(0, 5);
+
+  if (candidates.length === 0 && output.trim()) {
+    candidates.push(`Review follow-up from ${sourceTitle}`);
+  }
+
+  return candidates.map((candidate) => ({
+    title: candidate.length > 90 ? `${candidate.slice(0, 87)}...` : candidate,
+    description: `Automatically created from PM completion review for "${sourceTitle}".\n\n${candidate}`
+  }));
 }
 
 function inferDynamicHandoffRole(
@@ -1465,7 +1593,7 @@ function getDependencyBlocker(db: DatabaseSync, task: TaskRecord) {
 }
 
 function scheduleReadyDependents(project: ProjectRecord, db: DatabaseSync, completedTaskId: string) {
-  const rows = db.prepare("SELECT * FROM tasks WHERE status IN (?, ?, ?)").all("Backlog", "Selected", "Blocked").map(mapTask);
+  const rows = db.prepare("SELECT * FROM tasks WHERE status IN (?, ?)").all("Selected", "Blocked").map(mapTask);
   const unblocked: string[] = [];
   for (const task of rows) {
     if (!task.dependencyTaskIds.includes(completedTaskId)) {
