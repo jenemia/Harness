@@ -30,6 +30,7 @@ import {
   seedProjectFromTemplate,
   unregisterProject,
   updateGlobalSettings,
+  updateProjectRecord,
   updateProjectSettings
 } from "./db.js";
 import { createPlan } from "./planner.js";
@@ -168,6 +169,16 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "DELETE" && childPath === "") {
         const removed = unregisterProject(project.id);
         sendJson(res, { project: removed, projects: listProjectsWithSummaries() });
+        return;
+      }
+
+      if (req.method === "PATCH" && childPath === "") {
+        const body = await readBody<{ name?: string; path?: string }>(req);
+        const updated = updateProjectRecord(project.id, {
+          name: body.name,
+          path: body.path ? path.resolve(body.path) : undefined
+        });
+        sendJson(res, { project: updated, projects: listProjectsWithSummaries() });
         return;
       }
 

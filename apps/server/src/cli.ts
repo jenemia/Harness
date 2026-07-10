@@ -27,6 +27,7 @@ import {
   seedProjectFromTemplate,
   unregisterProject,
   updateGlobalSettings,
+  updateProjectRecord,
   updateProjectSettings
 } from "./db.js";
 import { createPlan, type PlanningMode } from "./planner.js";
@@ -49,6 +50,7 @@ const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Re
 const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
   "projects:register": registerProjectCommand,
+  "projects:update": updateProjectCommand,
   "projects:unregister": unregisterProjectCommand,
   "projects:overview": overviewCommand,
   "projects:report": reportCommand,
@@ -131,6 +133,16 @@ function unregisterProjectCommand(args: string[]) {
   const options = parseOptions(args);
   const projectId = getRequiredOption(options, "project");
   const project = unregisterProject(projectId);
+  return { project, projects: listProjectsWithSummaries() };
+}
+
+function updateProjectCommand(args: string[]) {
+  const options = parseOptions(args);
+  const projectId = getRequiredOption(options, "project");
+  const project = updateProjectRecord(projectId, {
+    name: options.name,
+    path: options.path ? path.resolve(options.path) : undefined
+  });
   return { project, projects: listProjectsWithSummaries() };
 }
 
@@ -1150,6 +1162,7 @@ function printHelp() {
 Usage:
   pnpm --filter @harness/server cli projects:list
   pnpm --filter @harness/server cli projects:register --path <folder> [--name <name>] [--seedDefaults false] [--projectTemplate <id>]
+  pnpm --filter @harness/server cli projects:update --project <projectId> [--name <name>] [--path <folder>]
   pnpm --filter @harness/server cli projects:unregister --project <projectId>
   pnpm --filter @harness/server cli projects:overview --project <projectId>
   pnpm --filter @harness/server cli projects:report --project <projectId>

@@ -1122,6 +1122,38 @@ export function unregisterProject(projectId: string): ProjectRecord {
   }
 }
 
+export function updateProjectRecord(projectId: string, input: { name?: string; path?: string }): ProjectRecord {
+  const db = openGlobalDb();
+  try {
+    const row = db
+      .prepare("SELECT id, name, path, created_at, updated_at FROM projects WHERE id = ?")
+      .get(projectId);
+    if (!row) {
+      throw new Error("Project not found.");
+    }
+
+    const current = mapProject(row);
+    const updatedAt = now();
+    const next: ProjectRecord = {
+      ...current,
+      name: input.name?.trim() || current.name,
+      path: input.path?.trim() || current.path,
+      updatedAt
+    };
+
+    db.prepare("UPDATE projects SET name = ?, path = ?, updated_at = ? WHERE id = ?").run(
+      next.name,
+      next.path,
+      next.updatedAt,
+      next.id
+    );
+
+    return next;
+  } finally {
+    db.close();
+  }
+}
+
 export function getProjectOverview(project: ProjectRecord): ProjectOverview {
   const db = openProjectDb(project.path);
   try {

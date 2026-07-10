@@ -166,6 +166,15 @@ export function App() {
               setOverview(null);
             }
           }}
+          onUpdated={async (projectId, payload) => {
+            const response = await api<{ project: Project; projects: ProjectListItem[] }>(`/api/projects/${projectId}`, {
+              method: "PATCH",
+              body: JSON.stringify(payload)
+            });
+            setProjects(response.projects);
+            setSelectedProjectId(response.project.id);
+            await loadOverview(response.project.id);
+          }}
           runAction={runAction}
         />
       </aside>
@@ -492,10 +501,13 @@ function ProjectPanel(props: {
   onSelect: (id: string) => void;
   onCreated: (project: Project) => Promise<void>;
   onRemoved: (id: string) => Promise<void>;
+  onUpdated: (id: string, payload: { name?: string; path?: string }) => Promise<void>;
   runAction: (action: () => Promise<void>) => Promise<void>;
 }) {
   const [projectPath, setProjectPath] = useState("");
   const [projectTemplateId, setProjectTemplateId] = useState("");
+  const [relinkPath, setRelinkPath] = useState("");
+  const selectedProject = props.projects.find((project) => project.id === props.selectedProjectId) || null;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -511,6 +523,17 @@ function ProjectPanel(props: {
       setProjectPath("");
       setProjectTemplateId("");
       await props.onCreated(data.project);
+    });
+  }
+
+  async function relink(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedProject) {
+      return;
+    }
+    await props.runAction(async () => {
+      await props.onUpdated(selectedProject.id, { path: relinkPath });
+      setRelinkPath("");
     });
   }
 
@@ -559,6 +582,19 @@ function ProjectPanel(props: {
           <span>Add</span>
         </button>
       </form>
+      {selectedProject && (
+        <form className="stack-form relink-form" onSubmit={relink}>
+          <input
+            value={relinkPath}
+            onChange={(event) => setRelinkPath(event.target.value)}
+            placeholder="Relink selected project path"
+          />
+          <button className="secondary-button" type="submit">
+            <Link2 size={16} />
+            <span>Relink</span>
+          </button>
+        </form>
+      )}
     </section>
   );
 }

@@ -50,6 +50,7 @@ The server package also exposes a local JSON CLI for headless automation:
 ```bash
 pnpm cli projects:list
 pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
+pnpm cli projects:update --project <projectId> --path ./moved-project --name "Moved Project"
 pnpm cli projects:unregister --project <projectId>
 pnpm cli projects:report --project <projectId>
 pnpm cli settings:update --defaultModelBackend codex --providerCommands '{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
@@ -104,6 +105,8 @@ Agent and workflow templates can also be managed headlessly with `templates:agen
 Projects can be removed from the Harness registry with the sidebar remove button, `DELETE /api/projects/:projectId`, or `projects:unregister`. This only removes the app registry entry; the project folder and `.harness/` data stay on disk.
 
 Project lists include folder and `.harness/harness.db` availability so moved or deleted folders can be spotted without recreating missing project data.
+
+Moved folders can be re-linked with the sidebar relink form, `PATCH /api/projects/:projectId`, or `projects:update`. Updating a registry path does not create a new folder.
 
 ## Agents
 
