@@ -2656,7 +2656,7 @@ function SettingsPanel(props: {
         <textarea
           value={globalProviderCommandsText}
           onChange={(event) => setGlobalProviderCommandsText(event.target.value)}
-          placeholder='{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
+          placeholder='{"node-darwin.codex":"codex exec \"$HARNESS_PROMPT_FILE\"","codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
         />
         <button className="secondary-button" type="submit">
           <Settings size={16} />
@@ -2731,7 +2731,7 @@ function SettingsPanel(props: {
         <textarea
           value={projectProviderCommandsText}
           onChange={(event) => setProjectProviderCommandsText(event.target.value)}
-          placeholder='{"shell":"node ./scripts/agent-runner.js"}'
+          placeholder='{"darwin.shell":"node ./scripts/agent-runner.js","shell":"node ./scripts/agent-runner.js"}'
         />
         <button className="secondary-button" type="submit">
           <Settings size={16} />

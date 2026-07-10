@@ -1407,7 +1407,17 @@ function getEffectiveModelBackend(agent: AgentRecord, task: TaskRecord) {
 }
 
 function getEffectiveProviderCommand(agent: AgentRecord, modelBackend: string, settings: ProjectSettings) {
-  return agent.cliCommand || settings.providerCommands[modelBackend] || null;
+  if (agent.cliCommand) {
+    return agent.cliCommand;
+  }
+  const platform = providers.platform();
+  const commandKeys = [
+    `${platform.id}.${modelBackend}`,
+    `${platform.platform}.${modelBackend}`,
+    modelBackend
+  ];
+  const matchingKey = commandKeys.find((key) => settings.providerCommands[key]?.trim());
+  return matchingKey ? settings.providerCommands[matchingKey] : null;
 }
 
 function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {

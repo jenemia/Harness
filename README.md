@@ -71,7 +71,7 @@ pnpm cli projects:init-git --project <projectId>
 pnpm cli projects:update --project <projectId> --path ./moved-project --name "Moved Project"
 pnpm cli projects:unregister --project <projectId>
 pnpm cli projects:report --project <projectId>
-pnpm cli settings:update --defaultModelBackend codex --largePlanTaskThreshold 12 --providerCommands '{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
+pnpm cli settings:update --defaultModelBackend codex --largePlanTaskThreshold 12 --providerCommands '{"node-darwin.codex":"codex exec \"$HARNESS_PROMPT_FILE\"","codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
 pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --largePlanTaskThreshold 8 --requireCommandApproval true
 pnpm cli providers:list
 pnpm cli templates:projects
@@ -121,7 +121,7 @@ Use the Settings panel, `/api/settings`, or `settings:get` and `settings:update`
 
 Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel, `PATCH /api/projects/:projectId/settings`, or `project-settings:get` and `project-settings:update` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, run timeout, PM plan auto-start behavior, large plan confirmation threshold, command approval policy, and PM handoff rules.
 
-Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
+Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. Project/global command lookup checks OS-specific keys first, then the model key: `<platformProviderId>.<modelBackend>`, `<nodePlatform>.<modelBackend>`, then `<modelBackend>` such as `node-darwin.codex`, `darwin.codex`, and `codex`. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. Dynamic handoffs with risk or error signals pause for human approval before the next agent starts. If no configured or dynamic handoff applies, the task moves to Done.
 
