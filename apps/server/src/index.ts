@@ -363,6 +363,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       description: input.description?.trim() || "",
       status: input.status || "Backlog",
       priority: input.priority || "Medium",
+      modelBackend: input.modelBackend?.trim() || null,
       assigneeAgentId: input.assigneeAgentId || null,
       reporter: input.reporter || "human",
       parentTaskId: input.parentTaskId || null,
@@ -380,16 +381,17 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
 
     db.prepare(`
       INSERT INTO tasks (
-        id, title, description, status, priority, assignee_agent_id, reporter,
+        id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
         parent_task_id, dependency_task_ids, labels, acceptance_criteria, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
       task.description,
       task.status,
       task.priority,
+      task.modelBackend,
       task.assigneeAgentId,
       task.reporter,
       task.parentTaskId,
@@ -437,6 +439,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
           description = COALESCE(?, description),
           status = COALESCE(?, status),
           priority = COALESCE(?, priority),
+          model_backend = ?,
           assignee_agent_id = ?,
           parent_task_id = ?,
           dependency_task_ids = COALESCE(?, dependency_task_ids),
@@ -450,6 +453,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       input.description?.trim() || null,
       status || null,
       input.priority || null,
+      input.modelBackend === undefined ? (existing as { model_backend: string | null }).model_backend : input.modelBackend?.trim() || null,
       input.assigneeAgentId === undefined ? (existing as { assignee_agent_id: string | null }).assignee_agent_id : input.assigneeAgentId,
       input.parentTaskId === undefined ? (existing as { parent_task_id: string | null }).parent_task_id : input.parentTaskId,
       Array.isArray(input.dependencyTaskIds) ? JSON.stringify(input.dependencyTaskIds) : null,

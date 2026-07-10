@@ -240,7 +240,7 @@ h3 {
 
 .task-composer {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 170px 190px 170px minmax(180px, 220px) 120px;
+  grid-template-columns: minmax(210px, 1fr) 170px 170px 190px 170px minmax(170px, 220px) 120px;
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -317,6 +317,7 @@ h3 {
 .issue-key,
 .priority-pill,
 .agent-chip,
+.backend-chip,
 .branch-chip,
 .dependency-chip,
 .label-chip,
@@ -346,6 +347,7 @@ h3 {
 }
 
 .agent-chip,
+.backend-chip,
 .branch-chip,
 .dependency-chip,
 .label-chip,
@@ -358,6 +360,11 @@ h3 {
 .agent-chip.busy {
   background: #fff0b3;
   color: #7f5f01;
+}
+
+.backend-chip {
+  background: #e9f2ff;
+  color: #0c66e4;
 }
 
 .branch-chip {

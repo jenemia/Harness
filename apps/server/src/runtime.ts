@@ -370,7 +370,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     });
 
     const freshTask = getTask(db, task.id) ?? task;
-    const executionAgent = withProviderCommand(agent, settings);
+    const executionAgent = withProviderCommand(agent, freshTask, settings);
     const projectMemory = db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory);
     const result = await providers.llm(executionAgent.modelBackend).run(executionAgent, freshTask, workspace, {
       projectMemory
@@ -604,29 +604,30 @@ function ensureCommandApproval(
   agent: AgentRecord,
   settings: ProjectSettings
 ) {
-  const provider = providers.llm(agent.modelBackend);
+  const effectiveBackend = getEffectiveModelBackend(agent, task);
+  const provider = providers.llm(effectiveBackend);
   if (!settings.requireCommandApproval || !provider.definition.requiresCommand) {
     return null;
   }
-  const commandPreview = getEffectiveProviderCommand(agent, settings) || provider.definition.commandExample;
+  const commandPreview = getEffectiveProviderCommand(agent, effectiveBackend, settings) || provider.definition.commandExample;
 
   const existingRows = db
     .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
     .all(task.id, agent.id, commandApprovalKind)
     .map(mapApproval);
-  const approved = existingRows.find((approval) => approval.status === "approved");
+  const approved = existingRows.find((approval) => approval.status === "approved" && approval.commandPreview === commandPreview);
   if (approved) {
     return null;
   }
 
-  const rejected = existingRows.find((approval) => approval.status === "rejected");
+  const rejected = existingRows.find((approval) => approval.status === "rejected" && approval.commandPreview === commandPreview);
   if (rejected) {
     const reason = "Command execution approval was rejected.";
     setTaskBlocked(db, task.id, reason);
     return reason;
   }
 
-  const pending = existingRows.find((approval) => approval.status === "pending");
+  const pending = existingRows.find((approval) => approval.status === "pending" && approval.commandPreview === commandPreview);
   const reason = `${agent.name} needs approval before running ${provider.definition.label}.`;
   setTaskBlocked(db, task.id, reason);
 
@@ -654,21 +655,28 @@ function ensureCommandApproval(
     metadata: {
       approvalId,
       provider: provider.definition.id,
+      effectiveBackend,
       commandPreview
     }
   });
   return reason;
 }
 
-function withProviderCommand(agent: AgentRecord, settings: ProjectSettings): AgentRecord {
+function withProviderCommand(agent: AgentRecord, task: TaskRecord, settings: ProjectSettings): AgentRecord {
+  const effectiveBackend = getEffectiveModelBackend(agent, task);
   return {
     ...agent,
-    cliCommand: getEffectiveProviderCommand(agent, settings)
+    modelBackend: effectiveBackend,
+    cliCommand: getEffectiveProviderCommand(agent, effectiveBackend, settings)
   };
 }
 
-function getEffectiveProviderCommand(agent: AgentRecord, settings: ProjectSettings) {
-  return agent.cliCommand || settings.providerCommands[agent.modelBackend] || null;
+function getEffectiveModelBackend(agent: AgentRecord, task: TaskRecord) {
+  return task.modelBackend || agent.modelBackend;
+}
+
+function getEffectiveProviderCommand(agent: AgentRecord, modelBackend: string, settings: ProjectSettings) {
+  return agent.cliCommand || settings.providerCommands[modelBackend] || null;
 }
 
 function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {

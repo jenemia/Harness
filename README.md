@@ -18,6 +18,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
+- Task-level model backend overrides for routing specific work to a different provider.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
 
 LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
@@ -42,7 +43,7 @@ Use the Settings panel or `/api/settings` to configure global defaults. Global s
 
 Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel or `PATCH /api/projects/:projectId/settings` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, PM plan auto-start behavior, command approval policy, and PM handoff rules.
 
-Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands.
+Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`; roles without a matching rule move to Done after successful completion.
 

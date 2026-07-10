@@ -90,6 +90,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       description: inputTask.description,
       status: inputTask.status,
       priority: "Medium",
+      modelBackend: null,
       assigneeAgentId: inputTask.assigneeAgentId,
       reporter: "pm-agent",
       parentTaskId: null,
@@ -109,16 +110,17 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
 
     db.prepare(`
       INSERT INTO tasks (
-        id, title, description, status, priority, assignee_agent_id, reporter,
+        id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
         parent_task_id, dependency_task_ids, labels, acceptance_criteria, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
       task.description,
       task.status,
       task.priority,
+      task.modelBackend,
       task.assigneeAgentId,
       task.reporter,
       task.parentTaskId,

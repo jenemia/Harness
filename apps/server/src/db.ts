@@ -166,6 +166,7 @@ export function openProjectDb(projectPath: string) {
       description TEXT NOT NULL,
       status TEXT NOT NULL,
       priority TEXT NOT NULL,
+      model_backend TEXT,
       assignee_agent_id TEXT,
       reporter TEXT NOT NULL,
       parent_task_id TEXT,
@@ -257,6 +258,7 @@ export function openProjectDb(projectPath: string) {
     );
   `);
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "tasks", "model_backend", "TEXT");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
@@ -630,6 +632,7 @@ export function mapTask(row: unknown): TaskRecord {
     description: String(r.description),
     status: String(r.status) as TaskStatus,
     priority: String(r.priority) as TaskRecord["priority"],
+    modelBackend: r.model_backend ? String(r.model_backend) : null,
     assigneeAgentId: r.assignee_agent_id ? String(r.assignee_agent_id) : null,
     reporter: String(r.reporter),
     parentTaskId: r.parent_task_id ? String(r.parent_task_id) : null,

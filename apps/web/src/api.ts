@@ -66,6 +66,7 @@ export type Task = {
   description: string;
   status: TaskStatus;
   priority: "Low" | "Medium" | "High" | "Urgent";
+  modelBackend: string | null;
   assigneeAgentId: string | null;
   reporter: string;
   parentTaskId: string | null;

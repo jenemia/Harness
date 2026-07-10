@@ -212,6 +212,8 @@ Example backends:
 
 The router should support project defaults, agent-specific defaults, and per-task overrides.
 
+Initial implementation: tasks can optionally override the agent's model backend. Runtime approval checks, provider selection, prompt environment, and project provider command lookup use the task override when present.
+
 ### Local Audit Log
 
 Every agent action should be auditable. Users should be able to answer: who did what, when, why, and with which model.

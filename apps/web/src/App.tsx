@@ -178,6 +178,7 @@ export function App() {
             <section className="board-area" aria-label="Kanban board">
               <TaskComposer
                 overview={overview}
+                providerCatalog={providerCatalog}
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
@@ -248,6 +249,7 @@ export function App() {
           <TaskDetailDrawer
             overview={overview}
             task={selectedTask}
+            providerCatalog={providerCatalog}
             assignee={selectedTask.assigneeAgentId ? agentsById.get(selectedTask.assigneeAgentId) : null}
             onClose={() => setSelectedTaskId("")}
             runAction={runAction}
@@ -683,10 +685,12 @@ function DocumentEditor(props: {
 
 function TaskComposer(props: {
   overview: Overview;
+  providerCatalog: ProviderCatalog | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
+  const [modelBackend, setModelBackend] = useState("");
   const [assigneeAgentId, setAssigneeAgentId] = useState("");
   const [dependencyTaskId, setDependencyTaskId] = useState("");
   const [parentTaskId, setParentTaskId] = useState("");
@@ -699,6 +703,7 @@ function TaskComposer(props: {
         method: "POST",
         body: JSON.stringify({
           title,
+          modelBackend: modelBackend || null,
           assigneeAgentId: assigneeAgentId || null,
           parentTaskId: parentTaskId || null,
           dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
@@ -708,6 +713,7 @@ function TaskComposer(props: {
         })
       });
       setTitle("");
+      setModelBackend("");
       setDependencyTaskId("");
       setParentTaskId("");
       setLabelsText("");
@@ -718,6 +724,14 @@ function TaskComposer(props: {
   return (
     <form className="task-composer" onSubmit={submit}>
       <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Task title" />
+      <select value={modelBackend} onChange={(event) => setModelBackend(event.target.value)}>
+        <option value="">Agent default backend</option>
+        {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => (
+          <option key={provider.id} value={provider.id}>
+            {provider.label}
+          </option>
+        ))}
+      </select>
       <select value={assigneeAgentId} onChange={(event) => setAssigneeAgentId(event.target.value)}>
         <option value="">Unassigned</option>
         {props.overview.agents.map((agent) => (
@@ -817,6 +831,12 @@ function TaskCard(props: {
             child task
           </span>
         )}
+        {props.task.modelBackend && (
+          <span className="backend-chip">
+            <Bot size={14} />
+            {props.task.modelBackend}
+          </span>
+        )}
         {props.task.labels.map((label) => (
           <span className="label-chip" key={label}>
             <Tag size={14} />
@@ -861,6 +881,7 @@ function TaskCard(props: {
 function TaskDetailDrawer(props: {
   overview: Overview;
   task: Task;
+  providerCatalog: ProviderCatalog | null;
   assignee: Agent | null | undefined;
   onClose: () => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
@@ -872,6 +893,7 @@ function TaskDetailDrawer(props: {
   const [editAcceptanceCriteria, setEditAcceptanceCriteria] = useState(props.task.acceptanceCriteria);
   const [editStatus, setEditStatus] = useState<TaskStatus>(props.task.status);
   const [editPriority, setEditPriority] = useState<Task["priority"]>(props.task.priority);
+  const [editModelBackend, setEditModelBackend] = useState(props.task.modelBackend || "");
   const [editAssigneeAgentId, setEditAssigneeAgentId] = useState(props.task.assigneeAgentId || "");
   const [editParentTaskId, setEditParentTaskId] = useState(props.task.parentTaskId || "");
   const [editLabelsText, setEditLabelsText] = useState(props.task.labels.join(", "));
@@ -892,6 +914,7 @@ function TaskDetailDrawer(props: {
     setEditAcceptanceCriteria(props.task.acceptanceCriteria);
     setEditStatus(props.task.status);
     setEditPriority(props.task.priority);
+    setEditModelBackend(props.task.modelBackend || "");
     setEditAssigneeAgentId(props.task.assigneeAgentId || "");
     setEditParentTaskId(props.task.parentTaskId || "");
     setEditLabelsText(props.task.labels.join(", "));
@@ -922,6 +945,7 @@ function TaskDetailDrawer(props: {
           acceptanceCriteria: editAcceptanceCriteria,
           status: editStatus,
           priority: editPriority,
+          modelBackend: editModelBackend || null,
           assigneeAgentId: editAssigneeAgentId || null,
           parentTaskId: editParentTaskId || null,
           labels: parseLabels(editLabelsText)
@@ -1000,6 +1024,14 @@ function TaskDetailDrawer(props: {
                 </option>
               ))}
             </select>
+            <select value={editModelBackend} onChange={(event) => setEditModelBackend(event.target.value)}>
+              <option value="">Agent default backend</option>
+              {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label}
+                </option>
+              ))}
+            </select>
             <select value={editParentTaskId} onChange={(event) => setEditParentTaskId(event.target.value)}>
               <option value="">No parent</option>
               {props.overview.tasks
@@ -1038,7 +1070,7 @@ function TaskDetailDrawer(props: {
             <DetailItem label="Status" value={props.task.status} />
             <DetailItem label="Priority" value={props.task.priority} />
             <DetailItem label="Assignee" value={props.assignee?.name || "Unassigned"} />
-            <DetailItem label="Backend" value={props.assignee?.modelBackend || "-"} />
+            <DetailItem label="Backend" value={props.task.modelBackend || props.assignee?.modelBackend || "-"} />
             <DetailItem label="Merge" value={props.task.mergeStatus} />
             <DetailItem label="Parent" value={parentTask?.title || "-"} />
             <DetailItem label="Reporter" value={props.task.reporter} />
