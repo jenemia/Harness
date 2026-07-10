@@ -558,6 +558,8 @@ Initial implementation: board cards can open a task detail drawer showing editab
 
 Initial implementation: the board includes local task search plus assignee and label filters. Filtered cards remain grouped by status, and each column count reflects the currently visible task set.
 
+Initial implementation: the right rail includes a backlog queue that shows backlog tasks in scheduler order, lets users promote work to Selected, adjust task order, and open the task drawer without leaving the board.
+
 Initial implementation: tasks can store linked file paths through the UI, API, or CLI. Linked files are visible in the task detail drawer, preserved when a PM or human decomposes a parent task into subtasks, and injected into the generated agent prompt plus the `HARNESS_LINKED_FILES` environment variable for provider-specific CLI wrappers.
 
 Initial implementation: the headless CLI can show the Kanban board grouped by status, list tasks with status/assignee/label filters, show task-scoped comments, runs, approvals, handoffs, and events, and inspect run records with filters for status, task, agent, provider, and model backend.

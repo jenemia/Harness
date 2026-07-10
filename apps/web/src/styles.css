@@ -612,6 +612,68 @@ button:disabled {
   white-space: nowrap;
 }
 
+.backlog-summary {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
+  margin-bottom: 10px;
+}
+
+.backlog-summary b {
+  background: #e9f2ff;
+  border-radius: 999px;
+  color: #0c66e4;
+  display: grid;
+  font-size: 12px;
+  min-height: 24px;
+  min-width: 24px;
+  place-items: center;
+}
+
+.backlog-summary span,
+.queue-line {
+  color: #626f86;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.backlog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.backlog-item {
+  border-top: 1px solid #f1f2f4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.backlog-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.backlog-item-head,
+.backlog-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.task-title-button.small {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.backlog-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px 36px;
+}
+
 .agent-row {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);

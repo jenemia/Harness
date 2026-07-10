@@ -332,6 +332,12 @@ export function App() {
 
             <aside className="right-rail">
               <ProjectHealthPanel overview={overview} healthReport={healthReport} providerCatalog={providerCatalog} />
+              <BacklogPanel
+                overview={overview}
+                runAction={runAction}
+                onOpenTask={setSelectedTaskId}
+                onChanged={() => loadOverview()}
+              />
               <PlanningPanel
                 overview={overview}
                 workflowTemplates={workflowTemplates}
@@ -688,6 +694,92 @@ function getDependencyBlocker(task: Task, tasksById: Map<string, Task>) {
   const blockedTitles = blocked.map((dependency) => `${dependency.title} (${dependency.status})`);
   const missing = missingIds.map((id) => `${id.slice(0, 8)} (missing)`);
   return `Waiting on dependencies: ${[...blockedTitles, ...missing].join(", ")}`;
+}
+
+function BacklogPanel(props: {
+  overview: Overview;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onOpenTask: (taskId: string) => void;
+  onChanged: () => Promise<void>;
+}) {
+  const agentsById = useMemo(() => new Map(props.overview.agents.map((agent) => [agent.id, agent])), [props.overview.agents]);
+  const backlogTasks = useMemo(
+    () =>
+      props.overview.tasks
+        .filter((task) => task.status === "Backlog")
+        .sort((left, right) => left.taskOrder - right.taskOrder || left.createdAt.localeCompare(right.createdAt)),
+    [props.overview.tasks]
+  );
+  const selectedTasks = props.overview.tasks.filter((task) => task.status === "Selected").length;
+
+  async function patchTask(taskId: string, payload: Partial<Task>) {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload)
+      });
+      await props.onChanged();
+    });
+  }
+
+  async function moveTask(taskId: string, direction: "up" | "down") {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${taskId}/move`, {
+        method: "POST",
+        body: JSON.stringify({ direction })
+      });
+      await props.onChanged();
+    });
+  }
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <Columns3 size={17} />
+        <h2>Backlog</h2>
+      </div>
+      <div className="backlog-summary">
+        <b>{backlogTasks.length}</b>
+        <span>backlog</span>
+        <b>{selectedTasks}</b>
+        <span>selected</span>
+      </div>
+      <div className="backlog-list">
+        {backlogTasks.slice(0, 6).map((task) => {
+          const assignee = task.assigneeAgentId ? agentsById.get(task.assigneeAgentId) : null;
+          return (
+            <div className="backlog-item" key={task.id}>
+              <div className="backlog-item-head">
+                <span className="issue-key">{task.id.slice(0, 8)}</span>
+                <span className="priority-pill">{task.priority}</span>
+              </div>
+              <button className="task-title-button small" type="button" onClick={() => props.onOpenTask(task.id)}>
+                {task.title}
+              </button>
+              <span className="queue-line">
+                {assignee?.name || "Unassigned"}
+                {task.dependencyTaskIds.length ? ` · ${task.dependencyTaskIds.length} dependency` : ""}
+              </span>
+              <div className="backlog-actions">
+                <button className="secondary-button compact" type="button" onClick={() => void patchTask(task.id, { status: "Selected" })}>
+                  <Play size={15} />
+                  <span>Select</span>
+                </button>
+                <button className="icon-button" title="Move up" type="button" onClick={() => void moveTask(task.id, "up")}>
+                  <ArrowUp size={16} />
+                </button>
+                <button className="icon-button" title="Move down" type="button" onClick={() => void moveTask(task.id, "down")}>
+                  <ArrowDown size={16} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {backlogTasks.length === 0 && <div className="column-empty">No backlog tasks</div>}
+        {backlogTasks.length > 6 && <span className="panel-count">{backlogTasks.length - 6} more backlog tasks on the board</span>}
+      </div>
+    </section>
+  );
 }
 
 function findProviderCommandIssues(overview: Overview, providerCatalog: ProviderCatalog | null) {
