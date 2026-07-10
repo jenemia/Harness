@@ -6,6 +6,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 
 - Local project registry with project-local `.harness/` storage.
 - Project root scanning for importing existing Harness folders and Git repositories.
+- Native OS folder selection for adding, scanning, and re-linking project folders without typing paths.
 - Git initialization flow for plain folders that need a baseline commit before agent worktrees can run.
 - Project sidebar summaries for task, backlog, selected, blocker, failed run, approval, running, follow-up, and merge counts across local folders.
 - Project health report for blockers, approvals, merges, failed runs, follow-up backlog items, scheduler readiness gaps, provider command setup gaps, and next recommended action.
@@ -155,6 +156,8 @@ Project lists include folder and `.harness/harness.db` availability so moved or 
 Moved folders can be re-linked with the sidebar relink form, `PATCH /api/projects/:projectId`, or `projects:update`. Updating a registry path does not create a new folder.
 
 The project sidebar can scan the global default project root and import existing Harness folders or Git repositories. The same flow is available through `POST /api/projects/import-root` and `projects:import-root`; plain folders are included only when explicitly requested.
+
+Folder controls in the web app open the host OS picker: Finder on macOS, the Windows folder dialog, and Zenity or KDialog on Linux. Linux desktops need either `zenity` or `kdialog` installed.
 
 Projects without Git or without an initial commit can be initialized from the sidebar `Init Git` button, `POST /api/projects/:projectId/init-git`, or `projects:init-git`. Harness initializes the repository when needed, excludes `.harness/` from Git, and creates a baseline commit so task worktrees can be created safely.
 

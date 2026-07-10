@@ -25,7 +25,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanPreviewResult, PlanResult, PlanningMode, Project, ProjectHealthReport, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, FolderPickerResult, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectHealthReport, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -1057,8 +1057,22 @@ function ProjectPanel(props: {
   const [projectPath, setProjectPath] = useState("");
   const [projectTemplateId, setProjectTemplateId] = useState("");
   const [relinkPath, setRelinkPath] = useState("");
+  const [importRootPath, setImportRootPath] = useState("");
   const [includePlainFolders, setIncludePlainFolders] = useState(false);
   const selectedProject = props.projects.find((project) => project.id === props.selectedProjectId) || null;
+
+  useEffect(() => {
+    setImportRootPath((current) => current || props.settings?.defaultProjectRoot || "");
+  }, [props.settings?.defaultProjectRoot]);
+
+  async function browse(initialPath: string, onSelected: (selectedPath: string) => void) {
+    await props.runAction(async () => {
+      const result = await requestFolder(initialPath);
+      if (result.path) {
+        onSelected(result.path);
+      }
+    });
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -1092,7 +1106,7 @@ function ProjectPanel(props: {
     event.preventDefault();
     await props.runAction(async () => {
       await props.onImportedRoot({
-        root: props.settings?.defaultProjectRoot,
+        root: importRootPath || props.settings?.defaultProjectRoot,
         includePlainFolders,
         seedDefaults: true,
         projectTemplateId: projectTemplateId || undefined
@@ -1127,10 +1141,10 @@ function ProjectPanel(props: {
         ))}
       </div>
       <form className="stack-form" onSubmit={submit}>
-        <input
+        <FolderPickerField
           value={projectPath}
-          onChange={(event) => setProjectPath(event.target.value)}
-          placeholder={props.settings ? `${props.settings.defaultProjectRoot}/my-project` : "/path/to/project"}
+          placeholder="Choose a project folder"
+          onBrowse={() => browse(projectPath || props.settings?.defaultProjectRoot || "", setProjectPath)}
         />
         <select value={projectTemplateId} onChange={(event) => setProjectTemplateId(event.target.value)}>
           <option value="">Default agent team</option>
@@ -1140,12 +1154,17 @@ function ProjectPanel(props: {
             </option>
           ))}
         </select>
-        <button className="primary-button" type="submit">
+        <button className="primary-button" disabled={!projectPath} type="submit">
           <Plus size={16} />
           <span>Add</span>
         </button>
       </form>
       <form className="stack-form import-root-form" onSubmit={importRoot}>
+        <FolderPickerField
+          value={importRootPath}
+          placeholder="Choose a root folder to scan"
+          onBrowse={() => browse(importRootPath || props.settings?.defaultProjectRoot || "", setImportRootPath)}
+        />
         <label className="checkbox-row">
           <input
             checked={includePlainFolders}
@@ -1154,7 +1173,7 @@ function ProjectPanel(props: {
           />
           <span>Plain folders</span>
         </label>
-        <button className="secondary-button" type="submit">
+        <button className="secondary-button" disabled={!importRootPath && !props.settings?.defaultProjectRoot} type="submit">
           <RefreshCcw size={16} />
           <span>Scan root</span>
         </button>
@@ -1162,12 +1181,12 @@ function ProjectPanel(props: {
       {selectedProject && (
         <>
           <form className="stack-form relink-form" onSubmit={relink}>
-            <input
+            <FolderPickerField
               value={relinkPath}
-              onChange={(event) => setRelinkPath(event.target.value)}
-              placeholder="Relink selected project path"
+              placeholder="Choose the moved project folder"
+              onBrowse={() => browse(relinkPath || selectedProject.path, setRelinkPath)}
             />
-            <button className="secondary-button" type="submit">
+            <button className="secondary-button" disabled={!relinkPath} type="submit">
               <Link2 size={16} />
               <span>Relink</span>
             </button>
@@ -1180,6 +1199,29 @@ function ProjectPanel(props: {
       )}
     </section>
   );
+}
+
+function FolderPickerField(props: {
+  value: string;
+  placeholder: string;
+  onBrowse: () => void | Promise<void>;
+}) {
+  return (
+    <div className="folder-picker-field">
+      <input aria-label={props.placeholder} placeholder={props.placeholder} readOnly title={props.value} value={props.value} />
+      <button aria-label={props.placeholder} className="secondary-button folder-picker-button" type="button" onClick={() => void props.onBrowse()}>
+        <FolderOpen size={16} />
+        <span>Browse</span>
+      </button>
+    </div>
+  );
+}
+
+async function requestFolder(initialPath: string) {
+  return api<FolderPickerResult>("/api/system/select-folder", {
+    method: "POST",
+    body: JSON.stringify({ initialPath: initialPath || undefined })
+  });
 }
 
 function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
@@ -2735,6 +2777,15 @@ function SettingsPanel(props: {
     });
   }
 
+  async function browseDefaultProjectRoot() {
+    await props.runAction(async () => {
+      const result = await requestFolder(defaultProjectRoot);
+      if (result.path) {
+        setDefaultProjectRoot(result.path);
+      }
+    });
+  }
+
   function updateProjectSetting<K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) {
     setProjectSettings((current) => ({ ...current, [key]: value }));
   }
@@ -2835,10 +2886,10 @@ function SettingsPanel(props: {
       )}
       <form className="stack-form" onSubmit={submitGlobal}>
         <div className="form-group-title">Global defaults</div>
-        <input
+        <FolderPickerField
           value={defaultProjectRoot}
-          onChange={(event) => setDefaultProjectRoot(event.target.value)}
-          placeholder="Default project root"
+          placeholder="Choose the default project root"
+          onBrowse={browseDefaultProjectRoot}
         />
         <select value={defaultModelBackend} onChange={(event) => setDefaultModelBackend(event.target.value)}>
           {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => (

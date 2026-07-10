@@ -857,6 +857,34 @@ button:disabled {
   margin-top: 10px;
 }
 
+.folder-picker-field {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.folder-picker-field input[readonly] {
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-picker-button {
+  white-space: nowrap;
+}
+
+.sidebar .folder-picker-field {
+  grid-template-columns: minmax(0, 1fr) 40px;
+}
+
+.sidebar .folder-picker-button {
+  padding: 0;
+}
+
+.sidebar .folder-picker-button span {
+  display: none;
+}
+
 .form-actions {
   display: grid;
   gap: 8px;

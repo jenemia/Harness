@@ -58,6 +58,7 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
+import { selectFolder } from "./folder-picker.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -174,6 +175,12 @@ const server = http.createServer(async (req, res) => {
     if (route === "PATCH /api/settings") {
       const settings = updateGlobalSettings(await readBody(req));
       sendJson(res, { settings });
+      return;
+    }
+
+    if (route === "POST /api/system/select-folder") {
+      const body = await readBody<{ initialPath?: string }>(req);
+      sendJson(res, await selectFolder({ initialPath: body.initialPath }));
       return;
     }
 
