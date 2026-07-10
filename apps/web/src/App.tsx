@@ -28,10 +28,12 @@ import {
 import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, FolderPickerResult, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectHealthReport, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
+import { statusMessageKey, supportedLocales, useI18n, type SupportedLocale } from "./i18n";
 
 const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
 
 export function App() {
+  const { t } = useI18n();
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -177,26 +179,26 @@ export function App() {
           <div className="brand-mark">H</div>
           <div>
             <strong>Harness</strong>
-            <span>local agent board</span>
+            <span>{t("app.subtitle")}</span>
           </div>
         </div>
 
-        <nav className="nav-list" aria-label="Main">
+        <nav className="nav-list" aria-label={t("nav.main")}>
           <button className="nav-item active" type="button">
             <Columns3 size={17} />
-            <span>Board</span>
+            <span>{t("nav.board")}</span>
           </button>
           <button className="nav-item" type="button">
             <Bot size={17} />
-            <span>Agents</span>
+            <span>{t("nav.agents")}</span>
           </button>
           <button className="nav-item" type="button">
             <Activity size={17} />
-            <span>Runs</span>
+            <span>{t("nav.runs")}</span>
           </button>
           <button className="nav-item" type="button">
             <Settings size={17} />
-            <span>Settings</span>
+            <span>{t("nav.settings")}</span>
           </button>
         </nav>
 
@@ -254,8 +256,8 @@ export function App() {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Project</p>
-            <h1>{overview?.project.name || "No project selected"}</h1>
+            <p className="eyebrow">{t("top.project")}</p>
+            <h1>{overview?.project.name || t("top.noProject")}</h1>
             {overview && <span className="path-line">{overview.project.path}</span>}
           </div>
           <div className="topbar-actions">
@@ -263,15 +265,15 @@ export function App() {
               <>
                 <button className="primary-button" type="button" onClick={() => setIsTaskPromptOpen(true)}>
                   <Plus size={16} />
-                  <span>Add work</span>
+                  <span>{t("top.addWork")}</span>
                 </button>
                 <button className="secondary-button" type="button" onClick={() => void scheduleReady()}>
                   <Play size={16} />
-                  <span>Run Ready</span>
+                  <span>{t("top.runReady")}</span>
                 </button>
               </>
             )}
-            <button className="icon-button" type="button" onClick={() => void runAction(() => loadOverview())}>
+            <button aria-label={t("top.refresh")} className="icon-button" type="button" onClick={() => void runAction(() => loadOverview())}>
               <RefreshCcw size={18} />
             </button>
           </div>
@@ -288,7 +290,7 @@ export function App() {
 
         {overview ? (
           <div className="content-grid">
-            <section className="board-area" aria-label="Kanban board">
+            <section className="board-area" aria-label={t("board.ariaLabel")}>
               <BoardFilters
                 agents={overview.agents}
                 labels={boardLabels}
@@ -310,7 +312,7 @@ export function App() {
                 {columns.map((column) => (
                   <section className="kanban-column" key={column}>
                     <div className="column-header">
-                      <span>{column}</span>
+                      <span>{t(statusMessageKey(column))}</span>
                       <b>{visibleTasks.filter((task) => task.status === column).length}</b>
                     </div>
                     <div className="column-list">
@@ -329,7 +331,7 @@ export function App() {
                           />
                         ))}
                       {hasBoardFilters && visibleTasks.filter((task) => task.status === column).length === 0 && (
-                        <div className="column-empty">No matching tasks</div>
+                        <div className="column-empty">{t("board.noMatchingTasks")}</div>
                       )}
                     </div>
                   </section>
@@ -376,11 +378,11 @@ export function App() {
         ) : (
           <div className="empty-state">
             <FolderOpen size={32} />
-            <h2>Select or create a project</h2>
+            <h2>{t("app.selectOrCreateProject")}</h2>
           </div>
         )}
 
-        {isBusy && <div className="busy-line">Working...</div>}
+        {isBusy && <div className="busy-line">{t("app.working")}</div>}
         {overview && isTaskPromptOpen && (
           <TaskPromptModal
             projectId={overview.project.id}
@@ -410,6 +412,7 @@ function ApprovalsPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { locale, t } = useI18n();
   const [kindFilter, setKindFilter] = useState("");
   const approvalKinds = useMemo(() => {
     return Array.from(new Set(props.overview.approvals.map((approval) => approval.kind))).sort((a, b) => a.localeCompare(b));
@@ -440,7 +443,7 @@ function ApprovalsPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <AlertTriangle size={17} />
-        <h2>Approvals</h2>
+        <h2>{t("panel.approvals")}</h2>
       </div>
       <div className="approval-filters">
         <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value)}>
@@ -495,7 +498,7 @@ function ApprovalsPanel(props: {
             <div className={`approval-row ${approval.status}`} key={approval.id}>
               <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
               <span>
-                {approval.kind.replace("_", " ")} · {approval.status} · {formatDate(approval.decidedAt || approval.createdAt)}
+                {approval.kind.replace("_", " ")} · {approval.status} · {formatDate(approval.decidedAt || approval.createdAt, locale)}
               </span>
               {providerResolution && <span>{providerResolution}</span>}
             </div>
@@ -515,6 +518,7 @@ function ProjectHealthPanel({
   healthReport: ProjectHealthReport | null;
   providerCatalog: ProviderCatalog | null;
 }) {
+  const { t } = useI18n();
   const fallbackBlockedTasks = overview.tasks.filter((task) => task.status === "Blocked");
   const fallbackProviderCommandIssues = useMemo(
     () => findProviderCommandIssues(overview, providerCatalog),
@@ -558,7 +562,7 @@ function ProjectHealthPanel({
     <section className="rail-panel">
       <div className="panel-header">
         <Activity size={17} />
-        <h2>Health</h2>
+        <h2>{t("panel.health")}</h2>
       </div>
       <div className="compact-list">
         <div className="compact-row">
@@ -715,6 +719,7 @@ function getDependencyBlocker(task: Task, tasksById: Map<string, Task>) {
 }
 
 function AttentionPanel(props: { overview: Overview; onOpenTask: (taskId: string) => void }) {
+  const { t } = useI18n();
   const tasksById = useMemo(() => new Map(props.overview.tasks.map((task) => [task.id, task])), [props.overview.tasks]);
   const items = useMemo(() => {
     const pendingApprovals = props.overview.approvals
@@ -781,7 +786,7 @@ function AttentionPanel(props: { overview: Overview; onOpenTask: (taskId: string
     <section className="rail-panel">
       <div className="panel-header">
         <AlertTriangle size={17} />
-        <h2>Attention</h2>
+        <h2>{t("panel.attention")}</h2>
       </div>
       <div className="attention-list">
         {items.length === 0 && <p className="provider-help">No attention items.</p>}
@@ -808,6 +813,7 @@ function BacklogPanel(props: {
   onOpenTask: (taskId: string) => void;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const agentsById = useMemo(() => new Map(props.overview.agents.map((agent) => [agent.id, agent])), [props.overview.agents]);
   const backlogTasks = useMemo(
     () =>
@@ -842,7 +848,7 @@ function BacklogPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Columns3 size={17} />
-        <h2>Backlog</h2>
+        <h2>{t("panel.backlog")}</h2>
       </div>
       <div className="backlog-summary">
         <b>{backlogTasks.length}</b>
@@ -941,6 +947,7 @@ function TaskPromptModal(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -987,32 +994,32 @@ function TaskPromptModal(props: {
       >
         <header className="task-prompt-header">
           <div>
-            <span className="modal-kicker">New work</span>
-            <h2 id="task-prompt-title">What should be done?</h2>
+            <span className="modal-kicker">{t("modal.newWork")}</span>
+            <h2 id="task-prompt-title">{t("modal.title")}</h2>
           </div>
-          <button aria-label="Close" className="icon-button" disabled={isSubmitting} type="button" onClick={props.onClose}>
+          <button aria-label={t("modal.close")} className="icon-button" disabled={isSubmitting} type="button" onClick={props.onClose}>
             <X size={18} />
           </button>
         </header>
         <form className="task-prompt-form" onSubmit={submit}>
           <textarea
             autoFocus
-            aria-label="Work prompt"
-            placeholder={"Describe the work, or paste Markdown...\n\n- Build the feature\n- Add tests\n- Update the docs"}
+            aria-label={t("modal.promptLabel")}
+            placeholder={t("modal.promptPlaceholder")}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
           />
           <div className="markdown-hint">
             <FileText size={15} />
-            <span>Markdown supported · lists and ticket headings can create multiple work items</span>
+            <span>{t("modal.markdownHint")}</span>
           </div>
           <div className="task-prompt-actions">
             <button className="secondary-button" disabled={isSubmitting} type="button" onClick={props.onClose}>
-              Cancel
+              {t("modal.cancel")}
             </button>
             <button className="primary-button" disabled={!prompt.trim() || isSubmitting} type="submit">
               <Sparkles size={16} />
-              <span>{isSubmitting ? "Creating..." : "Create work"}</span>
+              <span>{isSubmitting ? t("modal.creating") : t("modal.create")}</span>
             </button>
           </div>
         </form>
@@ -1054,6 +1061,7 @@ function ProjectPanel(props: {
   onInitializedGit: (id: string) => Promise<void>;
   runAction: (action: () => Promise<void>) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [projectPath, setProjectPath] = useState("");
   const [projectTemplateId, setProjectTemplateId] = useState("");
   const [relinkPath, setRelinkPath] = useState("");
@@ -1118,7 +1126,7 @@ function ProjectPanel(props: {
     <section className="sidebar-section">
       <div className="section-title">
         <FolderOpen size={15} />
-        <span>Projects</span>
+        <span>{t("projects.heading")}</span>
       </div>
       <div className="project-list">
         {props.projects.map((project) => (
@@ -1129,9 +1137,9 @@ function ProjectPanel(props: {
               <ProjectSummaryRow project={project} />
             </button>
             <button
-              aria-label={`Unregister ${project.name}`}
+              aria-label={t("projects.remove", { name: project.name })}
               className="project-remove"
-              title="Remove from Harness list. The folder stays on disk."
+              title={t("projects.removeHelp")}
               type="button"
               onClick={() => void props.runAction(() => props.onRemoved(project.id))}
             >
@@ -1143,11 +1151,11 @@ function ProjectPanel(props: {
       <form className="stack-form" onSubmit={submit}>
         <FolderPickerField
           value={projectPath}
-          placeholder="Choose a project folder"
+          placeholder={t("projects.chooseFolder")}
           onBrowse={() => browse(projectPath || props.settings?.defaultProjectRoot || "", setProjectPath)}
         />
         <select value={projectTemplateId} onChange={(event) => setProjectTemplateId(event.target.value)}>
-          <option value="">Default agent team</option>
+          <option value="">{t("projects.defaultTeam")}</option>
           {props.projectTemplates.map((template) => (
             <option key={template.id} value={template.id}>
               {template.name} ({template.agents.length} agents)
@@ -1156,13 +1164,13 @@ function ProjectPanel(props: {
         </select>
         <button className="primary-button" disabled={!projectPath} type="submit">
           <Plus size={16} />
-          <span>Add</span>
+          <span>{t("projects.add")}</span>
         </button>
       </form>
       <form className="stack-form import-root-form" onSubmit={importRoot}>
         <FolderPickerField
           value={importRootPath}
-          placeholder="Choose a root folder to scan"
+          placeholder={t("projects.chooseScanRoot")}
           onBrowse={() => browse(importRootPath || props.settings?.defaultProjectRoot || "", setImportRootPath)}
         />
         <label className="checkbox-row">
@@ -1171,11 +1179,11 @@ function ProjectPanel(props: {
             onChange={(event) => setIncludePlainFolders(event.target.checked)}
             type="checkbox"
           />
-          <span>Plain folders</span>
+          <span>{t("projects.plainFolders")}</span>
         </label>
         <button className="secondary-button" disabled={!importRootPath && !props.settings?.defaultProjectRoot} type="submit">
           <RefreshCcw size={16} />
-          <span>Scan root</span>
+          <span>{t("projects.scanRoot")}</span>
         </button>
       </form>
       {selectedProject && (
@@ -1183,17 +1191,17 @@ function ProjectPanel(props: {
           <form className="stack-form relink-form" onSubmit={relink}>
             <FolderPickerField
               value={relinkPath}
-              placeholder="Choose the moved project folder"
+              placeholder={t("projects.chooseMovedFolder")}
               onBrowse={() => browse(relinkPath || selectedProject.path, setRelinkPath)}
             />
             <button className="secondary-button" disabled={!relinkPath} type="submit">
               <Link2 size={16} />
-              <span>Relink</span>
+              <span>{t("projects.relink")}</span>
             </button>
           </form>
           <button className="secondary-button" type="button" onClick={() => void props.runAction(() => props.onInitializedGit(selectedProject.id))}>
             <GitBranch size={16} />
-            <span>Init Git</span>
+            <span>{t("projects.initGit")}</span>
           </button>
         </>
       )}
@@ -1206,12 +1214,13 @@ function FolderPickerField(props: {
   placeholder: string;
   onBrowse: () => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   return (
     <div className="folder-picker-field">
       <input aria-label={props.placeholder} placeholder={props.placeholder} readOnly title={props.value} value={props.value} />
       <button aria-label={props.placeholder} className="secondary-button folder-picker-button" type="button" onClick={() => void props.onBrowse()}>
         <FolderOpen size={16} />
-        <span>Browse</span>
+        <span>{t("projects.browse")}</span>
       </button>
     </div>
   );
@@ -1225,39 +1234,40 @@ async function requestFolder(initialPath: string) {
 }
 
 function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
+  const { t } = useI18n();
   const summary = project.summary;
   if (!summary.pathExists) {
     return (
       <div className="project-summary-row">
-        <b className="blocked">missing folder</b>
+        <b className="blocked">{t("projects.missingFolder")}</b>
       </div>
     );
   }
   if (!summary.harnessDbExists) {
     return (
       <div className="project-summary-row">
-        <b className="approval">missing harness db</b>
+        <b className="approval">{t("projects.missingDatabase")}</b>
       </div>
     );
   }
   if (summary.summaryError) {
     return (
       <div className="project-summary-row">
-        <b className="blocked">summary error</b>
+        <b className="blocked">{t("projects.summaryError")}</b>
       </div>
     );
   }
   return (
     <div className="project-summary-row">
-      <b>{summary.totalTasks} tasks</b>
-      {summary.selectedTasks > 0 && <b className="selected">{summary.selectedTasks} selected</b>}
-      {summary.backlogTasks > 0 && <b>{summary.backlogTasks} backlog</b>}
-      {summary.runningTasks > 0 && <b className="running">{summary.runningTasks} running</b>}
-      {summary.failedRuns > 0 && <b className="blocked">{summary.failedRuns} failed</b>}
-      {summary.blockedTasks > 0 && <b className="blocked">{summary.blockedTasks} blocked</b>}
-      {summary.pendingApprovals > 0 && <b className="approval">{summary.pendingApprovals} approvals</b>}
-      {summary.pendingMerges > 0 && <b className="merge">{summary.pendingMerges} merges</b>}
-      {summary.followUpBacklogTasks > 0 && <b className="followup">{summary.followUpBacklogTasks} follow-ups</b>}
+      <b>{t("projects.tasks", { count: summary.totalTasks })}</b>
+      {summary.selectedTasks > 0 && <b className="selected">{t("projects.selected", { count: summary.selectedTasks })}</b>}
+      {summary.backlogTasks > 0 && <b>{t("projects.backlog", { count: summary.backlogTasks })}</b>}
+      {summary.runningTasks > 0 && <b className="running">{t("projects.running", { count: summary.runningTasks })}</b>}
+      {summary.failedRuns > 0 && <b className="blocked">{t("projects.failed", { count: summary.failedRuns })}</b>}
+      {summary.blockedTasks > 0 && <b className="blocked">{t("projects.blocked", { count: summary.blockedTasks })}</b>}
+      {summary.pendingApprovals > 0 && <b className="approval">{t("projects.approvals", { count: summary.pendingApprovals })}</b>}
+      {summary.pendingMerges > 0 && <b className="merge">{t("projects.merges", { count: summary.pendingMerges })}</b>}
+      {summary.followUpBacklogTasks > 0 && <b className="followup">{t("projects.followUps", { count: summary.followUpBacklogTasks })}</b>}
     </div>
   );
 }
@@ -1267,6 +1277,7 @@ function DocumentsPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const selected = props.overview.documents.find((document) => document.id === selectedDocumentId) || null;
 
@@ -1274,7 +1285,7 @@ function DocumentsPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <FileText size={17} />
-        <h2>Documents</h2>
+        <h2>{t("panel.documents")}</h2>
       </div>
       <DocumentEditor
         projectId={props.overview.project.id}
@@ -1293,6 +1304,7 @@ function MemoryPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [scope, setScope] = useState<"project" | "global">("project");
   const [selectedMemoryId, setSelectedMemoryId] = useState("");
   const memories = scope === "project" ? props.overview.memories : props.overview.globalMemories;
@@ -1302,7 +1314,7 @@ function MemoryPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Brain size={17} />
-        <h2>Memory</h2>
+        <h2>{t("panel.memory")}</h2>
       </div>
       <MemoryEditor
         projectId={props.overview.project.id}
@@ -1407,6 +1419,7 @@ function DocumentEditor(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
 
@@ -1437,23 +1450,23 @@ function DocumentEditor(props: {
   return (
     <form className="stack-form" onSubmit={save}>
       <select value={props.document?.id || ""} onChange={(event) => props.onSelect(event.target.value)}>
-        <option value="">New document</option>
+        <option value="">{t("documents.new")}</option>
         {props.documents.map((document) => (
           <option key={document.id} value={document.id}>
             {document.title}
           </option>
         ))}
       </select>
-      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" />
+      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t("documents.title")} />
       <textarea
         className="document-textarea"
         value={content}
         onChange={(event) => setContent(event.target.value)}
-        placeholder="Project notes, service plan, acceptance criteria, research..."
+        placeholder={t("documents.content")}
       />
       <button className="secondary-button" type="submit">
         <FileText size={16} />
-        <span>Save</span>
+        <span>{t("common.save")}</span>
       </button>
     </form>
   );
@@ -1472,16 +1485,17 @@ function BoardFilters(props: {
   onLabelChange: (value: string) => void;
   onClear: () => void;
 }) {
+  const { t } = useI18n();
   const hasFilters = Boolean(props.query || props.assigneeId || props.label);
   return (
     <div className="board-filters">
       <label className="search-field">
         <Search size={16} />
-        <input value={props.query} onChange={(event) => props.onQueryChange(event.target.value)} placeholder="Search tasks" />
+        <input value={props.query} onChange={(event) => props.onQueryChange(event.target.value)} placeholder={t("board.search")} />
       </label>
       <select value={props.assigneeId} onChange={(event) => props.onAssigneeChange(event.target.value)}>
-        <option value="">All assignees</option>
-        <option value="unassigned">Unassigned</option>
+        <option value="">{t("board.allAssignees")}</option>
+        <option value="unassigned">{t("board.unassigned")}</option>
         {props.agents.map((agent) => (
           <option key={agent.id} value={agent.id}>
             {agent.name}
@@ -1489,7 +1503,7 @@ function BoardFilters(props: {
         ))}
       </select>
       <select value={props.label} onChange={(event) => props.onLabelChange(event.target.value)}>
-        <option value="">All labels</option>
+        <option value="">{t("board.allLabels")}</option>
         {props.labels.map((label) => (
           <option key={label} value={label}>
             {label}
@@ -1501,7 +1515,7 @@ function BoardFilters(props: {
       </span>
       <button className="secondary-button compact" type="button" onClick={props.onClear} disabled={!hasFilters}>
         <X size={15} />
-        <span>Clear</span>
+        <span>{t("board.clear")}</span>
       </button>
     </div>
   );
@@ -2155,6 +2169,7 @@ function TaskComments(props: {
   onBodyChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <section className="drawer-section">
       <h3>Comments</h3>
@@ -2175,7 +2190,7 @@ function TaskComments(props: {
           <div className="comment-row" key={comment.id}>
             <div>
               <strong>{comment.author}</strong>
-              <small>{formatDate(comment.createdAt)}</small>
+              <small>{formatDate(comment.createdAt, locale)}</small>
             </div>
             <p>{comment.body}</p>
           </div>
@@ -2189,6 +2204,7 @@ function TaskRuns(props: {
   runs: Run[];
   events: Event[];
 }) {
+  const { locale } = useI18n();
   const runStartEvents = useMemo(() => {
     return new Map(
       props.events
@@ -2231,7 +2247,7 @@ function TaskRuns(props: {
                   {run.status === "completed" ? <CheckCircle2 size={14} /> : <Activity size={14} />}
                   {run.status}
                 </span>
-                <span>{formatDate(run.startedAt)}</span>
+                <span>{formatDate(run.startedAt, locale)}</span>
               </div>
               {run.snapshotRef && (
                 <div className="snapshot-line">
@@ -2288,6 +2304,7 @@ function TaskRuns(props: {
 }
 
 function TaskHandoffs({ handoffs, agents, events }: { handoffs: Handoff[]; agents: Agent[]; events: Event[] }) {
+  const { locale } = useI18n();
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
   const handoffEvents = events.filter((event) => event.type === "handoff.automatic");
 
@@ -2316,7 +2333,7 @@ function TaskHandoffs({ handoffs, agents, events }: { handoffs: Handoff[]; agent
                 )}
                 <span>{handoff.reason}</span>
               </div>
-              <small>{formatDate(handoff.createdAt)}</small>
+              <small>{formatDate(handoff.createdAt, locale)}</small>
             </div>
           );
         })}
@@ -2396,6 +2413,7 @@ function mergeProviderCommandText(value: string, providerCatalog: ProviderCatalo
 }
 
 function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {
+  const { locale } = useI18n();
   const items = [
     ...events.map((event) => ({
       id: event.id,
@@ -2429,7 +2447,7 @@ function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {
             <div>
               <strong>{item.type}</strong>
               <span>{item.message}</span>
-              <small>{formatDate(item.at)}</small>
+              <small>{formatDate(item.at, locale)}</small>
               {item.detail && item.detail !== "{}" && <pre>{item.detail}</pre>}
             </div>
           </div>
@@ -2439,8 +2457,8 @@ function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {
   );
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+function formatDate(value: string, locale: SupportedLocale) {
+  return new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-US", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
@@ -2456,6 +2474,7 @@ function AgentPanel(props: {
   onTemplatesChanged: (templates: AgentTemplate[]) => void;
   onChanged: () => Promise<void>;
 }) {
+  const { locale, t } = useI18n();
   const [editingAgentId, setEditingAgentId] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("worker");
@@ -2583,7 +2602,7 @@ function AgentPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Bot size={17} />
-        <h2>Agents</h2>
+        <h2>{t("panel.agents")}</h2>
       </div>
       <div className="agent-list">
         {props.overview.agents.map((agent) => {
@@ -2595,7 +2614,7 @@ function AgentPanel(props: {
                 <div className="agent-row-title">
                   <strong>{agent.name}</strong>
                   <button className="mini-button" type="button" onClick={() => editAgent(agent)}>
-                    Edit
+                    {t("common.edit")}
                   </button>
                 </div>
                 <span>{agent.role} · {agent.modelBackend} · max {agent.maxParallel}</span>
@@ -2611,7 +2630,7 @@ function AgentPanel(props: {
                   Current: {stats?.currentTask?.title || "None"}
                 </span>
                 <span className="agent-context-line">
-                  Recent: {stats?.latestActivity ? `${stats.latestActivity.type} · ${formatDate(stats.latestActivity.createdAt)}` : "None"}
+                  Recent: {stats?.latestActivity ? `${stats.latestActivity.type} · ${formatDate(stats.latestActivity.createdAt, locale)}` : "None"}
                 </span>
               </div>
             </div>
@@ -2710,6 +2729,7 @@ function SettingsPanel(props: {
   onChanged: (settings: GlobalSettings) => void;
   onProjectChanged: () => Promise<void>;
 }) {
+  const { locale, setLocale, t } = useI18n();
   const [defaultProjectRoot, setDefaultProjectRoot] = useState("");
   const [defaultModelBackend, setDefaultModelBackend] = useState("mock");
   const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
@@ -2814,11 +2834,26 @@ function SettingsPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Settings size={17} />
-        <h2>Settings</h2>
+        <h2>{t("panel.settings")}</h2>
       </div>
+      <label className="language-setting">
+        <span>{t("settings.interfaceLanguage")}</span>
+        <select
+          aria-label={t("settings.interfaceLanguage")}
+          value={locale}
+          onChange={(event) => setLocale(event.target.value as SupportedLocale)}
+        >
+          {supportedLocales.map((supportedLocale) => (
+            <option key={supportedLocale.code} value={supportedLocale.code}>
+              {supportedLocale.label}
+            </option>
+          ))}
+        </select>
+        <small>{t("settings.languageHelp")}</small>
+      </label>
       {props.providerCatalog && (
         <div className="provider-summary">
-          <div className="form-group-title">Runtime provider</div>
+          <div className="form-group-title">{t("settings.runtimeProvider")}</div>
           <strong>{props.providerCatalog.platform.label}</strong>
           <span>
             {props.providerCatalog.platform.id} on {props.providerCatalog.platform.platform}
@@ -2870,7 +2905,7 @@ function SettingsPanel(props: {
           </span>
           {providerCommandKeyGuide && (
             <>
-              <strong>Provider command keys</strong>
+              <strong>{t("settings.providerCommandKeys")}</strong>
               <span>
                 {providerCommandKeyGuide.platformProviderId} on {providerCommandKeyGuide.nodePlatform} |{" "}
                 {providerCommandKeyGuide.precedence.join(" > ")}
@@ -2885,10 +2920,10 @@ function SettingsPanel(props: {
         </div>
       )}
       <form className="stack-form" onSubmit={submitGlobal}>
-        <div className="form-group-title">Global defaults</div>
+        <div className="form-group-title">{t("settings.globalDefaults")}</div>
         <FolderPickerField
           value={defaultProjectRoot}
-          placeholder="Choose the default project root"
+          placeholder={t("settings.chooseDefaultRoot")}
           onBrowse={browseDefaultProjectRoot}
         />
         <select value={defaultModelBackend} onChange={(event) => setDefaultModelBackend(event.target.value)}>
@@ -2911,7 +2946,7 @@ function SettingsPanel(props: {
             checked={autoStartPlans}
             onChange={(event) => setAutoStartPlans(event.target.checked)}
           />
-          <span>Auto-start plans by default</span>
+          <span>{t("settings.autoStartGlobal")}</span>
         </label>
         <input
           min={5}
@@ -2948,11 +2983,11 @@ function SettingsPanel(props: {
         )}
         <button className="secondary-button" type="submit">
           <Settings size={16} />
-          <span>Save global</span>
+          <span>{t("settings.saveGlobal")}</span>
         </button>
       </form>
       <form className="stack-form split-form" onSubmit={submitProject}>
-        <div className="form-group-title">Project defaults</div>
+        <div className="form-group-title">{t("settings.projectDefaults")}</div>
         <select
           value={projectSettings.defaultModelBackend}
           onChange={(event) => updateProjectSetting("defaultModelBackend", event.target.value)}
@@ -3001,7 +3036,7 @@ function SettingsPanel(props: {
             checked={projectSettings.autoStartPlans}
             onChange={(event) => updateProjectSetting("autoStartPlans", event.target.checked)}
           />
-          <span>Auto-start plans in this project</span>
+          <span>{t("settings.autoStartProject")}</span>
         </label>
         <label className="check-row">
           <input
@@ -3009,7 +3044,7 @@ function SettingsPanel(props: {
             checked={projectSettings.requireCommandApproval}
             onChange={(event) => updateProjectSetting("requireCommandApproval", event.target.checked)}
           />
-          <span>Require command approvals</span>
+          <span>{t("settings.requireApprovals")}</span>
         </label>
         <textarea
           value={handoffRulesText}
@@ -3035,7 +3070,7 @@ function SettingsPanel(props: {
         )}
         <button className="secondary-button" type="submit">
           <Settings size={16} />
-          <span>Save project</span>
+          <span>{t("settings.saveProject")}</span>
         </button>
       </form>
     </section>
@@ -3055,6 +3090,7 @@ function parseStringMapText(value: string, label: string) {
 }
 
 function RunPanel({ overview }: { overview: Overview }) {
+  const { t } = useI18n();
   const [statusFilter, setStatusFilter] = useState("");
   const [agentFilter, setAgentFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
@@ -3092,7 +3128,7 @@ function RunPanel({ overview }: { overview: Overview }) {
     <section className="rail-panel">
       <div className="panel-header">
         <Activity size={17} />
-        <h2>Runs</h2>
+        <h2>{t("panel.runs")}</h2>
       </div>
       <div className="run-filters">
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -3148,11 +3184,12 @@ function RunPanel({ overview }: { overview: Overview }) {
 }
 
 function EventPanel({ overview }: { overview: Overview }) {
+  const { t } = useI18n();
   return (
     <section className="rail-panel">
       <div className="panel-header">
         <Activity size={17} />
-        <h2>Activity</h2>
+        <h2>{t("panel.activity")}</h2>
       </div>
       <div className="event-list">
         {overview.events.slice(0, 10).map((event) => (

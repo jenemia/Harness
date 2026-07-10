@@ -1,0 +1,288 @@
+import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+
+export const supportedLocales = [
+  { code: "en", label: "English" },
+  { code: "ko", label: "한국어" }
+] as const;
+
+export type SupportedLocale = (typeof supportedLocales)[number]["code"];
+
+const enMessages = {
+  "app.subtitle": "local agent board",
+  "nav.main": "Main",
+  "nav.board": "Board",
+  "nav.agents": "Agents",
+  "nav.runs": "Runs",
+  "nav.settings": "Settings",
+  "top.project": "Project",
+  "top.noProject": "No project selected",
+  "top.addWork": "Add work",
+  "top.runReady": "Run Ready",
+  "top.refresh": "Refresh",
+  "app.working": "Working...",
+  "app.selectOrCreateProject": "Select or create a project",
+  "projects.heading": "Projects",
+  "projects.defaultTeam": "Default agent team",
+  "projects.add": "Add",
+  "projects.chooseFolder": "Choose a project folder",
+  "projects.chooseScanRoot": "Choose a root folder to scan",
+  "projects.plainFolders": "Plain folders",
+  "projects.scanRoot": "Scan root",
+  "projects.chooseMovedFolder": "Choose the moved project folder",
+  "projects.relink": "Relink",
+  "projects.initGit": "Init Git",
+  "projects.browse": "Browse",
+  "projects.remove": "Remove {{name}} from Harness",
+  "projects.removeHelp": "Remove from Harness list. The folder stays on disk.",
+  "projects.missingFolder": "missing folder",
+  "projects.missingDatabase": "missing harness db",
+  "projects.summaryError": "summary error",
+  "projects.tasks": "{{count}} tasks",
+  "projects.selected": "{{count}} selected",
+  "projects.backlog": "{{count}} backlog",
+  "projects.running": "{{count}} running",
+  "projects.failed": "{{count}} failed",
+  "projects.blocked": "{{count}} blocked",
+  "projects.approvals": "{{count}} approvals",
+  "projects.merges": "{{count}} merges",
+  "projects.followUps": "{{count}} follow-ups",
+  "board.ariaLabel": "Kanban board",
+  "board.search": "Search tasks",
+  "board.allAssignees": "All assignees",
+  "board.unassigned": "Unassigned",
+  "board.allLabels": "All labels",
+  "board.clear": "Clear",
+  "board.noMatchingTasks": "No matching tasks",
+  "status.backlog": "Backlog",
+  "status.selected": "Selected",
+  "status.inProgress": "In Progress",
+  "status.inReview": "In Review",
+  "status.paused": "Paused",
+  "status.blocked": "Blocked",
+  "status.done": "Done",
+  "modal.newWork": "New work",
+  "modal.title": "What should be done?",
+  "modal.close": "Close",
+  "modal.promptLabel": "Work prompt",
+  "modal.promptPlaceholder": "Describe the work, or paste Markdown...\n\n- Build the feature\n- Add tests\n- Update the docs",
+  "modal.markdownHint": "Markdown supported · lists and ticket headings can create multiple work items",
+  "modal.cancel": "Cancel",
+  "modal.create": "Create work",
+  "modal.creating": "Creating...",
+  "panel.health": "Health",
+  "panel.attention": "Attention",
+  "panel.backlog": "Backlog",
+  "panel.approvals": "Approvals",
+  "panel.documents": "Documents",
+  "panel.memory": "Memory",
+  "panel.agents": "Agents",
+  "panel.settings": "Settings",
+  "panel.runs": "Runs",
+  "panel.activity": "Activity",
+  "settings.interfaceLanguage": "Interface language",
+  "settings.languageHelp": "Defaults to the system language on first use. Currently supports English and Korean.",
+  "settings.globalDefaults": "Global defaults",
+  "settings.projectDefaults": "Project defaults",
+  "settings.chooseDefaultRoot": "Choose the default project root",
+  "settings.saveGlobal": "Save global",
+  "settings.saveProject": "Save project",
+  "settings.autoStartGlobal": "Auto-start plans by default",
+  "settings.autoStartProject": "Auto-start plans in this project",
+  "settings.requireApprovals": "Require command approvals",
+  "settings.runtimeProvider": "Runtime provider",
+  "settings.providerCommandKeys": "Provider command keys",
+  "settings.defaultModel": "Default model backend",
+  "documents.new": "New document",
+  "documents.title": "Document title",
+  "documents.content": "Project notes, service plan, acceptance criteria, research...",
+  "common.save": "Save",
+  "common.edit": "Edit",
+  "common.none": "None"
+} as const;
+
+type MessageKey = keyof typeof enMessages;
+
+const koMessages: Record<MessageKey, string> = {
+  "app.subtitle": "로컬 에이전트 보드",
+  "nav.main": "메인",
+  "nav.board": "보드",
+  "nav.agents": "에이전트",
+  "nav.runs": "실행",
+  "nav.settings": "설정",
+  "top.project": "프로젝트",
+  "top.noProject": "선택된 프로젝트 없음",
+  "top.addWork": "일감 추가",
+  "top.runReady": "준비된 일감 실행",
+  "top.refresh": "새로고침",
+  "app.working": "처리 중...",
+  "app.selectOrCreateProject": "프로젝트를 선택하거나 추가하세요",
+  "projects.heading": "프로젝트",
+  "projects.defaultTeam": "기본 에이전트 팀",
+  "projects.add": "추가",
+  "projects.chooseFolder": "프로젝트 폴더 선택",
+  "projects.chooseScanRoot": "검색할 루트 폴더 선택",
+  "projects.plainFolders": "일반 폴더 포함",
+  "projects.scanRoot": "루트 검색",
+  "projects.chooseMovedFolder": "이동된 프로젝트 폴더 선택",
+  "projects.relink": "다시 연결",
+  "projects.initGit": "Git 초기화",
+  "projects.browse": "찾아보기",
+  "projects.remove": "Harness에서 {{name}} 제거",
+  "projects.removeHelp": "Harness 목록에서만 제거합니다. 디스크의 폴더는 유지됩니다.",
+  "projects.missingFolder": "폴더 없음",
+  "projects.missingDatabase": "Harness DB 없음",
+  "projects.summaryError": "요약 오류",
+  "projects.tasks": "일감 {{count}}개",
+  "projects.selected": "선택 {{count}}개",
+  "projects.backlog": "백로그 {{count}}개",
+  "projects.running": "실행 중 {{count}}개",
+  "projects.failed": "실패 {{count}}개",
+  "projects.blocked": "차단 {{count}}개",
+  "projects.approvals": "승인 {{count}}개",
+  "projects.merges": "병합 {{count}}개",
+  "projects.followUps": "후속 {{count}}개",
+  "board.ariaLabel": "칸반 보드",
+  "board.search": "일감 검색",
+  "board.allAssignees": "모든 담당자",
+  "board.unassigned": "담당자 없음",
+  "board.allLabels": "모든 라벨",
+  "board.clear": "초기화",
+  "board.noMatchingTasks": "조건에 맞는 일감 없음",
+  "status.backlog": "백로그",
+  "status.selected": "선택됨",
+  "status.inProgress": "진행 중",
+  "status.inReview": "검토 중",
+  "status.paused": "일시 정지",
+  "status.blocked": "차단됨",
+  "status.done": "완료",
+  "modal.newWork": "새 일감",
+  "modal.title": "어떤 작업이 필요한가요?",
+  "modal.close": "닫기",
+  "modal.promptLabel": "일감 프롬프트",
+  "modal.promptPlaceholder": "필요한 작업을 설명하거나 Markdown을 붙여 넣으세요...\n\n- 기능 구현\n- 테스트 추가\n- 문서 업데이트",
+  "modal.markdownHint": "Markdown 지원 · 목록과 티켓 제목으로 여러 일감을 만들 수 있습니다",
+  "modal.cancel": "취소",
+  "modal.create": "일감 생성",
+  "modal.creating": "생성 중...",
+  "panel.health": "상태",
+  "panel.attention": "확인 필요",
+  "panel.backlog": "백로그",
+  "panel.approvals": "승인",
+  "panel.documents": "문서",
+  "panel.memory": "메모리",
+  "panel.agents": "에이전트",
+  "panel.settings": "설정",
+  "panel.runs": "실행",
+  "panel.activity": "활동",
+  "settings.interfaceLanguage": "인터페이스 언어",
+  "settings.languageHelp": "처음 실행할 때 시스템 언어를 기본값으로 사용합니다. 현재 한국어와 영어를 지원합니다.",
+  "settings.globalDefaults": "전역 기본값",
+  "settings.projectDefaults": "프로젝트 기본값",
+  "settings.chooseDefaultRoot": "기본 프로젝트 루트 선택",
+  "settings.saveGlobal": "전역 설정 저장",
+  "settings.saveProject": "프로젝트 설정 저장",
+  "settings.autoStartGlobal": "기본적으로 계획 자동 시작",
+  "settings.autoStartProject": "이 프로젝트에서 계획 자동 시작",
+  "settings.requireApprovals": "명령 실행 승인 필요",
+  "settings.runtimeProvider": "런타임 제공자",
+  "settings.providerCommandKeys": "제공자 명령 키",
+  "settings.defaultModel": "기본 모델 백엔드",
+  "documents.new": "새 문서",
+  "documents.title": "문서 제목",
+  "documents.content": "프로젝트 메모, 서비스 계획, 인수 조건, 조사 내용...",
+  "common.save": "저장",
+  "common.edit": "수정",
+  "common.none": "없음"
+};
+
+const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
+  en: enMessages,
+  ko: koMessages
+};
+
+const localeStorageKey = "harness.interface-locale";
+
+export function resolveSupportedLocale(languages: readonly string[]): SupportedLocale {
+  for (const language of languages) {
+    const baseLanguage = language.toLowerCase().split("-")[0];
+    if (supportedLocales.some((locale) => locale.code === baseLanguage)) {
+      return baseLanguage as SupportedLocale;
+    }
+  }
+  return "en";
+}
+
+function readInitialLocale(): SupportedLocale {
+  try {
+    const stored = window.localStorage.getItem(localeStorageKey);
+    if (supportedLocales.some((locale) => locale.code === stored)) {
+      return stored as SupportedLocale;
+    }
+  } catch {
+    // Local storage can be unavailable in hardened browser contexts.
+  }
+  return resolveSupportedLocale(window.navigator.languages?.length ? window.navigator.languages : [window.navigator.language]);
+}
+
+function interpolate(message: string, values?: Record<string, string | number>) {
+  if (!values) {
+    return message;
+  }
+  return Object.entries(values).reduce(
+    (result, [key, value]) => result.replaceAll(`{{${key}}}`, String(value)),
+    message
+  );
+}
+
+type I18nContextValue = {
+  locale: SupportedLocale;
+  setLocale: (locale: SupportedLocale) => void;
+  t: (key: MessageKey, values?: Record<string, string | number>) => string;
+};
+
+const I18nContext = createContext<I18nContextValue | null>(null);
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocale] = useState<SupportedLocale>(readInitialLocale);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    try {
+      window.localStorage.setItem(localeStorageKey, locale);
+    } catch {
+      // Keep the in-memory selection when persistence is unavailable.
+    }
+  }, [locale]);
+
+  const value = useMemo<I18nContextValue>(
+    () => ({
+      locale,
+      setLocale,
+      t: (key, values) => interpolate(messages[locale][key], values)
+    }),
+    [locale]
+  );
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n() {
+  const context = useContext(I18nContext);
+  if (!context) {
+    throw new Error("useI18n must be used inside LanguageProvider.");
+  }
+  return context;
+}
+
+export function statusMessageKey(status: string): MessageKey {
+  const keys: Record<string, MessageKey> = {
+    Backlog: "status.backlog",
+    Selected: "status.selected",
+    "In Progress": "status.inProgress",
+    "In Review": "status.inReview",
+    Paused: "status.paused",
+    Blocked: "status.blocked",
+    Done: "status.done"
+  };
+  return keys[status] || "status.backlog";
+}

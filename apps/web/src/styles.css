@@ -857,6 +857,25 @@ button:disabled {
   margin-top: 10px;
 }
 
+.language-setting {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.language-setting > span {
+  color: #44546f;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.language-setting small {
+  color: #6b778c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .folder-picker-field {
   display: grid;
   gap: 8px;
