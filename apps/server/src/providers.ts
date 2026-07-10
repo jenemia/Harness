@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { AgentRecord, MemoryRecord, TaskRecord } from "./types.js";
+import type { AgentRecord, ApprovalRecord, MemoryRecord, TaskRecord } from "./types.js";
 
 export type CommandResult = {
   ok: boolean;
@@ -72,10 +72,50 @@ export type LlmProviderDefinition = {
   commandExample: string | null;
 };
 
+export type ApprovalProviderDefinition = {
+  id: string;
+  label: string;
+  kind: "local-human";
+  description: string;
+  capabilities: {
+    commandExecution: boolean;
+    mergeApproval: boolean;
+    remembersDecisions: boolean;
+    resumesApprovedTasks: boolean;
+  };
+};
+
+export type CommandApprovalEvaluation =
+  | { action: "allow" }
+  | { action: "block"; reason: string }
+  | {
+      action: "request";
+      reason: string;
+      commandPreview: string | null;
+      metadata: Record<string, string | null>;
+    };
+
+export type ApprovalProvider = {
+  id: string;
+  definition: ApprovalProviderDefinition;
+  evaluateCommandExecution(input: {
+    required: boolean;
+    task: TaskRecord;
+    agent: AgentRecord;
+    llmProvider: LlmProviderDefinition;
+    effectiveBackend: string;
+    commandPreview: string | null;
+    existingApprovals: ApprovalRecord[];
+  }): CommandApprovalEvaluation;
+  decisionMessage(decision: "approved" | "rejected", approval: ApprovalRecord): string;
+  rejectionReason(approval: ApprovalRecord): string;
+};
+
 export class ProviderRegistry {
   constructor(
     private readonly platformProvider: PlatformProvider,
     private readonly workspaceProvider: WorkspaceProvider,
+    private readonly approvalProvider: ApprovalProvider,
     private readonly llmProviders: LlmProvider[]
   ) {}
 
@@ -85,6 +125,10 @@ export class ProviderRegistry {
 
   workspace() {
     return this.workspaceProvider;
+  }
+
+  approval() {
+    return this.approvalProvider;
   }
 
   llm(modelBackend: string) {
@@ -99,7 +143,8 @@ export class ProviderRegistry {
 export function createDefaultProviders(projectHarnessDir: (projectPath: string) => string) {
   const platformProvider = createPlatformProvider();
   const workspaceProvider = createGitWorktreeWorkspaceProvider(platformProvider, projectHarnessDir);
-  return new ProviderRegistry(platformProvider, workspaceProvider, [
+  const approvalProvider = createLocalHumanApprovalProvider();
+  return new ProviderRegistry(platformProvider, workspaceProvider, approvalProvider, [
     createMockLlmProvider(),
     createShellLlmProvider(platformProvider),
     createCliLlmProvider(platformProvider, {
@@ -333,6 +378,74 @@ function createGitWorktreeWorkspaceProvider(
           const file = line.slice(3).trim();
           return file.includes(" -> ") ? file.split(" -> ").pop()?.trim() || file : file;
         });
+    }
+  };
+}
+
+function createLocalHumanApprovalProvider(): ApprovalProvider {
+  return {
+    id: "local-human",
+    definition: {
+      id: "local-human",
+      label: "Local Human Approval",
+      kind: "local-human",
+      description: "Stores approval requests locally and resumes approved tasks from the Harness runtime.",
+      capabilities: {
+        commandExecution: true,
+        mergeApproval: true,
+        remembersDecisions: true,
+        resumesApprovedTasks: true
+      }
+    },
+
+    evaluateCommandExecution(input) {
+      if (!input.required || !input.llmProvider.requiresCommand) {
+        return { action: "allow" };
+      }
+
+      const approved = input.existingApprovals.find(
+        (approval) => approval.status === "approved" && approval.commandPreview === input.commandPreview
+      );
+      if (approved) {
+        return { action: "allow" };
+      }
+
+      const rejected = input.existingApprovals.find(
+        (approval) => approval.status === "rejected" && approval.commandPreview === input.commandPreview
+      );
+      if (rejected) {
+        return { action: "block", reason: this.rejectionReason(rejected) };
+      }
+
+      const reason = `${input.agent.name} needs approval before running ${input.llmProvider.label}.`;
+      const pending = input.existingApprovals.find(
+        (approval) => approval.status === "pending" && approval.commandPreview === input.commandPreview
+      );
+      if (pending) {
+        return { action: "block", reason };
+      }
+
+      return {
+        action: "request",
+        reason,
+        commandPreview: input.commandPreview,
+        metadata: {
+          provider: input.llmProvider.id,
+          approvalProvider: this.id,
+          effectiveBackend: input.effectiveBackend,
+          commandPreview: input.commandPreview
+        }
+      };
+    },
+
+    decisionMessage(decision) {
+      return decision === "approved"
+        ? "Human approved command execution for this task."
+        : "Human rejected command execution for this task.";
+    },
+
+    rejectionReason() {
+      return "Command execution approval was rejected.";
     }
   };
 }

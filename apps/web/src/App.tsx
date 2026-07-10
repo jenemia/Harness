@@ -1932,6 +1932,15 @@ function SettingsPanel(props: {
             worktrees {props.providerCatalog.workspace.capabilities.gitWorktrees ? "on" : "off"} | branch per task{" "}
             {props.providerCatalog.workspace.capabilities.branchPerTask ? "on" : "off"}
           </span>
+          <strong>{props.providerCatalog.approval.label}</strong>
+          <span>
+            {props.providerCatalog.approval.id} | {props.providerCatalog.approval.description}
+          </span>
+          <span>
+            command approvals {props.providerCatalog.approval.capabilities.commandExecution ? "on" : "off"} | merge
+            approvals {props.providerCatalog.approval.capabilities.mergeApproval ? "on" : "off"} | resumes tasks{" "}
+            {props.providerCatalog.approval.capabilities.resumesApprovedTasks ? "on" : "off"}
+          </span>
         </div>
       )}
       <form className="stack-form" onSubmit={submitGlobal}>

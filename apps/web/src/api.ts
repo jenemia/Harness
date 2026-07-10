@@ -264,6 +264,18 @@ export type ProviderCatalog = {
       mergeIntoMainCheckout: boolean;
     };
   };
+  approval: {
+    id: string;
+    label: string;
+    kind: "local-human";
+    description: string;
+    capabilities: {
+      commandExecution: boolean;
+      mergeApproval: boolean;
+      remembersDecisions: boolean;
+      resumesApprovedTasks: boolean;
+    };
+  };
   llmProviders: Array<{
     id: string;
     label: string;

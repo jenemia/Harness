@@ -384,6 +384,7 @@ Initial providers:
 - `node-darwin` platform provider for local Mac MVP.
 - Future `node-win32` platform provider for Windows.
 - `git-worktree` workspace provider for one branch and worktree per executable task.
+- `local-human` approval provider for command execution and merge approval gates.
 - `mock` LLM provider for deterministic local testing.
 - `shell` LLM provider for user-configured CLI commands.
 - `codex` LLM CLI provider slot.
@@ -398,7 +399,7 @@ LLM providers should receive a generated prompt file and normalized environment 
 
 Initial implementation: provider command defaults can be configured globally and per project. Agent-specific CLI commands override project provider commands, and project provider commands inherit from global defaults.
 
-Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a `git-worktree` workspace provider that owns task worktree creation, snapshotting, changed-file collection, commits, and merge operations. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
+Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a `git-worktree` workspace provider that owns task worktree creation, snapshotting, changed-file collection, commits, and merge operations. Runtime approval behavior is selected through a `local-human` approval provider that owns command approval policy, decision messages, and rejection reasons while the project database stores the approval records. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, approval provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
 
 ### Database
 

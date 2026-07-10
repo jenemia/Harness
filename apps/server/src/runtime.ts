@@ -36,6 +36,7 @@ export function listRuntimeProviders() {
       description: providers.workspace().description,
       capabilities: providers.workspace().capabilities
     },
+    approval: providers.approval().definition,
     llmProviders: providers.llmDefinitions()
   };
 }
@@ -419,11 +420,8 @@ export async function decideApproval(
       taskId: approval.taskId,
       agentId: approval.agentId,
       type: decision === "approved" ? "approval.approved" : "approval.rejected",
-      message:
-        decision === "approved"
-          ? "Human approved command execution for this task."
-          : "Human rejected command execution for this task.",
-      metadata: { approvalId: approval.id, kind: approval.kind }
+      message: providers.approval().decisionMessage(decision, approval),
+      metadata: { approvalId: approval.id, kind: approval.kind, approvalProvider: providers.approval().id }
     });
 
     if (task && decision === "approved") {
@@ -437,7 +435,7 @@ export async function decideApproval(
     }
 
     if (task && decision === "rejected") {
-      setTaskBlocked(db, task.id, "Command execution approval was rejected.");
+      setTaskBlocked(db, task.id, providers.approval().rejectionReason(approval));
       if (agent) {
         refreshAgentStatus(db, agent.id);
       }
@@ -769,33 +767,29 @@ function ensureCommandApproval(
 ) {
   const effectiveBackend = getEffectiveModelBackend(agent, task);
   const provider = providers.llm(effectiveBackend);
-  if (!settings.requireCommandApproval || !provider.definition.requiresCommand) {
-    return null;
-  }
   const commandPreview = getEffectiveProviderCommand(agent, effectiveBackend, settings) || provider.definition.commandExample;
-
   const existingRows = db
     .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
     .all(task.id, agent.id, commandApprovalKind)
     .map(mapApproval);
-  const approved = existingRows.find((approval) => approval.status === "approved" && approval.commandPreview === commandPreview);
-  if (approved) {
+
+  const evaluation = providers.approval().evaluateCommandExecution({
+    required: settings.requireCommandApproval,
+    task,
+    agent,
+    llmProvider: provider.definition,
+    effectiveBackend,
+    commandPreview,
+    existingApprovals: existingRows
+  });
+  if (evaluation.action === "allow") {
     return null;
   }
 
-  const rejected = existingRows.find((approval) => approval.status === "rejected" && approval.commandPreview === commandPreview);
-  if (rejected) {
-    const reason = "Command execution approval was rejected.";
-    setTaskBlocked(db, task.id, reason);
-    return reason;
-  }
+  setTaskBlocked(db, task.id, evaluation.reason);
 
-  const pending = existingRows.find((approval) => approval.status === "pending" && approval.commandPreview === commandPreview);
-  const reason = `${agent.name} needs approval before running ${provider.definition.label}.`;
-  setTaskBlocked(db, task.id, reason);
-
-  if (pending) {
-    return reason;
+  if (evaluation.action === "block") {
+    return evaluation.reason;
   }
 
   const approvalId = randomUUID();
@@ -805,8 +799,8 @@ function ensureCommandApproval(
     agent.id,
     commandApprovalKind,
     "pending",
-    reason,
-    commandPreview,
+    evaluation.reason,
+    evaluation.commandPreview,
     now(),
     null
   );
@@ -814,15 +808,13 @@ function ensureCommandApproval(
     taskId: task.id,
     agentId: agent.id,
     type: "approval.requested",
-    message: reason,
+    message: evaluation.reason,
     metadata: {
       approvalId,
-      provider: provider.definition.id,
-      effectiveBackend,
-      commandPreview
+      ...evaluation.metadata
     }
   });
-  return reason;
+  return evaluation.reason;
 }
 
 function withProviderCommand(agent: AgentRecord, task: TaskRecord, settings: ProjectSettings): AgentRecord {
