@@ -240,7 +240,7 @@ h3 {
 
 .task-composer {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 190px 220px 120px;
+  grid-template-columns: minmax(220px, 1fr) 170px 190px 170px minmax(180px, 220px) 120px;
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -319,6 +319,7 @@ h3 {
 .agent-chip,
 .branch-chip,
 .dependency-chip,
+.label-chip,
 .merge-chip,
 .run-state {
   border-radius: 999px;
@@ -347,6 +348,7 @@ h3 {
 .agent-chip,
 .branch-chip,
 .dependency-chip,
+.label-chip,
 .merge-chip {
   max-width: 100%;
   background: #e9f2ff;
@@ -369,6 +371,15 @@ h3 {
 .dependency-chip {
   background: #f1f2f4;
   color: #44546f;
+}
+
+.label-chip {
+  align-items: center;
+  background: #f1f2f4;
+  color: #44546f;
+  display: inline-flex;
+  gap: 5px;
+  overflow-wrap: anywhere;
 }
 
 .merge-chip.pending {
@@ -827,6 +838,7 @@ textarea {
 }
 
 .path-list,
+.label-list,
 .comment-list,
 .dependency-list,
 .handoff-list,
@@ -852,6 +864,11 @@ textarea {
 .path-line-row {
   color: #44546f;
   font-size: 12px;
+}
+
+.label-list {
+  flex-direction: row;
+  flex-wrap: wrap;
 }
 
 .path-line-row span {

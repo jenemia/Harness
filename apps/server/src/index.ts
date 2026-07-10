@@ -13,6 +13,7 @@ import {
   mapAgent,
   mapComment,
   mapDocument,
+  mapTask,
   now,
   openProjectDb,
   registerProject,
@@ -411,6 +412,9 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
     if (!existing) {
       throw new Error("Task not found.");
     }
+    if (input.parentTaskId === taskId) {
+      throw new Error("A task cannot be its own parent.");
+    }
 
     const status = input.status as TaskStatus | undefined;
     db.prepare(`
@@ -420,7 +424,9 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
           status = COALESCE(?, status),
           priority = COALESCE(?, priority),
           assignee_agent_id = ?,
+          parent_task_id = ?,
           dependency_task_ids = COALESCE(?, dependency_task_ids),
+          labels = COALESCE(?, labels),
           acceptance_criteria = COALESCE(?, acceptance_criteria),
           blocked_reason = ?,
           updated_at = ?
@@ -431,7 +437,9 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       status || null,
       input.priority || null,
       input.assigneeAgentId === undefined ? (existing as { assignee_agent_id: string | null }).assignee_agent_id : input.assigneeAgentId,
+      input.parentTaskId === undefined ? (existing as { parent_task_id: string | null }).parent_task_id : input.parentTaskId,
       Array.isArray(input.dependencyTaskIds) ? JSON.stringify(input.dependencyTaskIds) : null,
+      Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
       input.acceptanceCriteria?.trim() || null,
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
       now(),
@@ -446,7 +454,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       metadata: input as Record<string, unknown>
     });
 
-    return db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    return mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId));
   } finally {
     db.close();
   }

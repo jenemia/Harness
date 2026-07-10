@@ -10,12 +10,14 @@ import {
   FolderOpen,
   GitBranch,
   GitMerge,
+  GitFork,
   Link2,
   Play,
   Plus,
   RefreshCcw,
   Sparkles,
   Settings,
+  Tag,
   X,
   UserRoundCog
 } from "lucide-react";
@@ -598,6 +600,8 @@ function TaskComposer(props: {
   const [title, setTitle] = useState("");
   const [assigneeAgentId, setAssigneeAgentId] = useState("");
   const [dependencyTaskId, setDependencyTaskId] = useState("");
+  const [parentTaskId, setParentTaskId] = useState("");
+  const [labelsText, setLabelsText] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -607,13 +611,17 @@ function TaskComposer(props: {
         body: JSON.stringify({
           title,
           assigneeAgentId: assigneeAgentId || null,
+          parentTaskId: parentTaskId || null,
           dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
+          labels: parseLabels(labelsText),
           status: "Backlog",
           priority: "Medium"
         })
       });
       setTitle("");
       setDependencyTaskId("");
+      setParentTaskId("");
+      setLabelsText("");
       await props.onChanged();
     });
   }
@@ -637,6 +645,15 @@ function TaskComposer(props: {
           </option>
         ))}
       </select>
+      <select value={parentTaskId} onChange={(event) => setParentTaskId(event.target.value)}>
+        <option value="">No parent</option>
+        {props.overview.tasks.map((task) => (
+          <option key={task.id} value={task.id}>
+            parent: {task.title}
+          </option>
+        ))}
+      </select>
+      <input value={labelsText} onChange={(event) => setLabelsText(event.target.value)} placeholder="Labels, comma separated" />
       <button className="primary-button" type="submit">
         <Plus size={16} />
         <span>Create</span>
@@ -705,6 +722,18 @@ function TaskCard(props: {
             {props.task.dependencyTaskIds.length} dependency
           </span>
         )}
+        {props.task.parentTaskId && (
+          <span className="dependency-chip">
+            <GitFork size={14} />
+            child task
+          </span>
+        )}
+        {props.task.labels.map((label) => (
+          <span className="label-chip" key={label}>
+            <Tag size={14} />
+            {label}
+          </span>
+        ))}
         {props.task.blockedReason && <span className="blocked-note">{props.task.blockedReason}</span>}
         {props.task.mergeStatus !== "none" && (
           <span className={`merge-chip ${props.task.mergeStatus}`}>
@@ -755,11 +784,15 @@ function TaskDetailDrawer(props: {
   const [editStatus, setEditStatus] = useState<TaskStatus>(props.task.status);
   const [editPriority, setEditPriority] = useState<Task["priority"]>(props.task.priority);
   const [editAssigneeAgentId, setEditAssigneeAgentId] = useState(props.task.assigneeAgentId || "");
+  const [editParentTaskId, setEditParentTaskId] = useState(props.task.parentTaskId || "");
+  const [editLabelsText, setEditLabelsText] = useState(props.task.labels.join(", "));
   const [commentBody, setCommentBody] = useState("");
   const runs = props.overview.runs.filter((run) => run.taskId === props.task.id);
   const events = props.overview.events.filter((event) => event.taskId === props.task.id);
   const handoffs = props.overview.handoffs.filter((handoff) => handoff.taskId === props.task.id);
   const comments = props.overview.comments.filter((comment) => comment.taskId === props.task.id);
+  const parentTask = props.overview.tasks.find((task) => task.id === props.task.parentTaskId);
+  const subtasks = props.overview.tasks.filter((task) => task.parentTaskId === props.task.id);
   const dependencies = props.task.dependencyTaskIds
     .map((id) => props.overview.tasks.find((task) => task.id === id))
     .filter(Boolean) as Task[];
@@ -771,6 +804,8 @@ function TaskDetailDrawer(props: {
     setEditStatus(props.task.status);
     setEditPriority(props.task.priority);
     setEditAssigneeAgentId(props.task.assigneeAgentId || "");
+    setEditParentTaskId(props.task.parentTaskId || "");
+    setEditLabelsText(props.task.labels.join(", "));
   }, [props.task.id, props.task.updatedAt]);
 
   async function start() {
@@ -798,7 +833,9 @@ function TaskDetailDrawer(props: {
           acceptanceCriteria: editAcceptanceCriteria,
           status: editStatus,
           priority: editPriority,
-          assigneeAgentId: editAssigneeAgentId || null
+          assigneeAgentId: editAssigneeAgentId || null,
+          parentTaskId: editParentTaskId || null,
+          labels: parseLabels(editLabelsText)
         })
       });
       setIsEditing(false);
@@ -874,6 +911,21 @@ function TaskDetailDrawer(props: {
                 </option>
               ))}
             </select>
+            <select value={editParentTaskId} onChange={(event) => setEditParentTaskId(event.target.value)}>
+              <option value="">No parent</option>
+              {props.overview.tasks
+                .filter((task) => task.id !== props.task.id)
+                .map((task) => (
+                  <option key={task.id} value={task.id}>
+                    {task.title}
+                  </option>
+                ))}
+            </select>
+            <input
+              value={editLabelsText}
+              onChange={(event) => setEditLabelsText(event.target.value)}
+              placeholder="Labels, comma separated"
+            />
             <textarea
               value={editDescription}
               onChange={(event) => setEditDescription(event.target.value)}
@@ -899,9 +951,24 @@ function TaskDetailDrawer(props: {
             <DetailItem label="Assignee" value={props.assignee?.name || "Unassigned"} />
             <DetailItem label="Backend" value={props.assignee?.modelBackend || "-"} />
             <DetailItem label="Merge" value={props.task.mergeStatus} />
+            <DetailItem label="Parent" value={parentTask?.title || "-"} />
             <DetailItem label="Reporter" value={props.task.reporter} />
           </div>
         </section>
+
+        {props.task.labels.length > 0 && (
+          <section className="drawer-section">
+            <h3>Labels</h3>
+            <div className="label-list">
+              {props.task.labels.map((label) => (
+                <span className="label-chip" key={label}>
+                  <Tag size={14} />
+                  {label}
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="drawer-section">
           <h3>Description</h3>
@@ -947,12 +1014,37 @@ function TaskDetailDrawer(props: {
           </section>
         )}
 
+        {subtasks.length > 0 && (
+          <section className="drawer-section">
+            <h3>Subtasks</h3>
+            <div className="dependency-list">
+              {subtasks.map((subtask) => (
+                <div className="dependency-row" key={subtask.id}>
+                  <span>{subtask.title}</span>
+                  <b>{subtask.status}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <TaskComments comments={comments} body={commentBody} onBodyChange={setCommentBody} onSubmit={addComment} />
         <TaskRuns runs={runs} />
         <TaskHandoffs handoffs={handoffs} agents={props.overview.agents} />
         <TaskTimeline events={events} runs={runs} />
       </aside>
     </div>
+  );
+}
+
+function parseLabels(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((label) => label.trim())
+        .filter(Boolean)
+    )
   );
 }
 
