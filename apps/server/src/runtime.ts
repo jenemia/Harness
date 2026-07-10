@@ -437,31 +437,44 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
     return;
   }
 
-  if (completedBy.role !== "reviewer") {
-    const reviewer = findAgentByRole(db, "reviewer");
-    if (reviewer && reviewer.id !== completedBy.id) {
-      assignTask(db, task.id, reviewer.id);
-      updateTaskStatus(db, task.id, "In Review");
-      db.prepare("INSERT INTO handoffs VALUES (?, ?, ?, ?, ?, ?)").run(
-        randomUUID(),
-        task.id,
-        completedBy.id,
-        reviewer.id,
-        "PM auto-handoff: implementation completed and review is required before Done.",
-        now()
-      );
+  const settings = getProjectSettingsFromDb(db);
+  const nextRole = settings.handoffRules[completedBy.role];
+  if (nextRole) {
+    const nextAgent = findAgentForHandoff(db, nextRole, completedBy.id);
+    if (!nextAgent) {
+      const reason = `PM handoff rule needs a ${nextRole} agent, but none is available.`;
+      setTaskBlocked(db, task.id, reason);
       insertEvent(db, {
         taskId: task.id,
-        agentId: reviewer.id,
-        type: "handoff.automatic",
-        message: `PM Agent handed the task from ${completedBy.name} to ${reviewer.name}.`,
-        metadata: { fromAgentId: completedBy.id, toAgentId: reviewer.id }
+        agentId: completedBy.id,
+        type: "handoff.blocked",
+        message: reason,
+        metadata: { fromRole: completedBy.role, toRole: nextRole }
       });
-      setTimeout(() => {
-        void startTask(project, task.id);
-      }, 0);
       return;
     }
+
+    assignTask(db, task.id, nextAgent.id);
+    updateTaskStatus(db, task.id, nextAgent.role === "reviewer" ? "In Review" : "Selected");
+    db.prepare("INSERT INTO handoffs VALUES (?, ?, ?, ?, ?, ?)").run(
+      randomUUID(),
+      task.id,
+      completedBy.id,
+      nextAgent.id,
+      `PM auto-handoff rule: ${completedBy.role} -> ${nextRole}.`,
+      now()
+    );
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: nextAgent.id,
+      type: "handoff.automatic",
+      message: `PM Agent handed the task from ${completedBy.name} to ${nextAgent.name}.`,
+      metadata: { fromAgentId: completedBy.id, toAgentId: nextAgent.id, fromRole: completedBy.role, toRole: nextRole }
+    });
+    setTimeout(() => {
+      void startTask(project, task.id);
+    }, 0);
+    return;
   }
 
   updateTaskStatus(db, task.id, "Done");
@@ -508,9 +521,12 @@ function getApproval(db: DatabaseSync, approvalId: string): ApprovalRecord | nul
   return row ? mapApproval(row) : null;
 }
 
-function findAgentByRole(db: DatabaseSync, role: string): AgentRecord | null {
-  const row = db.prepare("SELECT * FROM agents WHERE role = ? ORDER BY created_at ASC LIMIT 1").get(role);
-  return row ? mapAgent(row) : null;
+function findAgentForHandoff(db: DatabaseSync, role: string, excludeAgentId: string): AgentRecord | null {
+  const rows = db
+    .prepare("SELECT * FROM agents WHERE id != ? ORDER BY created_at ASC")
+    .all(excludeAgentId)
+    .map(mapAgent);
+  return rows.find((agent) => agent.role === role || agent.capabilities.includes(role)) || null;
 }
 
 function chooseAgent(db: DatabaseSync, task: TaskRecord): AgentRecord | null {

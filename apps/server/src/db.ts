@@ -244,6 +244,10 @@ export function defaultProjectSettings(): ProjectSettings {
     autoStartPlans: globalSettings.autoStartPlans,
     requireCommandApproval: true,
     maxProjectParallel: 4,
+    handoffRules: {
+      programmer: "reviewer",
+      worker: "reviewer"
+    },
     updatedAt: null
   };
 }
@@ -285,6 +289,9 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "maxProjectParallel") {
       settings.maxProjectParallel = Math.max(1, Number(row.value || 1));
     }
+    if (row.key === "handoffRules") {
+      settings.handoffRules = parseHandoffRules(row.value, settings.handoffRules);
+    }
   }
 
   return { ...settings, updatedAt };
@@ -301,6 +308,7 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
       autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
       requireCommandApproval: input.requireCommandApproval ?? current.requireCommandApproval,
       maxProjectParallel: Math.max(1, Number(input.maxProjectParallel || current.maxProjectParallel)),
+      handoffRules: normalizeHandoffRules(input.handoffRules || current.handoffRules),
       updatedAt: timestamp
     };
 
@@ -310,10 +318,31 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
     stmt.run("autoStartPlans", String(next.autoStartPlans), timestamp);
     stmt.run("requireCommandApproval", String(next.requireCommandApproval), timestamp);
     stmt.run("maxProjectParallel", String(next.maxProjectParallel), timestamp);
+    stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
     return next;
   } finally {
     db.close();
   }
+}
+
+function parseHandoffRules(value: string, fallback: Record<string, string>) {
+  try {
+    return normalizeHandoffRules(JSON.parse(value));
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeHandoffRules(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(input as Record<string, unknown>)
+      .map(([fromRole, toRole]) => [fromRole.trim(), typeof toRole === "string" ? toRole.trim() : ""])
+      .filter(([fromRole, toRole]) => fromRole && toRole)
+  );
 }
 
 function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {

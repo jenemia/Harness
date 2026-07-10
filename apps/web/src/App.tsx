@@ -1048,6 +1048,7 @@ function SettingsPanel(props: {
   const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
   const [autoStartPlans, setAutoStartPlans] = useState(false);
   const [projectSettings, setProjectSettings] = useState<ProjectSettings>(props.overview.settings);
+  const [handoffRulesText, setHandoffRulesText] = useState(JSON.stringify(props.overview.settings.handoffRules, null, 2));
 
   useEffect(() => {
     if (!props.settings) {
@@ -1061,6 +1062,7 @@ function SettingsPanel(props: {
 
   useEffect(() => {
     setProjectSettings(props.overview.settings);
+    setHandoffRulesText(JSON.stringify(props.overview.settings.handoffRules, null, 2));
   }, [props.overview.settings]);
 
   async function submitGlobal(event: FormEvent) {
@@ -1082,11 +1084,13 @@ function SettingsPanel(props: {
   async function submitProject(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
+      const handoffRules = parseHandoffRulesText(handoffRulesText);
       const response = await api<{ settings: ProjectSettings }>(`/api/projects/${props.overview.project.id}/settings`, {
         method: "PATCH",
-        body: JSON.stringify(projectSettings)
+        body: JSON.stringify({ ...projectSettings, handoffRules })
       });
       setProjectSettings(response.settings);
+      setHandoffRulesText(JSON.stringify(response.settings.handoffRules, null, 2));
       await props.onProjectChanged();
     });
   }
@@ -1179,12 +1183,29 @@ function SettingsPanel(props: {
           />
           <span>Require command approvals</span>
         </label>
+        <textarea
+          value={handoffRulesText}
+          onChange={(event) => setHandoffRulesText(event.target.value)}
+          placeholder='{"programmer":"reviewer","worker":"reviewer"}'
+        />
         <button className="secondary-button" type="submit">
           <Settings size={16} />
           <span>Save project</span>
         </button>
       </form>
     </section>
+  );
+}
+
+function parseHandoffRulesText(value: string) {
+  const parsed = JSON.parse(value || "{}");
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Handoff rules must be a JSON object.");
+  }
+  return Object.fromEntries(
+    Object.entries(parsed)
+      .map(([fromRole, toRole]) => [fromRole.trim(), typeof toRole === "string" ? toRole.trim() : ""])
+      .filter(([fromRole, toRole]) => fromRole && toRole)
   );
 }
 

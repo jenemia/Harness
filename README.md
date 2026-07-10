@@ -13,7 +13,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
 - Ready-task scheduler with agent `maxParallel` capacity checks.
 - Git worktree per executable task.
-- Automatic PM-driven handoff with approval gates for LLM CLI command execution and merge.
+- Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
@@ -36,7 +36,9 @@ The web app runs on `http://localhost:5173`.
 
 Use the Settings panel or `/api/settings` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.
 
-Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel or `PATCH /api/projects/:projectId/settings` to configure the current project's default LLM backend, default agent concurrency, project-wide parallel run limit, PM plan auto-start behavior, and command approval policy.
+Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel or `PATCH /api/projects/:projectId/settings` to configure the current project's default LLM backend, default agent concurrency, project-wide parallel run limit, PM plan auto-start behavior, command approval policy, and PM handoff rules.
+
+Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`; roles without a matching rule move to Done after successful completion.
 
 ## PM Planning
 

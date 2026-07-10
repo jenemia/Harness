@@ -28,6 +28,7 @@ export type ProjectSettings = {
   autoStartPlans: boolean;
   requireCommandApproval: boolean;
   maxProjectParallel: number;
+  handoffRules: Record<string, string>;
   updatedAt: string | null;
 };
 
