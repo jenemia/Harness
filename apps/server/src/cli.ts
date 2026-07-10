@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import {
   createAgentTemplate,
   createGlobalMemory,
@@ -890,6 +891,7 @@ function createCliFollowUpTasks(project: ProjectRecord, runId: string) {
   let runAgentId = "";
   let sourceTask: TaskRecord;
   let candidates: Array<{ title: string; description: string }> = [];
+  let existingTitles = new Set<string>();
   try {
     const runRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(runId);
     if (!runRow) {
@@ -905,11 +907,23 @@ function createCliFollowUpTasks(project: ProjectRecord, runId: string) {
     sourceTask = mapTask(sourceTaskRow);
     runAgentId = run.agentId;
     candidates = parseFollowUpCandidates(run.output || run.error || "", sourceTask.title);
+    existingTitles = getExistingFollowUpTitles(db, sourceTask.id);
   } finally {
     db.close();
   }
 
-  const tasks = candidates.map((candidate) =>
+  const skippedTitles: string[] = [];
+  const newCandidates = candidates.filter((candidate) => {
+    const key = normalizeFollowUpTitle(candidate.title);
+    if (existingTitles.has(key)) {
+      skippedTitles.push(candidate.title);
+      return false;
+    }
+    existingTitles.add(key);
+    return true;
+  });
+
+  const tasks = newCandidates.map((candidate) =>
     createCliTask(project, {
       title: candidate.title,
       description: candidate.description,
@@ -934,15 +948,29 @@ function createCliFollowUpTasks(project: ProjectRecord, runId: string) {
     insertEvent(eventDb, {
       taskId: sourceTask.id,
       agentId: runAgentId,
-      type: "followups.created",
-      message: `${tasks.length} follow-up task(s) were created from run output.`,
-      metadata: { runId, followUpTaskIds: tasks.map((task) => task.id) }
+      type: tasks.length > 0 ? "followups.created" : "followups.skipped",
+      message:
+        tasks.length > 0
+          ? `${tasks.length} follow-up task(s) were created from run output.`
+          : "Follow-up creation skipped because matching child tasks already exist.",
+      metadata: { runId, followUpTaskIds: tasks.map((task) => task.id), skippedTitles }
     });
   } finally {
     eventDb.close();
   }
 
   return tasks;
+}
+
+function getExistingFollowUpTitles(db: DatabaseSync, parentTaskId: string): Set<string> {
+  return new Set<string>(
+    db
+      .prepare("SELECT * FROM tasks WHERE parent_task_id = ?")
+      .all(parentTaskId)
+      .map(mapTask)
+      .filter((task) => task.labels.includes("follow-up"))
+      .map((task) => normalizeFollowUpTitle(task.title))
+  );
 }
 
 function parseFollowUpCandidates(output: string, sourceTitle: string) {
@@ -959,10 +987,28 @@ function parseFollowUpCandidates(output: string, sourceTitle: string) {
     candidates.push(`Review follow-up from ${sourceTitle}`);
   }
 
-  return candidates.map((title) => ({
-    title,
-    description: `Created from agent run output for ${sourceTitle}.`
-  }));
+  return deduplicateFollowUpCandidates(
+    candidates.map((title) => ({
+      title,
+      description: `Created from agent run output for ${sourceTitle}.`
+    }))
+  );
+}
+
+function deduplicateFollowUpCandidates(candidates: Array<{ title: string; description: string }>) {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = normalizeFollowUpTitle(candidate.title);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizeFollowUpTitle(title: string) {
+  return title.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function createCliTask(

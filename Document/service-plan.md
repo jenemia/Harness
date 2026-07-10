@@ -128,7 +128,7 @@ Initial implementation: completed task worktree changes create merge approval re
 
 Initial implementation: the local policy provider detects risky shell commands and forces a command approval request even when project-wide command approvals are disabled. The first risk rules cover recursive forced deletes, hard Git resets, Git clean, Git push, sudo, package install/update commands, and remote scripts piped into a shell.
 
-Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list, API, or `runs:followups`. Follow-ups are created as child tasks with a dependency on the source task and inherit linked files, workspace mode, and model override context so PM output can become tracked work.
+Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list, API, or `runs:followups`. Follow-ups are created as child tasks with a dependency on the source task and inherit linked files, workspace mode, and model override context so PM output can become tracked work. Manual follow-up creation also skips duplicate child follow-ups with the same normalized title.
 
 Initial implementation: PM completion review also creates follow-up backlog tasks automatically when the latest agent output contains next-step, TODO, follow-up, or action-item signals. Automatic follow-ups are recorded in the task timeline, remain linked to the source task as children, and skip duplicate child follow-ups with the same normalized title.
 

@@ -27,7 +27,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Automatic workspace mode selection for common code, docs, planning, and research task signals.
 - Automatic PM-driven handoff with project-level handoff rules, dynamic fallback routing, and approval gates for risky handoffs, LLM CLI command execution, and merge.
 - PM completion evaluation events before automatic handoffs or Done transitions.
-- Automatic follow-up ticket creation when PM completion review detects next-step or TODO signals in agent output, with duplicate child follow-ups skipped.
+- Follow-up ticket creation from PM review, task drawer, API, or CLI when agent output contains next-step or TODO signals, with duplicate child follow-ups skipped.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
 - Configurable run timeout for command-backed providers.

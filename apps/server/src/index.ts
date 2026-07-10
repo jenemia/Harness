@@ -2,6 +2,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
   createAgentTemplate,
@@ -928,6 +929,7 @@ function createFollowUpTasks(project: ProjectRecord, runId: string) {
   let sourceTitle = "";
   let sourceTask: TaskRecord;
   let candidates: Array<{ title: string; description: string }> = [];
+  let existingTitles = new Set<string>();
   try {
     const runRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(runId);
     if (!runRow) {
@@ -944,11 +946,23 @@ function createFollowUpTasks(project: ProjectRecord, runId: string) {
     sourceTaskId = sourceTask.id;
     sourceTitle = sourceTask.title;
     candidates = parseFollowUpCandidates(run.output || run.error || "", sourceTitle);
+    existingTitles = getExistingFollowUpTitles(db, sourceTaskId);
   } finally {
     db.close();
   }
 
-  const tasks = candidates.map((candidate) =>
+  const skippedTitles: string[] = [];
+  const newCandidates = candidates.filter((candidate) => {
+    const key = normalizeFollowUpTitle(candidate.title);
+    if (existingTitles.has(key)) {
+      skippedTitles.push(candidate.title);
+      return false;
+    }
+    existingTitles.add(key);
+    return true;
+  });
+
+  const tasks = newCandidates.map((candidate) =>
     createTask(project, {
       title: candidate.title,
       description: candidate.description,
@@ -971,15 +985,29 @@ function createFollowUpTasks(project: ProjectRecord, runId: string) {
     insertEvent(eventDb, {
       taskId: sourceTaskId,
       agentId: runAgentId,
-      type: "followups.created",
-      message: `${tasks.length} follow-up task(s) were created from run output.`,
-      metadata: { runId, followUpTaskIds: tasks.map((task) => task.id) }
+      type: tasks.length > 0 ? "followups.created" : "followups.skipped",
+      message:
+        tasks.length > 0
+          ? `${tasks.length} follow-up task(s) were created from run output.`
+          : "Follow-up creation skipped because matching child tasks already exist.",
+      metadata: { runId, followUpTaskIds: tasks.map((task) => task.id), skippedTitles }
     });
   } finally {
     eventDb.close();
   }
 
   return tasks;
+}
+
+function getExistingFollowUpTitles(db: DatabaseSync, parentTaskId: string): Set<string> {
+  return new Set<string>(
+    db
+      .prepare("SELECT * FROM tasks WHERE parent_task_id = ?")
+      .all(parentTaskId)
+      .map(mapTask)
+      .filter((task) => task.labels.includes("follow-up"))
+      .map((task) => normalizeFollowUpTitle(task.title))
+  );
 }
 
 function parseFollowUpCandidates(output: string, sourceTitle: string) {
@@ -1002,10 +1030,28 @@ function parseFollowUpCandidates(output: string, sourceTitle: string) {
     ];
   }
 
-  return candidates.map((candidate) => ({
-    title: candidate.length > 90 ? `${candidate.slice(0, 87)}...` : candidate,
-    description: `Created from agent run output for "${sourceTitle}".\n\n${candidate}`
-  }));
+  return deduplicateFollowUpCandidates(
+    candidates.map((candidate) => ({
+      title: candidate.length > 90 ? `${candidate.slice(0, 87)}...` : candidate,
+      description: `Created from agent run output for "${sourceTitle}".\n\n${candidate}`
+    }))
+  );
+}
+
+function deduplicateFollowUpCandidates(candidates: Array<{ title: string; description: string }>) {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = normalizeFollowUpTitle(candidate.title);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizeFollowUpTitle(title: string) {
+  return title.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function createTaskComment(project: ProjectRecord, taskId: string, input: { author?: string; body?: string }) {
