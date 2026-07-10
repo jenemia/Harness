@@ -542,7 +542,7 @@ The task detail view should include:
 
 Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, linked files, parent/subtask links, dependencies, workspace mode, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, follow-up task creation, PM handoff decision history, and an activity timeline.
 
-Initial implementation: tasks can store linked file paths through the UI, API, or CLI. Linked files are visible in the task detail drawer, preserved when a PM or human decomposes a parent task into subtasks, and available in task records for future agent prompt/context routing.
+Initial implementation: tasks can store linked file paths through the UI, API, or CLI. Linked files are visible in the task detail drawer, preserved when a PM or human decomposes a parent task into subtasks, and injected into the generated agent prompt plus the `HARNESS_LINKED_FILES` environment variable for provider-specific CLI wrappers.
 
 Initial implementation: the headless CLI can show the Kanban board grouped by status, list tasks with status/assignee/label filters, show task-scoped comments, runs, approvals, handoffs, and events, and inspect run records with filters for status, task, agent, provider, and model backend.
 

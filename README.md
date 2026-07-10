@@ -171,6 +171,8 @@ Open a task from the board to inspect its status, assignee, labels, linked files
 
 Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files.
 
+Linked files are injected into the generated agent prompt and exposed to command-backed providers as `HARNESS_LINKED_FILES`, so model-specific CLI wrappers can use the same task context.
+
 Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, and run-scoped `runs:show`.
 
 ## Approvals
