@@ -319,6 +319,23 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "POST" && childPath === "tasks/from-prompt") {
+        const body = await readBody<{ prompt?: string }>(req);
+        if (!body.prompt?.trim()) {
+          sendError(res, 400, "Work prompt is required.");
+          return;
+        }
+        const settings = getProjectSettings(project.path);
+        const plan = createPlan(project, {
+          goal: body.prompt,
+          mode: "auto",
+          allowLargePlan: true,
+          largePlanTaskThreshold: settings.largePlanTaskThreshold
+        });
+        sendJson(res, { plan, overview: getProjectOverview(project) }, 201);
+        return;
+      }
+
       if (req.method === "POST" && childPath === "documents") {
         const document = createDocument(project, await readBody(req));
         sendJson(res, { document, overview: getProjectOverview(project) }, 201);

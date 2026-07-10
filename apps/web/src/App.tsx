@@ -38,7 +38,6 @@ export function App() {
   const [healthReport, setHealthReport] = useState<ProjectHealthReport | null>(null);
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
-  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
   const [projectTemplates, setProjectTemplates] = useState<ProjectTemplate[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
@@ -48,20 +47,19 @@ export function App() {
   const [boardQuery, setBoardQuery] = useState("");
   const [boardAssigneeId, setBoardAssigneeId] = useState("");
   const [boardLabel, setBoardLabel] = useState("");
+  const [isTaskPromptOpen, setIsTaskPromptOpen] = useState(false);
 
   async function loadProjects() {
-    const [data, providers, templatesResponse, workflowTemplatesResponse, projectTemplatesResponse, settingsResponse] = await Promise.all([
+    const [data, providers, templatesResponse, projectTemplatesResponse, settingsResponse] = await Promise.all([
       api<{ projects: ProjectListItem[] }>("/api/projects"),
       api<ProviderCatalog>("/api/providers"),
       api<{ templates: AgentTemplate[] }>("/api/agent-templates"),
-      api<{ templates: WorkflowTemplate[] }>("/api/workflow-templates"),
       api<{ templates: ProjectTemplate[] }>("/api/project-templates"),
       api<{ settings: GlobalSettings }>("/api/settings")
     ]);
     setProjects(data.projects);
     setProviderCatalog(providers);
     setAgentTemplates(templatesResponse.templates);
-    setWorkflowTemplates(workflowTemplatesResponse.templates);
     setProjectTemplates(projectTemplatesResponse.templates);
     setSettings(settingsResponse.settings);
     if (!selectedProjectId && data.projects[0]) {
@@ -262,10 +260,16 @@ export function App() {
           </div>
           <div className="topbar-actions">
             {overview && (
-              <button className="secondary-button" type="button" onClick={() => void scheduleReady()}>
-                <Play size={16} />
-                <span>Run Ready</span>
-              </button>
+              <>
+                <button className="primary-button" type="button" onClick={() => setIsTaskPromptOpen(true)}>
+                  <Plus size={16} />
+                  <span>Add work</span>
+                </button>
+                <button className="secondary-button" type="button" onClick={() => void scheduleReady()}>
+                  <Play size={16} />
+                  <span>Run Ready</span>
+                </button>
+              </>
             )}
             <button className="icon-button" type="button" onClick={() => void runAction(() => loadOverview())}>
               <RefreshCcw size={18} />
@@ -285,12 +289,6 @@ export function App() {
         {overview ? (
           <div className="content-grid">
             <section className="board-area" aria-label="Kanban board">
-              <TaskComposer
-                overview={overview}
-                providerCatalog={providerCatalog}
-                runAction={runAction}
-                onChanged={() => loadOverview()}
-              />
               <BoardFilters
                 agents={overview.agents}
                 labels={boardLabels}
@@ -348,16 +346,9 @@ export function App() {
                 onOpenTask={setSelectedTaskId}
                 onChanged={() => loadOverview()}
               />
-              <PlanningPanel
-                overview={overview}
-                workflowTemplates={workflowTemplates}
-                runAction={runAction}
-                onChanged={() => loadOverview()}
-              />
               <ApprovalsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <DocumentsPanel
                 overview={overview}
-                workflowTemplates={workflowTemplates}
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
@@ -390,6 +381,14 @@ export function App() {
         )}
 
         {isBusy && <div className="busy-line">Working...</div>}
+        {overview && isTaskPromptOpen && (
+          <TaskPromptModal
+            projectId={overview.project.id}
+            onClose={() => setIsTaskPromptOpen(false)}
+            runAction={runAction}
+            onChanged={() => loadOverview()}
+          />
+        )}
         {overview && selectedTask && (
           <TaskDetailDrawer
             overview={overview}
@@ -936,167 +935,90 @@ function findProviderCommandIssues(overview: Overview, providerCatalog: Provider
   return Array.from(issues.values());
 }
 
-function PlanningPanel(props: {
-  overview: Overview;
-  workflowTemplates: WorkflowTemplate[];
+function TaskPromptModal(props: {
+  projectId: string;
+  onClose: () => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
-  const [goal, setGoal] = useState("");
-  const [mode, setMode] = useState<PlanningMode>("auto");
-  const [workflowTemplateId, setWorkflowTemplateId] = useState("");
-  const [autoStart, setAutoStart] = useState(false);
-  const [lastPreview, setLastPreview] = useState<PlanPreviewResult | null>(null);
-  const [lastPlan, setLastPlan] = useState<PlanResult | null>(null);
-  const [lastSchedule, setLastSchedule] = useState<ScheduleResult | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    setAutoStart(props.overview.settings.autoStartPlans);
-  }, [props.overview.settings.autoStartPlans]);
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape" && !isSubmitting) {
+        props.onClose();
+      }
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isSubmitting, props.onClose]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!prompt.trim() || isSubmitting) {
+      return;
+    }
+
+    let completed = false;
+    setIsSubmitting(true);
     await props.runAction(async () => {
-      const confirmedPreview =
-        lastPreview?.goal === goal.trim() &&
-        lastPreview.mode === mode &&
-        lastPreview.workflowTemplateId === (workflowTemplateId || null);
-      const response = await api<{ plan: PlanResult; schedule: ScheduleResult | null }>(`/api/projects/${props.overview.project.id}/plan`, {
+      await api<{ plan: PlanResult }>(`/api/projects/${props.projectId}/tasks/from-prompt`, {
         method: "POST",
-        body: JSON.stringify({
-          goal,
-          mode,
-          autoStart,
-          workflowTemplateId: workflowTemplateId || undefined,
-          allowLargePlan: confirmedPreview
-        })
+        body: JSON.stringify({ prompt })
       });
-      setLastPlan(response.plan);
-      setLastSchedule(response.schedule);
-      setLastPreview(null);
-      setGoal("");
       await props.onChanged();
+      completed = true;
     });
-  }
-
-  async function preview() {
-    await props.runAction(async () => {
-      const response = await api<{ preview: PlanPreviewResult }>(`/api/projects/${props.overview.project.id}/plan-preview`, {
-        method: "POST",
-        body: JSON.stringify({ goal, mode, workflowTemplateId: workflowTemplateId || undefined })
-      });
-      setLastPreview(response.preview);
-      setLastPlan(null);
-      setLastSchedule(null);
-    });
+    setIsSubmitting(false);
+    if (completed) {
+      props.onClose();
+    }
   }
 
   return (
-    <section className="rail-panel">
-      <div className="panel-header">
-        <Sparkles size={17} />
-        <h2>PM Plan</h2>
-      </div>
-      <form className="stack-form" onSubmit={submit}>
-        <textarea
-          value={goal}
-          onChange={(event) => setGoal(event.target.value)}
-          placeholder="Goal or bullet list"
-        />
-        <select value={mode} onChange={(event) => setMode(event.target.value as PlanningMode)}>
-          <option value="auto">Auto PM decision</option>
-          <option value="sequential">Sequential handoff</option>
-          <option value="parallel">Parallel where safe</option>
-        </select>
-        <select value={workflowTemplateId} onChange={(event) => setWorkflowTemplateId(event.target.value)}>
-          <option value="">Default planner</option>
-          {props.workflowTemplates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name} ({template.steps.length} steps)
-            </option>
-          ))}
-        </select>
-        <label className="check-row">
-          <input type="checkbox" checked={autoStart} onChange={(event) => setAutoStart(event.target.checked)} />
-          <span>Auto-start ready tasks</span>
-        </label>
-        <div className="form-actions">
-          <button className="secondary-button" type="button" onClick={() => void preview()}>
-            <Search size={16} />
-            <span>Preview</span>
+    <div className="modal-backdrop" role="presentation" onClick={() => !isSubmitting && props.onClose()}>
+      <section
+        aria-labelledby="task-prompt-title"
+        aria-modal="true"
+        className="task-prompt-modal"
+        role="dialog"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="task-prompt-header">
+          <div>
+            <span className="modal-kicker">New work</span>
+            <h2 id="task-prompt-title">What should be done?</h2>
+          </div>
+          <button aria-label="Close" className="icon-button" disabled={isSubmitting} type="button" onClick={props.onClose}>
+            <X size={18} />
           </button>
-          <button className="primary-button" type="submit">
-            <Sparkles size={16} />
-            <span>Plan</span>
-          </button>
-        </div>
-      </form>
-      {lastPreview && <PlanPreviewBox agents={props.overview.agents} preview={lastPreview} />}
-      {lastPlan && (
-        <div className="plan-result">
-          <strong>{lastPlan.tasks.length} tasks created</strong>
-          <span>
-            {formatPlanningMode(lastPlan)}
-            {lastSchedule ? ` · ${lastSchedule.started.length} started · ${lastSchedule.skipped.length} skipped` : ""}
-          </span>
-          {lastPlan.warnings.map((warning) => (
-            <span key={warning} className="plan-warning">
-              {warning}
-            </span>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function PlanPreviewBox(props: { agents: Agent[]; preview: PlanPreviewResult }) {
-  const agentsById = useMemo(() => new Map(props.agents.map((agent) => [agent.id, agent])), [props.agents]);
-  return (
-    <div className="plan-preview">
-      <div className="plan-preview-header">
-        <strong>{props.preview.tasks.length} tasks previewed</strong>
-        <span>{formatPlanningMode(props.preview)}</span>
-      </div>
-      {props.preview.warnings.map((warning) => (
-        <span key={warning} className="plan-warning">
-          {warning}
-        </span>
-      ))}
-      <div className="plan-preview-list">
-        {props.preview.tasks.map((task, index) => {
-          const descriptionExcerpt = summarizePreviewText(task.description);
-          const acceptanceExcerpt = summarizePreviewText(task.acceptanceCriteria);
-          return (
-            <div className="plan-preview-item" key={`${task.title}-${index}`}>
-              <strong>{task.title}</strong>
-              <span>
-                {agentsById.get(task.assigneeAgentId || "")?.name || "Unassigned"} · {task.role} · {task.status}
-                {task.dependencyIndexes.length ? ` · after ${task.dependencyIndexes.map((item) => item + 1).join(", ")}` : ""}
-              </span>
-              {descriptionExcerpt && <p>{descriptionExcerpt}</p>}
-              {acceptanceExcerpt && <span className="plan-preview-acceptance">Acceptance: {acceptanceExcerpt}</span>}
-            </div>
-          );
-        })}
-      </div>
+        </header>
+        <form className="task-prompt-form" onSubmit={submit}>
+          <textarea
+            autoFocus
+            aria-label="Work prompt"
+            placeholder={"Describe the work, or paste Markdown...\n\n- Build the feature\n- Add tests\n- Update the docs"}
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+          <div className="markdown-hint">
+            <FileText size={15} />
+            <span>Markdown supported · lists and ticket headings can create multiple work items</span>
+          </div>
+          <div className="task-prompt-actions">
+            <button className="secondary-button" disabled={isSubmitting} type="button" onClick={props.onClose}>
+              Cancel
+            </button>
+            <button className="primary-button" disabled={!prompt.trim() || isSubmitting} type="submit">
+              <Sparkles size={16} />
+              <span>{isSubmitting ? "Creating..." : "Create work"}</span>
+            </button>
+          </div>
+        </form>
+      </section>
     </div>
   );
-}
-
-function summarizePreviewText(value: string) {
-  const text = value
-    .replace(/^#+\s+/gm, "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 2)
-    .join(" ");
-  return text.length > 180 ? `${text.slice(0, 177)}...` : text;
-}
-
-function formatPlanningMode(plan: { mode: PlanningMode; effectiveMode: "sequential" | "parallel" }) {
-  return plan.mode === "auto" ? `auto -> ${plan.effectiveMode}` : plan.mode;
 }
 
 function ScheduleResultLine(props: { result: ScheduleResult; tasks: Task[]; onDismiss: () => void }) {
@@ -1300,7 +1222,6 @@ function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
 
 function DocumentsPanel(props: {
   overview: Overview;
-  workflowTemplates: WorkflowTemplate[];
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -1316,9 +1237,6 @@ function DocumentsPanel(props: {
       <DocumentEditor
         projectId={props.overview.project.id}
         document={selected}
-        agents={props.overview.agents}
-        autoStartDefault={props.overview.settings.autoStartPlans}
-        workflowTemplates={props.workflowTemplates}
         onSelect={setSelectedDocumentId}
         documents={props.overview.documents}
         runAction={props.runAction}
@@ -1442,9 +1360,6 @@ function MemoryEditor(props: {
 function DocumentEditor(props: {
   projectId: string;
   document: DocumentRecord | null;
-  agents: Agent[];
-  autoStartDefault: boolean;
-  workflowTemplates: WorkflowTemplate[];
   documents: DocumentRecord[];
   onSelect: (id: string) => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
@@ -1452,22 +1367,11 @@ function DocumentEditor(props: {
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [planMode, setPlanMode] = useState<PlanningMode>("auto");
-  const [workflowTemplateId, setWorkflowTemplateId] = useState("");
-  const [autoStartPlan, setAutoStartPlan] = useState(false);
-  const [lastDocumentPreview, setLastDocumentPreview] = useState<PlanPreviewResult | null>(null);
-  const [lastDocumentPlan, setLastDocumentPlan] = useState<PlanResult | null>(null);
 
   useEffect(() => {
     setTitle(props.document?.title || "");
     setContent(props.document?.content || "");
-    setLastDocumentPreview(null);
-    setLastDocumentPlan(null);
   }, [props.document?.id]);
-
-  useEffect(() => {
-    setAutoStartPlan(props.autoStartDefault);
-  }, [props.autoStartDefault]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -1484,59 +1388,7 @@ function DocumentEditor(props: {
         });
         props.onSelect(response.document.id);
       }
-      setLastDocumentPreview(null);
-      setLastDocumentPlan(null);
       await props.onChanged();
-    });
-  }
-
-  async function planFromDocument() {
-    const document = props.document;
-    if (!document) {
-      return;
-    }
-
-    await props.runAction(async () => {
-      const confirmedPreview =
-        lastDocumentPreview?.mode === planMode &&
-        lastDocumentPreview.workflowTemplateId === (workflowTemplateId || null);
-      const response = await api<{ plan: PlanResult; schedule: ScheduleResult | null }>(
-        `/api/projects/${props.projectId}/documents/${document.id}/plan`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            mode: planMode,
-            autoStart: autoStartPlan,
-            workflowTemplateId: workflowTemplateId || undefined,
-            allowLargePlan: confirmedPreview
-          })
-        }
-      );
-      setLastDocumentPlan(response.plan);
-      setLastDocumentPreview(null);
-      await props.onChanged();
-    });
-  }
-
-  async function previewDocumentPlan() {
-    const document = props.document;
-    if (!document) {
-      return;
-    }
-
-    await props.runAction(async () => {
-      const response = await api<{ preview: PlanPreviewResult }>(
-        `/api/projects/${props.projectId}/documents/${document.id}/plan-preview`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            mode: planMode,
-            workflowTemplateId: workflowTemplateId || undefined
-          })
-        }
-      );
-      setLastDocumentPreview(response.preview);
-      setLastDocumentPlan(null);
     });
   }
 
@@ -1561,52 +1413,6 @@ function DocumentEditor(props: {
         <FileText size={16} />
         <span>Save</span>
       </button>
-      {props.document && (
-        <div className="document-plan-box">
-          <select value={planMode} onChange={(event) => setPlanMode(event.target.value as PlanningMode)}>
-            <option value="auto">Auto PM decision</option>
-            <option value="sequential">Sequential tickets</option>
-            <option value="parallel">Parallel tickets</option>
-          </select>
-          <select value={workflowTemplateId} onChange={(event) => setWorkflowTemplateId(event.target.value)}>
-            <option value="">Default planner</option>
-            {props.workflowTemplates.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name} ({template.steps.length} steps)
-              </option>
-            ))}
-          </select>
-          <label className="check-row">
-            <input
-              type="checkbox"
-              checked={autoStartPlan}
-              onChange={(event) => setAutoStartPlan(event.target.checked)}
-            />
-            <span>Auto-start</span>
-          </label>
-          <div className="form-actions">
-            <button className="secondary-button" type="button" onClick={() => void previewDocumentPlan()}>
-              <Search size={16} />
-              <span>Preview</span>
-            </button>
-            <button className="primary-button" type="button" onClick={() => void planFromDocument()}>
-              <Sparkles size={16} />
-              <span>Plan from doc</span>
-            </button>
-          </div>
-          {lastDocumentPreview && <PlanPreviewBox agents={props.agents} preview={lastDocumentPreview} />}
-          {lastDocumentPlan && (
-            <span className="document-plan-result">
-              {lastDocumentPlan.tasks.length} tickets created · {formatPlanningMode(lastDocumentPlan)}
-              {lastDocumentPlan.warnings.map((warning) => (
-                <span key={warning} className="plan-warning">
-                  {warning}
-                </span>
-              ))}
-            </span>
-          )}
-        </div>
-      )}
     </form>
   );
 }
@@ -1656,104 +1462,6 @@ function BoardFilters(props: {
         <span>Clear</span>
       </button>
     </div>
-  );
-}
-
-function TaskComposer(props: {
-  overview: Overview;
-  providerCatalog: ProviderCatalog | null;
-  runAction: (action: () => Promise<void>) => Promise<void>;
-  onChanged: () => Promise<void>;
-}) {
-  const [title, setTitle] = useState("");
-  const [modelBackend, setModelBackend] = useState("");
-  const [workspaceMode, setWorkspaceMode] = useState<Task["workspaceMode"] | "auto">("auto");
-  const [assigneeAgentId, setAssigneeAgentId] = useState("");
-  const [dependencyTaskId, setDependencyTaskId] = useState("");
-  const [parentTaskId, setParentTaskId] = useState("");
-  const [labelsText, setLabelsText] = useState("");
-  const [linkedFilesText, setLinkedFilesText] = useState("");
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    await props.runAction(async () => {
-      await api(`/api/projects/${props.overview.project.id}/tasks`, {
-        method: "POST",
-        body: JSON.stringify({
-          title,
-          modelBackend: modelBackend || null,
-          ...(workspaceMode === "auto" ? {} : { workspaceMode }),
-          assigneeAgentId: assigneeAgentId || null,
-          parentTaskId: parentTaskId || null,
-          dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
-          labels: parseLabels(labelsText),
-          linkedFiles: parseListText(linkedFilesText),
-          status: "Backlog",
-          priority: "Medium"
-        })
-      });
-      setTitle("");
-      setModelBackend("");
-      setWorkspaceMode("auto");
-      setDependencyTaskId("");
-      setParentTaskId("");
-      setLabelsText("");
-      setLinkedFilesText("");
-      await props.onChanged();
-    });
-  }
-
-  return (
-    <form className="task-composer" onSubmit={submit}>
-      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Task title" />
-      <select value={modelBackend} onChange={(event) => setModelBackend(event.target.value)}>
-        <option value="">Agent default backend</option>
-        {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => (
-          <option key={provider.id} value={provider.id}>
-            {provider.label}
-          </option>
-        ))}
-      </select>
-      <select value={workspaceMode} onChange={(event) => setWorkspaceMode(event.target.value as Task["workspaceMode"] | "auto")}>
-        <option value="auto">Auto workspace</option>
-        <option value="worktree">Git worktree</option>
-        <option value="harness">Harness workspace</option>
-      </select>
-      <select value={assigneeAgentId} onChange={(event) => setAssigneeAgentId(event.target.value)}>
-        <option value="">Unassigned</option>
-        {props.overview.agents.map((agent) => (
-          <option key={agent.id} value={agent.id}>
-            {agent.name}
-          </option>
-        ))}
-      </select>
-      <select value={dependencyTaskId} onChange={(event) => setDependencyTaskId(event.target.value)}>
-        <option value="">No dependency</option>
-        {props.overview.tasks.map((task) => (
-          <option key={task.id} value={task.id}>
-            waits on: {task.title}
-          </option>
-        ))}
-      </select>
-      <select value={parentTaskId} onChange={(event) => setParentTaskId(event.target.value)}>
-        <option value="">No parent</option>
-        {props.overview.tasks.map((task) => (
-          <option key={task.id} value={task.id}>
-            parent: {task.title}
-          </option>
-        ))}
-      </select>
-      <input value={labelsText} onChange={(event) => setLabelsText(event.target.value)} placeholder="Labels, comma separated" />
-      <input
-        value={linkedFilesText}
-        onChange={(event) => setLinkedFilesText(event.target.value)}
-        placeholder="Linked files, comma separated"
-      />
-      <button className="primary-button" type="submit">
-        <Plus size={16} />
-        <span>Create</span>
-      </button>
-    </form>
   );
 }
 
@@ -1968,8 +1676,6 @@ function TaskDetailDrawer(props: {
   const [editLabelsText, setEditLabelsText] = useState(props.task.labels.join(", "));
   const [editLinkedFilesText, setEditLinkedFilesText] = useState(props.task.linkedFiles.join("\n"));
   const [commentBody, setCommentBody] = useState("");
-  const [decomposeText, setDecomposeText] = useState("");
-  const [decomposeMode, setDecomposeMode] = useState<"parallel" | "sequential">("parallel");
   const runs = props.overview.runs.filter((run) => run.taskId === props.task.id);
   const events = props.overview.events.filter((event) => event.taskId === props.task.id);
   const handoffs = props.overview.handoffs.filter((handoff) => handoff.taskId === props.task.id);
@@ -2100,21 +1806,6 @@ function TaskDetailDrawer(props: {
         body: JSON.stringify({ body: commentBody, author: "human" })
       });
       setCommentBody("");
-      await props.onChanged();
-    });
-  }
-
-  async function decomposeTask(event: FormEvent) {
-    event.preventDefault();
-    await props.runAction(async () => {
-      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/decompose`, {
-        method: "POST",
-        body: JSON.stringify({
-          text: decomposeText,
-          mode: decomposeMode
-        })
-      });
-      setDecomposeText("");
       await props.onChanged();
     });
   }
@@ -2310,25 +2001,6 @@ function TaskDetailDrawer(props: {
         </section>
 
         <section className="drawer-section">
-          <h3>Decompose</h3>
-          <form className="stack-form" onSubmit={decomposeTask}>
-            <textarea
-              value={decomposeText}
-              onChange={(event) => setDecomposeText(event.target.value)}
-              placeholder="One subtask per line"
-            />
-            <select value={decomposeMode} onChange={(event) => setDecomposeMode(event.target.value as "parallel" | "sequential")}>
-              <option value="parallel">Parallel subtasks</option>
-              <option value="sequential">Sequential chain</option>
-            </select>
-            <button className="secondary-button" type="submit">
-              <GitFork size={16} />
-              <span>Create subtasks</span>
-            </button>
-          </form>
-        </section>
-
-        <section className="drawer-section">
           <h3>Workspace</h3>
           <div className="path-list">
             <PathLine icon={<GitBranch size={14} />} value={props.task.branchName || "No branch yet"} />
@@ -2387,13 +2059,7 @@ function TaskDetailDrawer(props: {
         )}
 
         <TaskComments comments={comments} body={commentBody} onBodyChange={setCommentBody} onSubmit={addComment} />
-        <TaskRuns
-          projectId={props.overview.project.id}
-          runs={runs}
-          events={events}
-          runAction={props.runAction}
-          onChanged={props.onChanged}
-        />
+        <TaskRuns runs={runs} events={events} />
         <TaskHandoffs handoffs={handoffs} agents={props.overview.agents} events={events} />
         <TaskTimeline events={events} runs={runs} />
       </aside>
@@ -2478,11 +2144,8 @@ function TaskComments(props: {
 }
 
 function TaskRuns(props: {
-  projectId: string;
   runs: Run[];
   events: Event[];
-  runAction: (action: () => Promise<void>) => Promise<void>;
-  onChanged: () => Promise<void>;
 }) {
   const runStartEvents = useMemo(() => {
     return new Map(
@@ -2502,13 +2165,6 @@ function TaskRuns(props: {
         .map((event) => [event.metadata.runId as string, event])
     );
   }, [props.events]);
-
-  async function createFollowUps(run: Run) {
-    await props.runAction(async () => {
-      await api(`/api/projects/${props.projectId}/runs/${run.id}/followups`, { method: "POST" });
-      await props.onChanged();
-    });
-  }
 
   return (
     <section className="drawer-section">
@@ -2581,12 +2237,6 @@ function TaskRuns(props: {
               )}
               {run.output && <pre>{run.output}</pre>}
               {run.error && <pre className="error-pre">{run.error}</pre>}
-              <div className="run-actions">
-                <button className="secondary-button" type="button" onClick={() => void createFollowUps(run)}>
-                  <Plus size={16} />
-                  <span>Follow-ups</span>
-                </button>
-              </div>
             </div>
           );
         })}

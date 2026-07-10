@@ -92,3 +92,26 @@ Acceptance criteria:
   assert.deepEqual(preview.tasks[0].dependencyIndexes, []);
   assert.equal(preview.tasks[0].status, "Selected");
 });
+
+test("Markdown task lists create simple parallel work items", () => {
+  const preview = previewPlan({
+    mode: "auto",
+    goal: `
+# Release checklist
+
+- Build the release candidate
+- Run the regression suite
+- Update the release notes
+`
+  });
+
+  assert.equal(preview.effectiveMode, "parallel");
+  assert.deepEqual(
+    preview.tasks.map((task) => ({ title: task.title, status: task.status })),
+    [
+      { title: "Build the release candidate", status: "Selected" },
+      { title: "Run the regression suite", status: "Selected" },
+      { title: "Update the release notes", status: "Selected" }
+    ]
+  );
+});
