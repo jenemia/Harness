@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 import { invokeApplicationCommand } from "../src/application.js";
 import {
   DraftRevisionConflictError,
@@ -14,16 +15,19 @@ import {
   recordDraftApplyAttempt,
   recoverDraftReviewRequests,
   replayDraftEvents,
+  subscribeDraftEvents,
   submitDraftReview,
   updateDraftRevision
 } from "../src/drafts.js";
 import { registerProjectService } from "../src/services.js";
+import { openProjectDb } from "../src/db.js";
+import { ensureProjectLayout } from "../src/project-store.js";
 
 test("draft collaboration persists revisions, debounce, stale reviews, replies, apply history, replay, and recovery", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-drafts-"));
   const previousHome = process.env.HARNESS_HOME;
   process.env.HARNESS_HOME = path.join(root, "home");
-  const scheduling = { debounceMs: 25, rateLimitMs: 80 };
+  const scheduling = { debounceMs: 25, rateLimitMs: 80, autoReview: false };
   let projectPath = "";
   let draftId = "";
   try {
@@ -35,12 +39,17 @@ test("draft collaboration persists revisions, debounce, stale reviews, replies, 
     assert.equal(created.reviewers.length, 2);
     assert.equal(created.requests.length, 0);
 
+    const liveSequences: number[] = [];
+    const unsubscribe = subscribeDraftEvents(draftId, created.events.at(-1)?.sequence || 0, (event) => liveSequences.push(event.sequence));
+
     const revision2 = updateDraftRevision(project, draftId, {
       expectedRevision: 1,
       content: "Implement an export flow with explicit acceptance criteria."
     }, scheduling);
     assert.equal(revision2.snapshot.session.currentRevision, 2);
     assert.equal(revision2.snapshot.requests.filter((request) => request.revision === 2).length, 2);
+    unsubscribe();
+    assert.deepEqual(liveSequences, [2, 3]);
 
     const revision3 = updateDraftRevision(project, draftId, {
       expectedRevision: 2,
@@ -172,6 +181,43 @@ test("draft collaboration persists revisions, debounce, stale reviews, replies, 
     assert.equal(fetched.draft.session.id, viaApplication.draft.session.id);
   } finally {
     if (projectPath) cancelDraftReviewTimers(projectPath, draftId || undefined);
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("legacy draft review request uniqueness migrates to support reply turns", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-draft-migration-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const projectPath = path.join(root, "project");
+    const layout = ensureProjectLayout(projectPath, "project-1");
+    const legacy = new DatabaseSync(layout.databasePath);
+    legacy.exec(`
+      CREATE TABLE draft_review_requests (
+        id TEXT PRIMARY KEY, draft_id TEXT NOT NULL, reviewer_id TEXT NOT NULL, revision INTEGER NOT NULL,
+        status TEXT NOT NULL, available_at TEXT NOT NULL, dedupe_key TEXT NOT NULL, requested_at TEXT NOT NULL,
+        started_at TEXT, completed_at TEXT, error TEXT,
+        UNIQUE(draft_id, reviewer_id, revision), UNIQUE(draft_id, dedupe_key)
+      );
+    `);
+    legacy.close();
+
+    const migrated = openProjectDb(projectPath);
+    try {
+      const insert = migrated.prepare(`
+        INSERT INTO draft_review_requests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      insert.run("r1", "d1", "reviewer-1", 1, "completed", "2026-01-01", "revision:1", "2026-01-01", null, null, null);
+      insert.run("r2", "d1", "reviewer-1", 1, "pending", "2026-01-02", "reply:1", "2026-01-02", null, null, null);
+      const count = migrated.prepare("SELECT COUNT(*) AS value FROM draft_review_requests").get() as { value: number };
+      assert.equal(count.value, 2);
+    } finally {
+      migrated.close();
+    }
+  } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
     rmSync(root, { recursive: true, force: true });

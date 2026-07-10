@@ -35,6 +35,8 @@ export type HarnessCommandInputs = {
   "drafts:get": { projectId: string; draftId: string };
   "drafts:update": { projectId: string; draftId: string; expectedRevision: number; content: string };
   "drafts:claim-review": { projectId: string; requestId: string };
+  "drafts:stop-review": { projectId: string; requestId: string };
+  "drafts:retry-review": { projectId: string; requestId: string };
   "drafts:submit-review": {
     projectId: string;
     requestId: string;
@@ -45,6 +47,7 @@ export type HarnessCommandInputs = {
     draftId: string;
     payload: { parentCommentId: string; body: string; author?: string; idempotencyKey?: string };
   };
+  "drafts:comment-status": { projectId: string; draftId: string; commentId: string; status: "open" | "resolved" };
   "drafts:apply-request": {
     projectId: string;
     draftId: string;
@@ -67,9 +70,10 @@ export type HarnessCommandInputs = {
 };
 
 export type HarnessCommand = keyof HarnessCommandInputs;
-export type HarnessEvent = "provider:event";
+export type HarnessEvent = "provider:event" | "draft:event";
 export type HarnessEventFilters = {
   "provider:event": { projectId: string; runId?: string; afterSequence?: number };
+  "draft:event": { projectId: string; draftId: string; afterSequence?: number };
 };
 
 export type HarnessInvokeRequest<C extends HarnessCommand = HarnessCommand> = {
@@ -85,11 +89,14 @@ export type HarnessEventEnvelope = {
 };
 
 export function isHarnessEventFilter(event: HarnessEvent, filter: unknown): filter is HarnessEventFilters[HarnessEvent] {
-  if (event !== "provider:event" || !isRecord(filter) || !isText(filter.projectId)) return false;
-  if (filter.runId !== undefined && !isText(filter.runId)) return false;
-  if (filter.afterSequence !== undefined && filter.runId === undefined) return false;
-  return filter.afterSequence === undefined ||
-    (typeof filter.afterSequence === "number" && Number.isSafeInteger(filter.afterSequence) && filter.afterSequence >= 0);
+  if (!isRecord(filter) || !isText(filter.projectId)) return false;
+  if (event === "provider:event") {
+    if (filter.runId !== undefined && !isText(filter.runId)) return false;
+    if (filter.afterSequence !== undefined && filter.runId === undefined) return false;
+  } else if (!isText(filter.draftId)) {
+    return false;
+  }
+  return filter.afterSequence === undefined || isNonNegativeInteger(filter.afterSequence);
 }
 
 export const providerEventVersion = 1 as const;
@@ -121,6 +128,15 @@ export type ProviderCapabilities = {
   gracefulStop: boolean;
 };
 
+export type DraftEventEnvelope = {
+  id: string;
+  draftId: string;
+  sequence: number;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
 export function isHarnessCommand(value: string): value is HarnessCommand {
   return commandNames.has(value as HarnessCommand);
 }
@@ -146,9 +162,11 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "drafts:create") return isDraftCreatePayload(payload.payload);
   if (command === "drafts:get") return isText(payload.draftId);
   if (command === "drafts:update") return isText(payload.draftId) && isNonNegativeInteger(payload.expectedRevision) && typeof payload.content === "string";
-  if (command === "drafts:claim-review") return isText(payload.requestId);
+  if (command === "drafts:claim-review" || command === "drafts:stop-review" || command === "drafts:retry-review") return isText(payload.requestId);
   if (command === "drafts:submit-review") return isText(payload.requestId) && isDraftReviewPayload(payload.payload);
   if (command === "drafts:reply") return isText(payload.draftId) && isDraftReplyPayload(payload.payload);
+  if (command === "drafts:comment-status") return isText(payload.draftId) && isText(payload.commentId) &&
+    (payload.status === "open" || payload.status === "resolved");
   if (command === "drafts:apply-request") return isText(payload.draftId) && isDraftApplyPayload(payload.payload);
   if (command === "drafts:events") return isText(payload.draftId) && (payload.afterSequence === undefined || isNonNegativeInteger(payload.afterSequence));
   if (command === "drafts:recover") return true;
@@ -166,7 +184,8 @@ const commandNames = new Set<HarnessCommand>([
   "templates:projects", "templates:agent-create", "settings:get", "settings:update", "project-settings:update",
   "system:select-folder", "agents:save", "documents:create", "documents:update", "global-memories:create",
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
-  "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:submit-review", "drafts:reply",
+  "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
+  "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:events", "drafts:recover",
   "tasks:create-from-prompt", "tasks:create", "tasks:update", "tasks:start", "tasks:pause", "tasks:resume", "tasks:move",
   "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:resolve-merge", "tasks:request-changes"

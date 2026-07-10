@@ -142,11 +142,15 @@ Status: 완료
 
 Depends on: A09
 
+Status: 완료
+
 - 2열 draft/comment UI, small-screen tab/drawer와 streaming 상태를 구현한다.
 - 기획 리뷰어와 예외 감지 reviewer 역할, mention, reply, retry와 stop을 제공한다.
 - 사용자 입력과 draft 변경만 자동 review trigger가 되게 한다.
 
 완료 조건: 편집을 막지 않고 revision별 제안·질문·위험을 실시간 확인하고 응답할 수 있다.
+
+검증: deterministic planning/edge-case reviewer progress·stop·retry·reply-turn·duplicate suppression 테스트, draft event IPC replay, Strict Mode draft restore, desktop 2열 live review browser smoke, 390×844 Draft/Review tab 전환과 전체 typecheck/test/build.
 
 ### A11: Draft apply, diff, approval과 undo
 

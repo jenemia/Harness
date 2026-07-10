@@ -297,6 +297,15 @@ export type DraftEvent = {
   id: string; draftId: string; sequence: number; type: string;
   payload: Record<string, unknown>; createdAt: string;
 };
+export type DraftSnapshot = {
+  session: DraftSession;
+  revisions: DraftRevision[];
+  reviewers: DraftReviewer[];
+  requests: DraftReviewRequest[];
+  comments: DraftComment[];
+  applyHistory: DraftApplyHistory[];
+  events: DraftEvent[];
+};
 
 export type Run = {
   id: string;

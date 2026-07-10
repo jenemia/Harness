@@ -40,7 +40,8 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { selectFolder } from "./folder-picker.js";
-import { recoverDraftReviewRequests } from "./drafts.js";
+import { createDraftReply, createDraftSession, getDraftSnapshot, recoverDraftReviewRequests, replayDraftEvents, updateDraftCommentStatus, updateDraftRevision } from "./drafts.js";
+import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
 import {
   createAgentService,
   createDocumentService,
@@ -279,6 +280,55 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "POST" && childPath === "drafts") {
+        sendJson(res, { draft: createDraftSession(project, await readBody(req)) }, 201);
+        return;
+      }
+
+      const draftMatch = childPath.match(/^drafts\/([^/]+)$/);
+      if (draftMatch && req.method === "GET") {
+        sendJson(res, { draft: getDraftSnapshot(project, draftMatch[1]) });
+        return;
+      }
+      if (draftMatch && req.method === "PATCH") {
+        const body = await readBody<{ expectedRevision: number; content: string }>(req);
+        sendJson(res, { draft: updateDraftRevision(project, draftMatch[1], body) });
+        return;
+      }
+
+      const draftReplyMatch = childPath.match(/^drafts\/([^/]+)\/replies$/);
+      if (draftReplyMatch && req.method === "POST") {
+        sendJson(res, { comment: createDraftReply(project, draftReplyMatch[1], await readBody(req)) }, 201);
+        return;
+      }
+
+      const draftCommentMatch = childPath.match(/^drafts\/([^/]+)\/comments\/([^/]+)$/);
+      if (draftCommentMatch && req.method === "PATCH") {
+        const body = await readBody<{ status: "open" | "resolved" }>(req);
+        sendJson(res, { comment: updateDraftCommentStatus(project, draftCommentMatch[1], draftCommentMatch[2], body.status) });
+        return;
+      }
+
+      const draftEventsMatch = childPath.match(/^drafts\/([^/]+)\/events$/);
+      if (draftEventsMatch && req.method === "GET") {
+        sendJson(res, {
+          events: replayDraftEvents(project, draftEventsMatch[1], Number(requestUrl.searchParams.get("afterSequence") || 0))
+        });
+        return;
+      }
+
+      const stopDraftReviewMatch = childPath.match(/^draft-review-requests\/([^/]+)\/stop$/);
+      if (stopDraftReviewMatch && req.method === "POST") {
+        sendJson(res, { request: stopDraftReview(project, stopDraftReviewMatch[1]) });
+        return;
+      }
+
+      const retryDraftReviewMatch = childPath.match(/^draft-review-requests\/([^/]+)\/retry$/);
+      if (retryDraftReviewMatch && req.method === "POST") {
+        sendJson(res, { request: retryDraftReview(project, retryDraftReviewMatch[1]) });
+        return;
+      }
+
       if (req.method === "POST" && childPath === "schedule") {
         const schedule = await startReadyTasks(project);
         sendJson(res, { schedule, overview: getProjectOverview(project) }, 202);
@@ -497,6 +547,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+ensureDraftReviewAgentRuntime();
 recoverRegisteredProjects();
 
 server.listen(port, () => {

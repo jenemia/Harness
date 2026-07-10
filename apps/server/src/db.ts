@@ -977,7 +977,6 @@ export function openProjectDb(projectPath: string) {
       started_at TEXT,
       completed_at TEXT,
       error TEXT,
-      UNIQUE(draft_id, reviewer_id, revision),
       UNIQUE(draft_id, dedupe_key)
     );
 
@@ -1044,6 +1043,7 @@ export function openProjectDb(projectPath: string) {
       updated_at TEXT NOT NULL
     );
   `);
+  migrateDraftReviewRequestsForConversationTurns(db);
   ensureColumn(db, "agents", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "agents", "boundaries", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "agents", "definition_path", "TEXT");
@@ -1217,6 +1217,44 @@ function normalizeStringMap(input: unknown) {
       .map(([fromRole, toRole]) => [fromRole.trim(), typeof toRole === "string" ? toRole.trim() : ""])
       .filter(([fromRole, toRole]) => fromRole && toRole)
   );
+}
+
+function migrateDraftReviewRequestsForConversationTurns(db: DatabaseSync) {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'draft_review_requests'").get() as
+    | { sql: string }
+    | undefined;
+  if (!row?.sql || !/UNIQUE\s*\(\s*draft_id\s*,\s*reviewer_id\s*,\s*revision\s*\)/i.test(row.sql)) return;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(`
+      ALTER TABLE draft_review_requests RENAME TO draft_review_requests_legacy;
+      CREATE TABLE draft_review_requests (
+        id TEXT PRIMARY KEY,
+        draft_id TEXT NOT NULL,
+        reviewer_id TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        available_at TEXT NOT NULL,
+        dedupe_key TEXT NOT NULL,
+        requested_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT,
+        error TEXT,
+        UNIQUE(draft_id, dedupe_key)
+      );
+      INSERT INTO draft_review_requests
+      SELECT id, draft_id, reviewer_id, revision, status, available_at, dedupe_key,
+             requested_at, started_at, completed_at, error
+      FROM draft_review_requests_legacy;
+      DROP TABLE draft_review_requests_legacy;
+      CREATE INDEX IF NOT EXISTS draft_review_requests_status_available
+        ON draft_review_requests(status, available_at);
+    `);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 
 function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {

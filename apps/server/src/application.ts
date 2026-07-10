@@ -1,4 +1,4 @@
-import type { HarnessCommand, HarnessCommandInputs, HarnessEventFilters, ProviderEventEnvelope } from "@harness/core";
+import type { DraftEventEnvelope, HarnessCommand, HarnessCommandInputs, HarnessEventFilters, ProviderEventEnvelope } from "@harness/core";
 import {
   createAgentTemplate,
   createGlobalMemory,
@@ -60,9 +60,14 @@ import {
   recordDraftApplyAttempt,
   recoverDraftReviewRequests,
   replayDraftEvents,
+  subscribeDraftEvents,
   submitDraftReview,
+  updateDraftCommentStatus,
   updateDraftRevision
 } from "./drafts.js";
+import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
+
+ensureDraftReviewAgentRuntime();
 
 export function subscribeApplicationProviderEvents(
   filter: HarnessEventFilters["provider:event"],
@@ -71,6 +76,16 @@ export function subscribeApplicationProviderEvents(
   const project = requiredProject(filter.projectId);
   const unsubscribe = subscribeProviderEvents(filter, listener);
   const replay = replayProviderEvents(project, filter);
+  return { replay, unsubscribe };
+}
+
+export function subscribeApplicationDraftEvents(
+  filter: HarnessEventFilters["draft:event"],
+  listener: (event: DraftEventEnvelope) => void
+) {
+  const project = requiredProject(filter.projectId);
+  const unsubscribe = subscribeDraftEvents(filter.draftId, filter.afterSequence || 0, listener);
+  const replay = replayDraftEvents(project, filter.draftId, filter.afterSequence || 0);
   return { replay, unsubscribe };
 }
 
@@ -202,6 +217,14 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["drafts:claim-review"];
       return { request: claimDraftReviewRequest(requiredProject(value.projectId), value.requestId) };
     }
+    case "drafts:stop-review": {
+      const value = input(payload) as HarnessCommandInputs["drafts:stop-review"];
+      return { request: stopDraftReview(requiredProject(value.projectId), value.requestId) };
+    }
+    case "drafts:retry-review": {
+      const value = input(payload) as HarnessCommandInputs["drafts:retry-review"];
+      return { request: retryDraftReview(requiredProject(value.projectId), value.requestId) };
+    }
     case "drafts:submit-review": {
       const value = input(payload) as HarnessCommandInputs["drafts:submit-review"];
       return { result: submitDraftReview(requiredProject(value.projectId), value.requestId, value.payload as Parameters<typeof submitDraftReview>[2]) };
@@ -209,6 +232,10 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
     case "drafts:reply": {
       const value = input(payload) as HarnessCommandInputs["drafts:reply"];
       return { comment: createDraftReply(requiredProject(value.projectId), value.draftId, value.payload as Parameters<typeof createDraftReply>[2]) };
+    }
+    case "drafts:comment-status": {
+      const value = input(payload) as HarnessCommandInputs["drafts:comment-status"];
+      return { comment: updateDraftCommentStatus(requiredProject(value.projectId), value.draftId, value.commentId, value.status) };
     }
     case "drafts:apply-request": {
       const value = input(payload) as HarnessCommandInputs["drafts:apply-request"];

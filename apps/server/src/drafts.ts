@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 import type { DatabaseSync } from "node:sqlite";
 import {
   mapDraftApplyHistory,
@@ -27,8 +28,14 @@ import type {
 const defaultDebounceMs = 300;
 const defaultRateLimitMs = 1000;
 const reviewTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const draftEventBus = new EventEmitter();
+draftEventBus.setMaxListeners(100);
+let reviewRuntime: {
+  start(project: ProjectRecord, request: DraftReviewRequestRecord): void;
+  cancel(project: ProjectRecord, draftId: string): void;
+} | null = null;
 
-type SchedulingOptions = { debounceMs?: number; rateLimitMs?: number };
+type SchedulingOptions = { debounceMs?: number; rateLimitMs?: number; autoReview?: boolean };
 
 export type DraftSnapshot = {
   session: DraftSessionRecord;
@@ -39,6 +46,10 @@ export type DraftSnapshot = {
   applyHistory: DraftApplyHistoryRecord[];
   events: DraftEventRecord[];
 };
+
+export function registerDraftReviewRuntime(runtime: typeof reviewRuntime) {
+  reviewRuntime = runtime;
+}
 
 export function createDraftSession(
   project: ProjectRecord,
@@ -126,6 +137,7 @@ export function updateDraftRevision(
       db.close();
     }
   });
+  if (!result.deduplicated) reviewRuntime?.cancel(project, draftId);
   cancelDraftReviewTimers(project.path, draftId);
   armDraftReviewTimers(project, result.snapshot.requests, scheduling);
   return result;
@@ -157,6 +169,100 @@ export function claimDraftReviewRequest(project: ProjectRecord, requestId: strin
   });
 }
 
+export function recordDraftReviewProgress(project: ProjectRecord, requestId: string, message: string) {
+  return withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      const row = db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(requestId);
+      if (!row) throw new Error("Draft review request not found.");
+      const request = mapDraftReviewRequest(row);
+      if (request.status !== "running") return request;
+      appendDraftEvent(db, request.draftId, "draft.review.progress", {
+        requestId, reviewerId: request.reviewerId, revision: request.revision, message: message.slice(0, 500)
+      });
+      return request;
+    } finally {
+      db.close();
+    }
+  });
+}
+
+export function cancelDraftReviewRequest(project: ProjectRecord, requestId: string, reason = "Stopped by user.") {
+  return withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      const row = db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(requestId);
+      if (!row) throw new Error("Draft review request not found.");
+      const request = mapDraftReviewRequest(row);
+      if (!["debounced", "pending", "running"].includes(request.status)) return request;
+      const timestamp = now();
+      db.prepare("UPDATE draft_review_requests SET status = ?, completed_at = ?, error = ? WHERE id = ?").run(
+        "cancelled", timestamp, reason, request.id
+      );
+      db.prepare("UPDATE draft_reviewers SET status = ?, updated_at = ? WHERE id = ?").run("idle", timestamp, request.reviewerId);
+      appendDraftEvent(db, request.draftId, "draft.review.cancelled", {
+        requestId, reviewerId: request.reviewerId, revision: request.revision, reason
+      });
+      return mapDraftReviewRequest(db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(request.id));
+    } finally {
+      db.close();
+    }
+  });
+}
+
+export function retryDraftReviewRequest(project: ProjectRecord, requestId: string) {
+  const request = withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      const row = db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(requestId);
+      if (!row) throw new Error("Draft review request not found.");
+      const existing = mapDraftReviewRequest(row);
+      const session = requiredDraftSession(db, existing.draftId);
+      if (session.status !== "open" || session.currentRevision !== existing.revision) {
+        throw new Error("Only a review for the current open draft revision can be retried.");
+      }
+      if (!["cancelled", "failed", "stale"].includes(existing.status)) return existing;
+      const timestamp = now();
+      db.prepare(`
+        UPDATE draft_review_requests
+        SET status = 'pending', started_at = NULL, completed_at = NULL, error = NULL, requested_at = ?
+        WHERE id = ?
+      `).run(timestamp, existing.id);
+      appendDraftEvent(db, existing.draftId, "draft.review.retried", {
+        requestId: existing.id, reviewerId: existing.reviewerId, revision: existing.revision
+      });
+      return mapDraftReviewRequest(db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(existing.id));
+    } finally {
+      db.close();
+    }
+  });
+  if (request.status === "pending") reviewRuntime?.start(project, request);
+  return request;
+}
+
+export function failDraftReviewRequest(project: ProjectRecord, requestId: string, error: string) {
+  return withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      const row = db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(requestId);
+      if (!row) throw new Error("Draft review request not found.");
+      const request = mapDraftReviewRequest(row);
+      if (request.status !== "running") return request;
+      const timestamp = now();
+      db.prepare("UPDATE draft_review_requests SET status = 'failed', completed_at = ?, error = ? WHERE id = ?").run(
+        timestamp, error.slice(0, 2000), request.id
+      );
+      db.prepare("UPDATE draft_reviewers SET status = 'idle', updated_at = ? WHERE id = ?").run(timestamp, request.reviewerId);
+      appendDraftEvent(db, request.draftId, "draft.review.failed", {
+        requestId, reviewerId: request.reviewerId, revision: request.revision, error: error.slice(0, 500)
+      });
+      return mapDraftReviewRequest(db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(request.id));
+    } finally {
+      db.close();
+    }
+  });
+}
+
 export function submitDraftReview(
   project: ProjectRecord,
   requestId: string,
@@ -175,6 +281,9 @@ export function submitDraftReview(
         return { request, comments: listRequestComments(db, request) };
       }
       const session = requiredDraftSession(db, request.draftId);
+      if (request.status === "cancelled" && session.status === "open" && request.revision === session.currentRevision) {
+        return { request, comments: listRequestComments(db, request) };
+      }
       const stale = session.status !== "open" || request.revision !== session.currentRevision;
       const timestamp = now();
       const insertedComments: DraftCommentRecord[] = [];
@@ -224,10 +333,11 @@ export function submitDraftReview(
 export function createDraftReply(
   project: ProjectRecord,
   draftId: string,
-  input: { parentCommentId: string; body: string; author?: string; idempotencyKey?: string }
+  input: { parentCommentId: string; body: string; author?: string; idempotencyKey?: string },
+  scheduling: SchedulingOptions = {}
 ) {
   assertNoCredentialMaterial(input.body, "Draft reply");
-  return withProjectWriterLock(project.path, () => {
+  const outcome = withProjectWriterLock(project.path, () => {
     const db = openProjectDb(project.path);
     try {
       const session = requiredDraftSession(db, draftId);
@@ -248,7 +358,36 @@ export function createDraftReply(
       if (result.changes > 0) appendDraftEvent(db, draftId, "draft.comment.replied", {
         commentId: reply.id, parentCommentId: input.parentCommentId, revision: session.currentRevision
       });
-      return reply;
+      const requests = result.changes > 0 && mapDraftComment(parent).reviewerId
+        ? enqueueReviewerRequest(db, draftId, mapDraftComment(parent).reviewerId as string, session.currentRevision, `reply:${reply.id}`, scheduling)
+        : [];
+      return { reply, requests };
+    } finally {
+      db.close();
+    }
+  });
+  armDraftReviewTimers(project, outcome.requests, scheduling);
+  return outcome.reply;
+}
+
+export function updateDraftCommentStatus(
+  project: ProjectRecord,
+  draftId: string,
+  commentId: string,
+  status: "open" | "resolved"
+) {
+  return withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      requiredDraftSession(db, draftId);
+      const row = db.prepare("SELECT * FROM draft_comments WHERE id = ? AND draft_id = ?").get(commentId, draftId);
+      if (!row) throw new Error("Draft comment not found.");
+      const comment = mapDraftComment(row);
+      if (comment.stale) throw new Error("Stale draft comments cannot change review status.");
+      const timestamp = now();
+      db.prepare("UPDATE draft_comments SET status = ?, updated_at = ? WHERE id = ?").run(status, timestamp, comment.id);
+      appendDraftEvent(db, draftId, "draft.comment.status", { commentId, status, revision: comment.revision });
+      return mapDraftComment(db.prepare("SELECT * FROM draft_comments WHERE id = ?").get(comment.id));
     } finally {
       db.close();
     }
@@ -321,6 +460,21 @@ export function replayDraftEvents(project: ProjectRecord, draftId: string, after
   }
 }
 
+export function subscribeDraftEvents(
+  draftId: string,
+  afterSequence: number,
+  listener: (event: DraftEventRecord) => void
+) {
+  let cursor = Math.max(0, afterSequence);
+  const wrapped = (event: DraftEventRecord) => {
+    if (event.draftId !== draftId || event.sequence <= cursor) return;
+    cursor = event.sequence;
+    listener(event);
+  };
+  draftEventBus.on("event", wrapped);
+  return () => draftEventBus.off("event", wrapped);
+}
+
 export function recoverDraftReviewRequests(project: ProjectRecord, scheduling: SchedulingOptions = {}) {
   const toArm = withProjectWriterLock(project.path, () => {
     const db = openProjectDb(project.path);
@@ -338,12 +492,16 @@ export function recoverDraftReviewRequests(project: ProjectRecord, scheduling: S
         recovered += 1;
       }
       const debounced = db.prepare("SELECT * FROM draft_review_requests WHERE status = 'debounced'").all().map(mapDraftReviewRequest);
-      return { recovered, requests: debounced };
+      const pending = db.prepare("SELECT * FROM draft_review_requests WHERE status = 'pending'").all().map(mapDraftReviewRequest);
+      return { recovered, requests: debounced, pending };
     } finally {
       db.close();
     }
   });
   armDraftReviewTimers(project, toArm.requests, scheduling);
+  if (scheduling.autoReview !== false) {
+    for (const request of toArm.pending) reviewRuntime?.start(project, request);
+  }
   return { recovered: toArm.recovered, rescheduled: toArm.requests.length };
 }
 
@@ -391,19 +549,52 @@ function enqueueDraftReviews(
   });
 }
 
-function activateReviewRequest(project: ProjectRecord, requestId: string, rateLimitMs: number) {
-  withProjectWriterLock(project.path, () => {
+function enqueueReviewerRequest(
+  db: DatabaseSync,
+  draftId: string,
+  reviewerId: string,
+  revision: number,
+  triggerKey: string,
+  scheduling: SchedulingOptions
+) {
+  const reviewerRow = db.prepare("SELECT * FROM draft_reviewers WHERE id = ? AND draft_id = ?").get(reviewerId, draftId);
+  if (!reviewerRow) return [];
+  const reviewer = mapDraftReviewer(reviewerRow);
+  const debounceMs = duration(scheduling.debounceMs, defaultDebounceMs);
+  const earliest = Math.max(Date.now() + debounceMs, reviewer.rateLimitUntil ? Date.parse(reviewer.rateLimitUntil) : 0);
+  const timestamp = now();
+  const dedupeKey = `${reviewer.id}:${revision}:${triggerKey}`;
+  db.prepare(`
+    INSERT OR IGNORE INTO draft_review_requests (
+      id, draft_id, reviewer_id, revision, status, available_at, dedupe_key,
+      requested_at, started_at, completed_at, error
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(randomUUID(), draftId, reviewer.id, revision, "debounced", new Date(earliest).toISOString(), dedupeKey, timestamp, null, null, null);
+  db.prepare("UPDATE draft_reviewers SET status = ?, updated_at = ? WHERE id = ?").run(
+    earliest > Date.now() + debounceMs ? "rate-limited" : "debounced", timestamp, reviewer.id
+  );
+  const request = db.prepare("SELECT * FROM draft_review_requests WHERE draft_id = ? AND dedupe_key = ?").get(draftId, dedupeKey);
+  if (!request) return [];
+  const mapped = mapDraftReviewRequest(request);
+  appendDraftEvent(db, draftId, "draft.review.debounced", {
+    revision, reviewerId, trigger: "reply", requestId: mapped.id
+  });
+  return [mapped];
+}
+
+function activateReviewRequest(project: ProjectRecord, requestId: string, rateLimitMs: number, autoReview: boolean) {
+  const activated = withProjectWriterLock(project.path, () => {
     const db = openProjectDb(project.path);
     try {
       const row = db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(requestId);
-      if (!row) return;
+      if (!row) return null;
       const request = mapDraftReviewRequest(row);
-      if (request.status !== "debounced") return;
+      if (request.status !== "debounced") return null;
       const session = requiredDraftSession(db, request.draftId);
       const timestamp = now();
       if (session.status !== "open" || session.currentRevision !== request.revision) {
         db.prepare("UPDATE draft_review_requests SET status = ?, completed_at = ? WHERE id = ?").run("cancelled", timestamp, request.id);
-        return;
+        return null;
       }
       const rateLimitUntil = new Date(Date.now() + rateLimitMs).toISOString();
       db.prepare("UPDATE draft_review_requests SET status = ? WHERE id = ?").run("pending", request.id);
@@ -415,20 +606,23 @@ function activateReviewRequest(project: ProjectRecord, requestId: string, rateLi
       appendDraftEvent(db, request.draftId, "draft.review.requested", {
         requestId: request.id, reviewerId: request.reviewerId, revision: request.revision
       });
+      return mapDraftReviewRequest(db.prepare("SELECT * FROM draft_review_requests WHERE id = ?").get(request.id));
     } finally {
       db.close();
     }
   });
+  if (activated && autoReview) reviewRuntime?.start(project, activated);
 }
 
 function armDraftReviewTimers(project: ProjectRecord, requests: DraftReviewRequestRecord[], scheduling: SchedulingOptions) {
   const rateLimitMs = duration(scheduling.rateLimitMs, defaultRateLimitMs);
+  const autoReview = scheduling.autoReview !== false;
   for (const request of requests.filter((item) => item.status === "debounced")) {
     const key = timerKey(project.path, request.draftId, request.reviewerId);
     const existing = reviewTimers.get(key);
     if (existing) clearTimeout(existing);
     const delay = Math.max(0, Date.parse(request.availableAt) - Date.now());
-    scheduleReviewActivation(project, request, rateLimitMs, delay);
+    scheduleReviewActivation(project, request, rateLimitMs, autoReview, delay);
   }
 }
 
@@ -436,6 +630,7 @@ function scheduleReviewActivation(
   project: ProjectRecord,
   request: DraftReviewRequestRecord,
   rateLimitMs: number,
+  autoReview: boolean,
   delay: number,
   attempt = 0
 ) {
@@ -443,10 +638,10 @@ function scheduleReviewActivation(
   const timer = setTimeout(() => {
     reviewTimers.delete(key);
     try {
-      activateReviewRequest(project, request.id, rateLimitMs);
+      activateReviewRequest(project, request.id, rateLimitMs, autoReview);
     } catch (error) {
       if (error instanceof ProjectLockedError && attempt < 200) {
-        scheduleReviewActivation(project, request, rateLimitMs, 25, attempt + 1);
+        scheduleReviewActivation(project, request, rateLimitMs, autoReview, 25, attempt + 1);
         return;
       }
       console.error(`Failed to activate draft review request ${request.id}: ${error instanceof Error ? error.message : String(error)}`);
@@ -485,9 +680,11 @@ function readDraftSnapshot(db: DatabaseSync, draftId: string): DraftSnapshot {
 function appendDraftEvent(db: DatabaseSync, draftId: string, type: string, payload: Record<string, unknown>) {
   const row = db.prepare("SELECT MAX(sequence) AS value FROM draft_events WHERE draft_id = ?").get(draftId) as { value: number | null };
   const sequence = Number(row.value || 0) + 1;
+  const event: DraftEventRecord = { id: randomUUID(), draftId, sequence, type, payload, createdAt: now() };
   db.prepare("INSERT INTO draft_events VALUES (?, ?, ?, ?, ?, ?)").run(
-    randomUUID(), draftId, sequence, type, JSON.stringify(payload), now()
+    event.id, event.draftId, event.sequence, event.type, JSON.stringify(event.payload), event.createdAt
   );
+  draftEventBus.emit("event", event);
 }
 
 function listRequestComments(db: DatabaseSync, request: DraftReviewRequestRecord) {

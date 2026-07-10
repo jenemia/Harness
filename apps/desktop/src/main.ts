@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { harnessIpcVersion, isHarnessCommand, isHarnessCommandPayload, isHarnessEventFilter, type HarnessInvokeRequest, type ProviderEventEnvelope } from "@harness/core";
-import { invokeApplicationCommand, recoverApplicationState, subscribeApplicationProviderEvents } from "@harness/server/application";
+import { harnessIpcVersion, isHarnessCommand, isHarnessCommandPayload, isHarnessEventFilter, type DraftEventEnvelope, type HarnessEventFilters, type HarnessInvokeRequest, type ProviderEventEnvelope } from "@harness/core";
+import { invokeApplicationCommand, recoverApplicationState, subscribeApplicationDraftEvents, subscribeApplicationProviderEvents } from "@harness/server/application";
 import { secureWindowOptions } from "./security.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -23,20 +23,33 @@ const eventSubscriptions = new Map<string, { senderId: number; unsubscribe: () =
 
 ipcMain.handle("harness:subscribe", (ipcEvent, request: unknown) => {
   const value = request as Record<string, unknown> | null;
-  if (!value || value.version !== harnessIpcVersion || value.event !== "provider:event" ||
-      typeof value.subscriptionId !== "string" || !isHarnessEventFilter("provider:event", value.filter)) {
+  if (!value || value.version !== harnessIpcVersion || typeof value.subscriptionId !== "string" ||
+      (value.event !== "provider:event" && value.event !== "draft:event") || !isHarnessEventFilter(value.event, value.filter)) {
     throw new Error("Unsupported Harness event subscription.");
   }
   const key = `${ipcEvent.sender.id}:${value.subscriptionId}`;
   eventSubscriptions.get(key)?.unsubscribe();
+  const channel = `harness:event:${value.subscriptionId}`;
+  if (value.event === "draft:event") {
+    let cursor = 0;
+    const send = (draftEvent: DraftEventEnvelope) => {
+      if (draftEvent.sequence <= cursor || ipcEvent.sender.isDestroyed()) return;
+      cursor = draftEvent.sequence;
+      ipcEvent.sender.send(channel, draftEvent);
+    };
+    const subscription = subscribeApplicationDraftEvents(value.filter as HarnessEventFilters["draft:event"], send);
+    eventSubscriptions.set(key, { senderId: ipcEvent.sender.id, unsubscribe: subscription.unsubscribe });
+    for (const draftEvent of subscription.replay) send(draftEvent);
+    return { subscribed: true };
+  }
   const seen = new Map<string, number>();
   const send = (providerEvent: ProviderEventEnvelope) => {
     const cursor = seen.get(providerEvent.runId) || 0;
     if (providerEvent.sequence <= cursor || ipcEvent.sender.isDestroyed()) return;
     seen.set(providerEvent.runId, providerEvent.sequence);
-    ipcEvent.sender.send(`harness:event:${value.subscriptionId}`, providerEvent);
+    ipcEvent.sender.send(channel, providerEvent);
   };
-  const subscription = subscribeApplicationProviderEvents(value.filter, send);
+  const subscription = subscribeApplicationProviderEvents(value.filter as HarnessEventFilters["provider:event"], send);
   eventSubscriptions.set(key, { senderId: ipcEvent.sender.id, unsubscribe: subscription.unsubscribe });
   for (const providerEvent of subscription.replay) send(providerEvent);
   return { subscribed: true };
