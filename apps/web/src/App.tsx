@@ -25,7 +25,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanPreviewResult, PlanResult, Project, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -545,6 +545,7 @@ function PlanningPanel(props: {
   const [mode, setMode] = useState<"sequential" | "parallel">("sequential");
   const [workflowTemplateId, setWorkflowTemplateId] = useState("");
   const [autoStart, setAutoStart] = useState(false);
+  const [lastPreview, setLastPreview] = useState<PlanPreviewResult | null>(null);
   const [lastPlan, setLastPlan] = useState<PlanResult | null>(null);
   const [lastSchedule, setLastSchedule] = useState<ScheduleResult | null>(null);
 
@@ -561,8 +562,21 @@ function PlanningPanel(props: {
       });
       setLastPlan(response.plan);
       setLastSchedule(response.schedule);
+      setLastPreview(null);
       setGoal("");
       await props.onChanged();
+    });
+  }
+
+  async function preview() {
+    await props.runAction(async () => {
+      const response = await api<{ preview: PlanPreviewResult }>(`/api/projects/${props.overview.project.id}/plan-preview`, {
+        method: "POST",
+        body: JSON.stringify({ goal, mode, workflowTemplateId: workflowTemplateId || undefined })
+      });
+      setLastPreview(response.preview);
+      setLastPlan(null);
+      setLastSchedule(null);
     });
   }
 
@@ -594,11 +608,18 @@ function PlanningPanel(props: {
           <input type="checkbox" checked={autoStart} onChange={(event) => setAutoStart(event.target.checked)} />
           <span>Auto-start ready tasks</span>
         </label>
-        <button className="primary-button" type="submit">
-          <Sparkles size={16} />
-          <span>Plan</span>
-        </button>
+        <div className="form-actions">
+          <button className="secondary-button" type="button" onClick={() => void preview()}>
+            <Search size={16} />
+            <span>Preview</span>
+          </button>
+          <button className="primary-button" type="submit">
+            <Sparkles size={16} />
+            <span>Plan</span>
+          </button>
+        </div>
       </form>
+      {lastPreview && <PlanPreviewBox preview={lastPreview} />}
       {lastPlan && (
         <div className="plan-result">
           <strong>{lastPlan.tasks.length} tasks created</strong>
@@ -614,6 +635,33 @@ function PlanningPanel(props: {
         </div>
       )}
     </section>
+  );
+}
+
+function PlanPreviewBox(props: { preview: PlanPreviewResult }) {
+  return (
+    <div className="plan-preview">
+      <div className="plan-preview-header">
+        <strong>{props.preview.tasks.length} tasks previewed</strong>
+        <span>{props.preview.mode}</span>
+      </div>
+      {props.preview.warnings.map((warning) => (
+        <span key={warning} className="plan-warning">
+          {warning}
+        </span>
+      ))}
+      <div className="plan-preview-list">
+        {props.preview.tasks.map((task, index) => (
+          <div className="plan-preview-item" key={`${task.title}-${index}`}>
+            <strong>{task.title}</strong>
+            <span>
+              {task.role} · {task.status}
+              {task.dependencyIndexes.length ? ` · after ${task.dependencyIndexes.map((item) => item + 1).join(", ")}` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -947,11 +995,14 @@ function DocumentEditor(props: {
   const [planMode, setPlanMode] = useState<"sequential" | "parallel">("sequential");
   const [workflowTemplateId, setWorkflowTemplateId] = useState("");
   const [autoStartPlan, setAutoStartPlan] = useState(false);
+  const [lastDocumentPreview, setLastDocumentPreview] = useState<PlanPreviewResult | null>(null);
   const [lastDocumentPlan, setLastDocumentPlan] = useState<PlanResult | null>(null);
 
   useEffect(() => {
     setTitle(props.document?.title || "");
     setContent(props.document?.content || "");
+    setLastDocumentPreview(null);
+    setLastDocumentPlan(null);
   }, [props.document?.id]);
 
   useEffect(() => {
@@ -996,7 +1047,30 @@ function DocumentEditor(props: {
         }
       );
       setLastDocumentPlan(response.plan);
+      setLastDocumentPreview(null);
       await props.onChanged();
+    });
+  }
+
+  async function previewDocumentPlan() {
+    const document = props.document;
+    if (!document) {
+      return;
+    }
+
+    await props.runAction(async () => {
+      const response = await api<{ preview: PlanPreviewResult }>(
+        `/api/projects/${props.projectId}/documents/${document.id}/plan-preview`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            mode: planMode,
+            workflowTemplateId: workflowTemplateId || undefined
+          })
+        }
+      );
+      setLastDocumentPreview(response.preview);
+      setLastDocumentPlan(null);
     });
   }
 
@@ -1043,10 +1117,17 @@ function DocumentEditor(props: {
             />
             <span>Auto-start</span>
           </label>
-          <button className="primary-button" type="button" onClick={() => void planFromDocument()}>
-            <Sparkles size={16} />
-            <span>Plan from doc</span>
-          </button>
+          <div className="form-actions">
+            <button className="secondary-button" type="button" onClick={() => void previewDocumentPlan()}>
+              <Search size={16} />
+              <span>Preview</span>
+            </button>
+            <button className="primary-button" type="button" onClick={() => void planFromDocument()}>
+              <Sparkles size={16} />
+              <span>Plan from doc</span>
+            </button>
+          </div>
+          {lastDocumentPreview && <PlanPreviewBox preview={lastDocumentPreview} />}
           {lastDocumentPlan && (
             <span className="document-plan-result">
               {lastDocumentPlan.tasks.length} tickets created

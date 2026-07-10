@@ -696,6 +696,12 @@ button:disabled {
   margin-top: 10px;
 }
 
+.form-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
 .split-form {
   border-top: 1px solid #f1f2f4;
   padding-top: 10px;
@@ -943,6 +949,51 @@ textarea {
 
 .plan-result strong {
   color: #172b4d;
+}
+
+.plan-preview {
+  border-top: 1px solid #f1f2f4;
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.plan-preview-header {
+  align-items: center;
+  color: #626f86;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.plan-preview-header strong {
+  color: #172b4d;
+}
+
+.plan-preview-list {
+  display: grid;
+  gap: 6px;
+}
+
+.plan-preview-item {
+  border-left: 2px solid #0c66e4;
+  display: grid;
+  gap: 2px;
+  padding-left: 8px;
+}
+
+.plan-preview-item strong {
+  color: #172b4d;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.plan-preview-item span {
+  color: #626f86;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .plan-warning {
