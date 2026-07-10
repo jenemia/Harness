@@ -31,6 +31,8 @@ async function createWindow() {
   await window.loadFile(rendererPath);
   if (process.env.HARNESS_DESKTOP_SMOKE === "1") {
     console.log("Harness desktop smoke ready");
+    const holdMs = Math.max(0, Number(process.env.HARNESS_DESKTOP_SMOKE_HOLD_MS || 0));
+    if (holdMs > 0) await new Promise((resolve) => setTimeout(resolve, holdMs));
     window.destroy();
     app.quit();
     return;

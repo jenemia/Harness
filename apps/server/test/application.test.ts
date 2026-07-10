@@ -31,6 +31,20 @@ test("typed application commands reuse project, agent, and task services", async
     };
     assert.ok(overview.tasks.some((task) => task.id === taskResult.task.id));
     assert.ok(overview.agents.some((agent) => agent.id === agentResult.agent.id));
+    const document = await invokeApplicationCommand("documents:create", {
+      projectId,
+      payload: { title: "IPC document", content: "body" }
+    }) as { document: { title: string } };
+    assert.equal(document.document.title, "IPC document");
+    const settings = await invokeApplicationCommand("project-settings:update", {
+      projectId,
+      payload: { maxProjectParallel: 2 }
+    }) as { settings: { maxProjectParallel: number } };
+    assert.equal(settings.settings.maxProjectParallel, 2);
+    const plan = await invokeApplicationCommand("tasks:create-from-prompt", { projectId, prompt: "Write release notes" }) as {
+      plan: { tasks: unknown[] };
+    };
+    assert.ok(plan.plan.tasks.length > 0);
     const listed = await invokeApplicationCommand("projects:list", {}) as { projects: unknown[] };
     assert.equal(listed.projects.length, 1);
   } finally {

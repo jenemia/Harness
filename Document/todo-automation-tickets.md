@@ -72,11 +72,15 @@ Status: 완료
 
 Depends on: A04
 
+Status: 완료
+
 - production desktop에서 persistent HTTP server 자동 시작을 제거한다.
 - headless/remote 사용 시에만 명시적으로 HTTP transport를 시작한다.
 - desktop smoke에서 listening TCP port 없이 board 동작을 검증한다.
 
 완료 조건: desktop 기본 경로는 packaged asset과 IPC로만 동작하고 HTTP는 선택 기능이다.
+
+검증: 모든 renderer service action의 IPC command coverage, dispatcher integration tests, full build와 Electron main process listening-TCP 부재 smoke.
 
 ### A06: CLI-owned 인증과 credential 보호
 

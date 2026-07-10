@@ -1,20 +1,31 @@
 import type { HarnessCommand, HarnessCommandInputs } from "@harness/core";
 import {
+  createAgentTemplate,
+  createGlobalMemory,
+  getGlobalSettings,
   getProject,
   getProjectOverview,
-  getGlobalSettings,
+  getProjectSettings,
   listAgentTemplates,
   listProjectTemplates,
   listProjectsWithSummaries,
   listWorkflowTemplates,
-  moveTaskInBoard
+  moveTaskInBoard,
+  updateGlobalMemory,
+  updateGlobalSettings,
+  updateProjectSettings
 } from "./db.js";
 import { selectFolder } from "./folder-picker.js";
+import { createPlan } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
+  approveMerge,
+  decideApproval,
   initializeProjectWorkspace,
   listRuntimeProviders,
   pauseTask,
+  requestMergeChanges,
+  resolveMerge,
   resumeTask,
   startReadyTasks,
   startTask,
@@ -22,6 +33,9 @@ import {
 } from "./runtime.js";
 import {
   createAgentService,
+  createDocumentService,
+  createFollowUpTasksService,
+  createMemoryService,
   createTaskCommentService,
   createTaskService,
   decomposeTaskService,
@@ -29,6 +43,8 @@ import {
   registerProjectService,
   unregisterProjectService,
   updateAgentService,
+  updateDocumentService,
+  updateMemoryService,
   updateProjectService,
   updateTaskService
 } from "./services.js";
@@ -65,9 +81,19 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
     }
     case "providers:list": return listRuntimeProviders();
     case "templates:agents": return { templates: listAgentTemplates() };
+    case "templates:agent-create": {
+      const template = createAgentTemplate(input(payload).payload);
+      return { template, templates: listAgentTemplates() };
+    }
     case "templates:workflows": return { templates: listWorkflowTemplates() };
     case "templates:projects": return { templates: listProjectTemplates() };
     case "settings:get": return { settings: getGlobalSettings() };
+    case "settings:update": return { settings: updateGlobalSettings(input(payload).payload) };
+    case "project-settings:update": {
+      const value = input(payload) as HarnessCommandInputs["project-settings:update"];
+      const project = requiredProject(value.projectId);
+      return { settings: updateProjectSettings(project.path, value.payload), overview: getProjectOverview(project) };
+    }
     case "system:select-folder": return selectFolder(input(payload));
     case "agents:save": {
       const value = input(payload) as HarnessCommandInputs["agents:save"];
@@ -76,6 +102,57 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
         ? updateAgentService(project, value.agentId, value.payload as Partial<AgentRecord>)
         : createAgentService(project, value.payload as Partial<AgentRecord>);
       return { agent, overview: getProjectOverview(project) };
+    }
+    case "documents:create": {
+      const value = input(payload) as HarnessCommandInputs["documents:create"];
+      const project = requiredProject(value.projectId);
+      return { document: createDocumentService(project, value.payload), overview: getProjectOverview(project) };
+    }
+    case "documents:update": {
+      const value = input(payload) as HarnessCommandInputs["documents:update"];
+      const project = requiredProject(value.projectId);
+      return { document: updateDocumentService(project, value.documentId, value.payload), overview: getProjectOverview(project) };
+    }
+    case "global-memories:create": {
+      const memory = createGlobalMemory(input(payload).payload as { title: string; content: string });
+      return { memory };
+    }
+    case "global-memories:update": {
+      const value = input(payload) as HarnessCommandInputs["global-memories:update"];
+      return { memory: updateGlobalMemory(value.memoryId, value.payload) };
+    }
+    case "memories:create": {
+      const value = input(payload) as HarnessCommandInputs["memories:create"];
+      const project = requiredProject(value.projectId);
+      return { memory: createMemoryService(project, value.payload), overview: getProjectOverview(project) };
+    }
+    case "memories:update": {
+      const value = input(payload) as HarnessCommandInputs["memories:update"];
+      const project = requiredProject(value.projectId);
+      return { memory: updateMemoryService(project, value.memoryId, value.payload), overview: getProjectOverview(project) };
+    }
+    case "approvals:decide": {
+      const value = input(payload) as HarnessCommandInputs["approvals:decide"];
+      const project = requiredProject(value.projectId);
+      const result = await decideApproval(project, value.approvalId, value.action === "approve" ? "approved" : "rejected");
+      return { result, overview: getProjectOverview(project) };
+    }
+    case "runs:followups": {
+      const value = input(payload) as HarnessCommandInputs["runs:followups"];
+      const project = requiredProject(value.projectId);
+      return { tasks: createFollowUpTasksService(project, value.runId), overview: getProjectOverview(project) };
+    }
+    case "tasks:create-from-prompt": {
+      const value = input(payload) as HarnessCommandInputs["tasks:create-from-prompt"];
+      const project = requiredProject(value.projectId);
+      const settings = getProjectSettings(project.path);
+      const plan = createPlan(project, {
+        goal: value.prompt,
+        mode: "auto",
+        allowLargePlan: true,
+        largePlanTaskThreshold: settings.largePlanTaskThreshold
+      });
+      return { plan, overview: getProjectOverview(project) };
     }
     case "tasks:create": {
       const value = input(payload) as HarnessCommandInputs["tasks:create"];
@@ -118,6 +195,21 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["tasks:decompose"];
       const project = requiredProject(value.projectId);
       return { tasks: decomposeTaskService(project, value.taskId, value.payload), overview: getProjectOverview(project) };
+    }
+    case "tasks:merge": {
+      const value = input(payload) as HarnessCommandInputs["tasks:merge"];
+      const project = requiredProject(value.projectId);
+      return { result: await approveMerge(project, value.taskId), overview: getProjectOverview(project) };
+    }
+    case "tasks:resolve-merge": {
+      const value = input(payload) as HarnessCommandInputs["tasks:resolve-merge"];
+      const project = requiredProject(value.projectId);
+      return { result: await resolveMerge(project, value.taskId), overview: getProjectOverview(project) };
+    }
+    case "tasks:request-changes": {
+      const value = input(payload) as HarnessCommandInputs["tasks:request-changes"];
+      const project = requiredProject(value.projectId);
+      return { result: await requestMergeChanges(project, value.taskId, value.reason), overview: getProjectOverview(project) };
     }
   }
 }

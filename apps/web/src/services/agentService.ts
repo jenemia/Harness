@@ -27,12 +27,12 @@ export const agentService = {
         body: JSON.stringify(payload),
       },
     )),
-  createTemplate: (payload: AgentPayload) =>
+  createTemplate: (payload: AgentPayload) => desktopOrHttp("templates:agent-create", { payload }, () =>
     api<{ template: AgentTemplate; templates: AgentTemplate[] }>(
       "/api/agent-templates",
       {
         method: "POST",
         body: JSON.stringify(payload),
       },
-    ),
+    )),
 };

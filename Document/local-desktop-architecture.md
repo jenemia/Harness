@@ -385,6 +385,8 @@ provider process, PID, session id, last sequence와 workspace는 DB에 기록한
 - HTTP server는 명시적인 headless command로만 시작한다.
 - desktop smoke test에서 listening TCP port가 없어도 주요 기능이 동작하는지 확인한다.
 
+desktop renderer의 project, settings, agent, task, approval, document, memory와 folder-picker service는 모두 typed IPC command를 선택하며 HTTP fallback은 브라우저/headless 실행에만 사용한다. Electron launch smoke는 renderer load 동안 main process에 listening TCP socket이 없음을 확인한다.
+
 ### 5단계: CLI와 MCP local bridge
 
 - CLI와 MCP가 active desktop instance를 발견하고 local socket으로 service command를 전달하게 한다.

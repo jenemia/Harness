@@ -3,11 +3,11 @@ import type { CommentRecord, PlanResult, Task } from "../api/contracts";
 import { desktopOrHttp } from "../api/desktop";
 
 export const taskService = {
-  createFromPrompt: (projectId: string, prompt: string) =>
+  createFromPrompt: (projectId: string, prompt: string) => desktopOrHttp("tasks:create-from-prompt", { projectId, prompt }, () =>
     api<{ plan: PlanResult }>(`/api/projects/${projectId}/tasks/from-prompt`, {
       method: "POST",
       body: JSON.stringify({ prompt }),
-    }),
+    })),
   create: (projectId: string, payload: Partial<Task>) => desktopOrHttp("tasks:create", { projectId, payload }, () =>
     api(`/api/projects/${projectId}/tasks`, {
       method: "POST",
@@ -34,17 +34,17 @@ export const taskService = {
       method: "POST",
       body: JSON.stringify({ direction }),
     })),
-  merge: (projectId: string, taskId: string) =>
-    api(`/api/projects/${projectId}/tasks/${taskId}/merge`, { method: "POST" }),
-  resolveMerge: (projectId: string, taskId: string) =>
+  merge: (projectId: string, taskId: string) => desktopOrHttp("tasks:merge", { projectId, taskId }, () =>
+    api(`/api/projects/${projectId}/tasks/${taskId}/merge`, { method: "POST" })),
+  resolveMerge: (projectId: string, taskId: string) => desktopOrHttp("tasks:resolve-merge", { projectId, taskId }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/resolve-merge`, {
       method: "POST",
-    }),
-  requestChanges: (projectId: string, taskId: string, reason: string) =>
+    })),
+  requestChanges: (projectId: string, taskId: string, reason: string) => desktopOrHttp("tasks:request-changes", { projectId, taskId, reason }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/request-changes`, {
       method: "POST",
       body: JSON.stringify({ reason }),
-    }),
+    })),
   addComment: (
     projectId: string,
     taskId: string,
