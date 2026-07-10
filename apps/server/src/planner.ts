@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, nextTaskOrder, now, openProjectDb } from "./db.js";
 import { resolveTaskWorkspaceMode } from "./workspace-mode.js";
+import { withProjectWriterLock } from "./project-store.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
 
 export type PlanningMode = "auto" | "sequential" | "parallel";
@@ -94,7 +95,7 @@ export function previewProjectPlan(project: ProjectRecord, input: PlanRequest): 
   }
 }
 
-export function createPlan(project: ProjectRecord, input: PlanRequest) {
+function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
   const db = openProjectDb(project.path);
   try {
     const preview = previewPlanWithAssignments(db, input);
@@ -260,6 +261,9 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     return mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(task.id));
   }
 }
+
+export const createPlan = (project: ProjectRecord, input: PlanRequest) =>
+  withProjectWriterLock(project.path, () => createPlanMutation(project, input));
 
 function createDeterministicPlanningProvider(): PlanningProvider {
   return {

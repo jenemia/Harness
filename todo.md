@@ -14,7 +14,7 @@
 - [ ] production desktop은 packaged web asset을 열고 별도의 persistent HTTP server를 자동 시작하지 않는다.
 - [ ] HTTP transport는 headless 또는 remote 사용을 위한 명시적 선택 기능으로만 남긴다.
 - [ ] HTTP route, IPC, CLI와 MCP가 transport별 business logic을 갖지 않고 같은 application service를 호출하게 한다.
-- [ ] project lock, SQLite WAL, stale process와 interrupted run recovery를 구현한다.
+- [x] project lock, SQLite WAL, stale process와 interrupted run recovery를 구현한다.
 - [ ] desktop이 실행 중일 때 CLI와 MCP는 Unix domain socket 또는 Windows named pipe로 동일 service를 호출한다.
 - [ ] desktop이 꺼져 있을 때 CLI와 MCP는 project writer lock을 획득한 경우에만 직접 mutation을 수행한다.
 

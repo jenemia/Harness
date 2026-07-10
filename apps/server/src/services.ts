@@ -23,6 +23,7 @@ import {
   updateProjectRecord
 } from "./db.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
+import { withProjectWriterLock } from "./project-store.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 export type RegisterProjectInput = {
@@ -49,13 +50,15 @@ export function registerProjectService(input: RegisterProjectInput) {
   }
   const projectPath = path.resolve(input.path);
   mkdirSync(projectPath, { recursive: true });
-  const project = registerProject(projectPath, input.name?.trim() || path.basename(projectPath));
-  if (input.projectTemplateId) {
-    seedProjectFromTemplate(project.path, input.projectTemplateId);
-  } else if (input.seedDefaults !== false) {
-    seedDefaultAgents(project.path);
-  }
-  return { project, overview: getProjectOverview(project) };
+  return withProjectWriterLock(projectPath, () => {
+    const project = registerProject(projectPath, input.name?.trim() || path.basename(projectPath));
+    if (input.projectTemplateId) {
+      seedProjectFromTemplate(project.path, input.projectTemplateId);
+    } else if (input.seedDefaults !== false) {
+      seedDefaultAgents(project.path);
+    }
+    return { project, overview: getProjectOverview(project) };
+  });
 }
 
 export function updateProjectService(projectId: string, input: { name?: string; path?: string }) {
@@ -87,7 +90,7 @@ export function unregisterProjectService(projectId: string) {
   return unregisterProject(projectId);
 }
 
-export function createAgentService(project: ProjectRecord, input: Partial<AgentRecord>) {
+function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>) {
   if (!input.name?.trim()) {
     throw new Error("Agent name is required.");
   }
@@ -147,7 +150,7 @@ export function createAgentService(project: ProjectRecord, input: Partial<AgentR
   }
 }
 
-export function updateAgentService(project: ProjectRecord, agentId: string, input: Partial<AgentRecord>) {
+function updateAgentMutation(project: ProjectRecord, agentId: string, input: Partial<AgentRecord>) {
   const db = openProjectDb(project.path);
   try {
     const existing = db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId) as
@@ -190,7 +193,7 @@ export function updateAgentService(project: ProjectRecord, agentId: string, inpu
   }
 }
 
-export function createTaskService(project: ProjectRecord, input: Partial<TaskRecord>) {
+function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) {
   if (!input.title?.trim()) {
     throw new Error("Task title is required.");
   }
@@ -266,7 +269,7 @@ export function createTaskService(project: ProjectRecord, input: Partial<TaskRec
   }
 }
 
-export function updateTaskService(project: ProjectRecord, taskId: string, input: Partial<TaskRecord>) {
+function updateTaskMutation(project: ProjectRecord, taskId: string, input: Partial<TaskRecord>) {
   const db = openProjectDb(project.path);
   try {
     const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as
@@ -326,7 +329,7 @@ export function updateTaskService(project: ProjectRecord, taskId: string, input:
   }
 }
 
-export function createTaskCommentService(
+function createTaskCommentMutation(
   project: ProjectRecord,
   taskId: string,
   input: { author?: string; body?: string }
@@ -355,7 +358,7 @@ export function createTaskCommentService(
   }
 }
 
-export function decomposeTaskService(
+function decomposeTaskMutation(
   project: ProjectRecord,
   taskId: string,
   input: {
@@ -416,7 +419,7 @@ export function decomposeTaskService(
   return tasks;
 }
 
-export function createFollowUpTasksService(project: ProjectRecord, runId: string) {
+function createFollowUpTasksMutation(project: ProjectRecord, runId: string) {
   const db = openProjectDb(project.path);
   let sourceTask: TaskRecord;
   let runAgentId: string;
@@ -475,7 +478,7 @@ export function createFollowUpTasksService(project: ProjectRecord, runId: string
   return tasks;
 }
 
-export function createDocumentService(project: ProjectRecord, input: { title?: string; content?: string }) {
+function createDocumentMutation(project: ProjectRecord, input: { title?: string; content?: string }) {
   if (!input.title?.trim()) {
     throw new Error("Document title is required.");
   }
@@ -491,7 +494,7 @@ export function createDocumentService(project: ProjectRecord, input: { title?: s
   }
 }
 
-export function updateDocumentService(project: ProjectRecord, documentId: string, input: { title?: string; content?: string }) {
+function updateDocumentMutation(project: ProjectRecord, documentId: string, input: { title?: string; content?: string }) {
   const db = openProjectDb(project.path);
   try {
     if (!db.prepare("SELECT id FROM documents WHERE id = ?").get(documentId)) {
@@ -517,7 +520,7 @@ export function getDocumentService(project: ProjectRecord, documentId: string) {
   }
 }
 
-export function createMemoryService(project: ProjectRecord, input: { title?: string; content?: string }) {
+function createMemoryMutation(project: ProjectRecord, input: { title?: string; content?: string }) {
   if (!input.title?.trim()) {
     throw new Error("Memory title is required.");
   }
@@ -533,7 +536,7 @@ export function createMemoryService(project: ProjectRecord, input: { title?: str
   }
 }
 
-export function updateMemoryService(project: ProjectRecord, memoryId: string, input: { title?: string; content?: string }) {
+function updateMemoryMutation(project: ProjectRecord, memoryId: string, input: { title?: string; content?: string }) {
   const db = openProjectDb(project.path);
   try {
     if (!db.prepare("SELECT id FROM memories WHERE id = ?").get(memoryId)) {
@@ -547,6 +550,25 @@ export function updateMemoryService(project: ProjectRecord, memoryId: string, in
     db.close();
   }
 }
+
+function projectMutation<TArgs extends unknown[], TResult>(
+  operation: (project: ProjectRecord, ...args: TArgs) => TResult
+) {
+  return (project: ProjectRecord, ...args: TArgs) =>
+    withProjectWriterLock(project.path, () => operation(project, ...args));
+}
+
+export const createAgentService = projectMutation(createAgentMutation);
+export const updateAgentService = projectMutation(updateAgentMutation);
+export const createTaskService = projectMutation(createTaskMutation);
+export const updateTaskService = projectMutation(updateTaskMutation);
+export const createTaskCommentService = projectMutation(createTaskCommentMutation);
+export const decomposeTaskService = projectMutation(decomposeTaskMutation);
+export const createFollowUpTasksService = projectMutation(createFollowUpTasksMutation);
+export const createDocumentService = projectMutation(createDocumentMutation);
+export const updateDocumentService = projectMutation(updateDocumentMutation);
+export const createMemoryService = projectMutation(createMemoryMutation);
+export const updateMemoryService = projectMutation(updateMemoryMutation);
 
 function normalizeStringList(value: unknown) {
   return Array.from(new Set((Array.isArray(value) ? value : []).map((item) => String(item).trim()).filter(Boolean)));

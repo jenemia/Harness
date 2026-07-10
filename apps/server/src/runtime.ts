@@ -17,6 +17,7 @@ import {
 } from "./db.js";
 import { createDefaultProviders, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
 import { getPlanningProviderDefinition } from "./planner.js";
+import { withProjectWriterLock, withProjectWriterLockAsync } from "./project-store.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -71,7 +72,7 @@ export type RecoveryResult = {
   resetAgents: string[];
 };
 
-export function recoverInterruptedRuns(project: ProjectRecord): RecoveryResult {
+function recoverInterruptedRunsMutation(project: ProjectRecord): RecoveryResult {
   const db = openProjectDb(project.path);
   try {
     const timestamp = now();
@@ -164,7 +165,7 @@ export function recoverInterruptedRuns(project: ProjectRecord): RecoveryResult {
   }
 }
 
-export async function initializeProjectWorkspace(project: ProjectRecord) {
+async function initializeProjectWorkspaceMutation(project: ProjectRecord) {
   const result = await providers.workspace().initializeProject(project.path);
   const db = openProjectDb(project.path);
   try {
@@ -186,7 +187,7 @@ export async function initializeProjectWorkspace(project: ProjectRecord) {
   return result;
 }
 
-export async function startTask(project: ProjectRecord, taskId: string) {
+async function startTaskMutation(project: ProjectRecord, taskId: string) {
   if (runningTasks.has(taskId)) {
     return { accepted: false, reason: "Task is already running." };
   }
@@ -266,7 +267,7 @@ export async function startTask(project: ProjectRecord, taskId: string) {
   return { accepted: true };
 }
 
-export function pauseTask(project: ProjectRecord, taskId: string, reason = "Paused by human.") {
+function pauseTaskMutation(project: ProjectRecord, taskId: string, reason = "Paused by human.") {
   const db = openProjectDb(project.path);
   try {
     const task = getTask(db, taskId);
@@ -311,7 +312,7 @@ export function pauseTask(project: ProjectRecord, taskId: string, reason = "Paus
   }
 }
 
-export function resumeTask(project: ProjectRecord, taskId: string) {
+function resumeTaskMutation(project: ProjectRecord, taskId: string) {
   const db = openProjectDb(project.path);
   try {
     const task = getTask(db, taskId);
@@ -345,7 +346,7 @@ export function resumeTask(project: ProjectRecord, taskId: string) {
   }
 }
 
-export async function startReadyTasks(project: ProjectRecord) {
+async function startReadyTasksMutation(project: ProjectRecord) {
   const db = openProjectDb(project.path);
   try {
     const tasks = db
@@ -417,7 +418,7 @@ export async function startReadyTasks(project: ProjectRecord) {
   }
 }
 
-export async function approveMerge(project: ProjectRecord, taskId: string) {
+async function approveMergeMutation(project: ProjectRecord, taskId: string) {
   const db = openProjectDb(project.path);
   try {
     const task = getTask(db, taskId);
@@ -494,7 +495,7 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
   }
 }
 
-export async function resolveMerge(project: ProjectRecord, taskId: string) {
+async function resolveMergeMutation(project: ProjectRecord, taskId: string) {
   const db = openProjectDb(project.path);
   try {
     const task = getTask(db, taskId);
@@ -570,7 +571,7 @@ export async function resolveMerge(project: ProjectRecord, taskId: string) {
   }
 }
 
-export async function requestMergeChanges(project: ProjectRecord, taskId: string, reason = "Human requested changes before merge.") {
+async function requestMergeChangesMutation(project: ProjectRecord, taskId: string, reason = "Human requested changes before merge.") {
   const db = openProjectDb(project.path);
   try {
     const task = getTask(db, taskId);
@@ -617,7 +618,7 @@ export async function requestMergeChanges(project: ProjectRecord, taskId: string
   }
 }
 
-export function unblockReadyDependents(project: ProjectRecord, completedTaskId: string) {
+function unblockReadyDependentsMutation(project: ProjectRecord, completedTaskId: string) {
   const db = openProjectDb(project.path);
   try {
     return scheduleReadyDependents(project, db, completedTaskId);
@@ -626,7 +627,7 @@ export function unblockReadyDependents(project: ProjectRecord, completedTaskId: 
   }
 }
 
-export async function decideApproval(
+async function decideApprovalMutation(
   project: ProjectRecord,
   approvalId: string,
   decision: "approved" | "rejected"
@@ -723,6 +724,32 @@ export async function decideApproval(
 
   return { ok: true };
 }
+
+function runtimeMutation<TArgs extends unknown[], TResult>(
+  operation: (project: ProjectRecord, ...args: TArgs) => TResult
+) {
+  return (project: ProjectRecord, ...args: TArgs) =>
+    withProjectWriterLock(project.path, () => operation(project, ...args));
+}
+
+function asyncRuntimeMutation<TArgs extends unknown[], TResult>(
+  operation: (project: ProjectRecord, ...args: TArgs) => Promise<TResult>
+) {
+  return (project: ProjectRecord, ...args: TArgs) =>
+    withProjectWriterLockAsync(project.path, () => operation(project, ...args));
+}
+
+export const recoverInterruptedRuns = runtimeMutation(recoverInterruptedRunsMutation);
+export const initializeProjectWorkspace = asyncRuntimeMutation(initializeProjectWorkspaceMutation);
+export const startTask = asyncRuntimeMutation(startTaskMutation);
+export const pauseTask = runtimeMutation(pauseTaskMutation);
+export const resumeTask = runtimeMutation(resumeTaskMutation);
+export const startReadyTasks = asyncRuntimeMutation(startReadyTasksMutation);
+export const approveMerge = asyncRuntimeMutation(approveMergeMutation);
+export const resolveMerge = asyncRuntimeMutation(resolveMergeMutation);
+export const requestMergeChanges = asyncRuntimeMutation(requestMergeChangesMutation);
+export const unblockReadyDependents = runtimeMutation(unblockReadyDependentsMutation);
+export const decideApproval = asyncRuntimeMutation(decideApprovalMutation);
 
 async function executeTask(project: ProjectRecord, taskId: string, reservedAgentId?: string) {
   const db = openProjectDb(project.path);

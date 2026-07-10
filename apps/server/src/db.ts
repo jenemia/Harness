@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { ensureProjectLayout, projectHarnessPath, withProjectWriterLock } from "./project-store.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -682,7 +683,7 @@ export function createProjectTemplate(input: Partial<ProjectTemplateRecord>): Pr
   }
 }
 
-export function seedProjectFromTemplate(projectPath: string, templateId: string): ProjectTemplateRecord {
+function seedProjectFromTemplateMutation(projectPath: string, templateId: string): ProjectTemplateRecord {
   const template = getProjectTemplate(templateId);
   if (!template) {
     throw new Error("Project template not found.");
@@ -782,15 +783,19 @@ function normalizeProjectTemplateAgents(input: unknown): ProjectTemplateAgent[] 
 }
 
 export function projectHarnessDir(projectPath: string) {
-  return path.join(projectPath, ".harness");
+  return projectHarnessPath(projectPath);
 }
 
 export function openProjectDb(projectPath: string) {
-  const dir = projectHarnessDir(projectPath);
-  mkdirSync(dir, { recursive: true });
-  mkdirSync(path.join(dir, "worktrees"), { recursive: true });
-  mkdirSync(path.join(dir, "workspaces"), { recursive: true });
-  const db = new DatabaseSync(path.join(dir, "harness.db"));
+  const layout = ensureProjectLayout(projectPath);
+  const db = new DatabaseSync(layout.databasePath);
+  db.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = NORMAL;
+    PRAGMA busy_timeout = 5000;
+    PRAGMA foreign_keys = ON;
+    PRAGMA user_version = 1;
+  `);
   db.exec(`
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
@@ -1016,7 +1021,7 @@ function getProjectProviderCommandOverridesFromDb(db: DatabaseSync) {
   return parseStringMap(row?.value || "{}", {});
 }
 
-export function updateProjectSettings(projectPath: string, input: Partial<ProjectSettings>): ProjectSettings {
+function updateProjectSettingsMutation(projectPath: string, input: Partial<ProjectSettings>): ProjectSettings {
   const db = openProjectDb(projectPath);
   try {
     const current = getProjectSettingsFromDb(db);
@@ -1177,25 +1182,47 @@ export function getProject(projectId: string): ProjectRecord | null {
   }
 }
 
-export function registerProject(projectPath: string, name: string): ProjectRecord {
+function registerProjectUnlocked(projectPath: string, name: string): ProjectRecord {
   const db = openGlobalDb();
   const timestamp = now();
+  const normalizedPath = path.resolve(projectPath);
   const existing = db
     .prepare("SELECT id, name, path, created_at, updated_at FROM projects WHERE path = ?")
-    .get(projectPath);
+    .get(normalizedPath);
 
   if (existing) {
     const project = mapProject(existing);
     db.prepare("UPDATE projects SET name = ?, updated_at = ? WHERE id = ?").run(name, timestamp, project.id);
     db.close();
+    ensureProjectLayout(project.path, project.id);
     openProjectDb(project.path).close();
     return { ...project, name, updatedAt: timestamp };
   }
 
+  let layout = ensureProjectLayout(normalizedPath);
+  const manifestProject = db
+    .prepare("SELECT id, name, path, created_at, updated_at FROM projects WHERE id = ?")
+    .get(layout.manifest.projectId);
+  if (manifestProject) {
+    const registered = mapProject(manifestProject);
+    if (!existsSync(registered.path)) {
+      db.prepare("UPDATE projects SET name = ?, path = ?, updated_at = ? WHERE id = ?").run(
+        name,
+        normalizedPath,
+        timestamp,
+        registered.id
+      );
+      db.close();
+      openProjectDb(normalizedPath).close();
+      return { ...registered, name, path: normalizedPath, updatedAt: timestamp };
+    }
+    layout = ensureProjectLayout(normalizedPath, randomUUID());
+  }
+
   const project: ProjectRecord = {
-    id: randomUUID(),
+    id: layout.manifest.projectId,
     name,
-    path: projectPath,
+    path: normalizedPath,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -1210,6 +1237,11 @@ export function registerProject(projectPath: string, name: string): ProjectRecor
   db.close();
   openProjectDb(project.path).close();
   return project;
+}
+
+export function registerProject(projectPath: string, name: string): ProjectRecord {
+  const normalizedPath = path.resolve(projectPath);
+  return withProjectWriterLock(normalizedPath, () => registerProjectUnlocked(normalizedPath, name));
 }
 
 export function importProjectsFromRoot(input: {
@@ -1337,7 +1369,7 @@ export function nextTaskOrder(db: DatabaseSync) {
   return Number(row.max_order || 0) + 1000;
 }
 
-export function moveTaskInBoard(projectPath: string, taskId: string, direction: TaskMoveDirection) {
+function moveTaskInBoardMutation(projectPath: string, taskId: string, direction: TaskMoveDirection) {
   const db = openProjectDb(projectPath);
   try {
     const taskRow = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
@@ -1465,7 +1497,7 @@ export function updateGlobalMemory(memoryId: string, input: Partial<Pick<MemoryR
   }
 }
 
-export function seedDefaultAgents(projectPath: string) {
+function seedDefaultAgentsMutation(projectPath: string) {
   const db = openProjectDb(projectPath);
   try {
     const count = db.prepare("SELECT COUNT(*) AS count FROM agents").get() as { count: number };
@@ -1550,6 +1582,18 @@ export function seedDefaultAgents(projectPath: string) {
     db.close();
   }
 }
+
+function projectPathMutation<TArgs extends unknown[], TResult>(
+  operation: (projectPath: string, ...args: TArgs) => TResult
+) {
+  return (projectPath: string, ...args: TArgs) =>
+    withProjectWriterLock(projectPath, () => operation(projectPath, ...args));
+}
+
+export const seedProjectFromTemplate = projectPathMutation(seedProjectFromTemplateMutation);
+export const updateProjectSettings = projectPathMutation(updateProjectSettingsMutation);
+export const moveTaskInBoard = projectPathMutation(moveTaskInBoardMutation);
+export const seedDefaultAgents = projectPathMutation(seedDefaultAgentsMutation);
 
 export function insertEvent(
   db: DatabaseSync,

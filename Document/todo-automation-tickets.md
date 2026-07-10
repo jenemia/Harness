@@ -30,11 +30,15 @@ Status: 완료
 
 Depends on: A01
 
+Status: 완료
+
 - `.harness/manifest.json`, config, DB, runtime, reports, runs, worktree/workspace layout을 관리한다.
 - SQLite WAL, project writer lock, stale instance와 interrupted run recovery를 구현한다.
 - 이동된 project를 다시 열고 동시 writer 및 crash recovery를 테스트한다.
 
 완료 조건: project folder와 `.harness/`만 이동해도 상태를 복구하고 중복 mutation을 차단한다.
+
+검증: layout/manifest migration, WAL pragma, active·stale lock, moved project relink, interrupted run recovery 회귀 테스트와 전체 typecheck/build.
 
 ### A03: File-based agent persona와 migration
 

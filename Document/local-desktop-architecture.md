@@ -367,6 +367,8 @@ provider process, PID, session id, last sequence와 workspace는 DB에 기록한
 - scheduler, provider execution, recovery와 merge lifecycle을 runtime module로 이동한다.
 - transport가 raw DB statement를 직접 실행하지 못하게 한다.
 
+현재 `apps/server/src/project-store.ts`가 versioned manifest/config와 표준 `.harness/` directory를 migration하고, process 소유권을 기록하는 atomic writer lock과 stale lock recovery를 제공한다. project DB는 WAL, busy timeout과 schema user version을 설정하며 application/runtime/planning mutation entry는 같은 reentrant lock을 사용한다.
+
 ### 3단계: typed IPC와 desktop shell
 
 - Electron main, preload와 packaged renderer를 추가한다.

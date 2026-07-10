@@ -36,6 +36,7 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { parseWorkspaceModeOption } from "./workspace-mode.js";
+import { withProjectWriterLockAsync } from "./project-store.js";
 import {
   createAgentService,
   createDocumentService,
@@ -59,6 +60,33 @@ import type { ApprovalRecord, TaskRecord, TaskStatus } from "./types.js";
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
 const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
+const projectMutationCommands = new Set([
+  "projects:init-git",
+  "project-settings:update",
+  "agents:create",
+  "agents:update",
+  "plans:create",
+  "documents:create",
+  "documents:update",
+  "documents:plan",
+  "memories:create",
+  "memories:update",
+  "approvals:approve",
+  "approvals:reject",
+  "runs:followups",
+  "tasks:create",
+  "tasks:update",
+  "tasks:decompose",
+  "tasks:comment",
+  "tasks:merge",
+  "tasks:resolve-merge",
+  "tasks:request-changes",
+  "tasks:move",
+  "tasks:pause",
+  "tasks:resume",
+  "tasks:start",
+  "tasks:schedule"
+]);
 
 const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
@@ -131,7 +159,14 @@ async function main() {
     throw new Error(`Unknown command: ${commandName}`);
   }
 
-  const result = await command(args);
+  const projectId = parseOptions(args).project;
+  const project = projectId && projectMutationCommands.has(commandName) ? getProject(projectId) : null;
+  if (projectId && projectMutationCommands.has(commandName) && !project) {
+    throw new Error(`Project not found: ${projectId}`);
+  }
+  const result = project
+    ? await withProjectWriterLockAsync(project.path, async () => command(args))
+    : await command(args);
   if (result !== undefined) {
     console.log(JSON.stringify(result, null, 2));
   }
