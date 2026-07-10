@@ -37,7 +37,7 @@ import {
   updateProjectRecord,
   updateProjectSettings
 } from "./db.js";
-import { createPlan, type PlanningMode } from "./planner.js";
+import { createPlan, previewPlan, type PlanningMode } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
@@ -82,10 +82,12 @@ const commands: Record<string, CommandHandler> = {
   "agents:list": listAgentsCommand,
   "agents:create": createAgentCommand,
   "agents:update": updateAgentCommand,
+  "plans:preview": previewPlanCommand,
   "plans:create": createPlanCommand,
   "documents:list": listDocumentsCommand,
   "documents:create": createDocumentCommand,
   "documents:update": updateDocumentCommand,
+  "documents:plan-preview": previewDocumentPlanCommand,
   "documents:plan": planDocumentCommand,
   "memories:list": listMemoriesCommand,
   "memories:create": createMemoryCommand,
@@ -350,6 +352,19 @@ async function createPlanCommand(args: string[]) {
   return { plan, schedule, overview: getProjectOverview(project) };
 }
 
+function previewPlanCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const goal = readGoal(options);
+  const mode = normalizeMode(options.mode);
+  const preview = previewPlan({
+    goal,
+    mode,
+    workflowTemplateId: options.workflowTemplate
+  });
+  return { preview, overview: getProjectOverview(project) };
+}
+
 function listDocumentsCommand(args: string[]) {
   const project = getRequiredProject(args);
   const overview = getProjectOverview(project);
@@ -391,6 +406,20 @@ async function planDocumentCommand(args: string[]) {
   const shouldAutoStart = options.autoStart === "true";
   const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
   return { document, plan, schedule, overview: getProjectOverview(project) };
+}
+
+function previewDocumentPlanCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const document = getCliDocument(project, getRequiredOption(options, "document"));
+  const mode = normalizeMode(options.mode);
+  const preview = previewPlan({
+    goal: `Document: ${document.title}\n\n${document.content}`,
+    mode,
+    workflowTemplateId: options.workflowTemplate,
+    sourceDocumentId: document.id
+  });
+  return { document, preview, overview: getProjectOverview(project) };
 }
 
 function listMemoriesCommand(args: string[]) {
@@ -1583,10 +1612,12 @@ Usage:
   pnpm --filter @harness/server cli agents:list --project <projectId>
   pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
   pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
+  pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>]
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
   pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli documents:update --project <projectId> --document <documentId> [--title <text>] [--content <text>|--contentFile <file>]
+  pnpm --filter @harness/server cli documents:plan-preview --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>]
   pnpm --filter @harness/server cli documents:plan --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
   pnpm --filter @harness/server cli memories:list --project <projectId>
   pnpm --filter @harness/server cli memories:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]

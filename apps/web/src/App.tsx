@@ -606,6 +606,11 @@ function PlanningPanel(props: {
             {lastPlan.mode}
             {lastSchedule ? ` · ${lastSchedule.started.length} started` : ""}
           </span>
+          {lastPlan.warnings.map((warning) => (
+            <span key={warning} className="plan-warning">
+              {warning}
+            </span>
+          ))}
         </div>
       )}
     </section>
@@ -1043,7 +1048,14 @@ function DocumentEditor(props: {
             <span>Plan from doc</span>
           </button>
           {lastDocumentPlan && (
-            <span className="document-plan-result">{lastDocumentPlan.tasks.length} tickets created</span>
+            <span className="document-plan-result">
+              {lastDocumentPlan.tasks.length} tickets created
+              {lastDocumentPlan.warnings.map((warning) => (
+                <span key={warning} className="plan-warning">
+                  {warning}
+                </span>
+              ))}
+            </span>
           )}
         </div>
       )}

@@ -20,25 +20,62 @@ export type PlannedTaskSummary = {
   dependencyTaskIds: string[];
 };
 
-export function createPlan(project: ProjectRecord, input: PlanRequest) {
+export type PlanPreviewTask = {
+  title: string;
+  role: string;
+  description: string;
+  acceptanceCriteria: string;
+  dependencyIndexes: number[];
+  status: TaskStatus;
+};
+
+export type PlanPreviewResult = {
+  goal: string;
+  mode: PlanningMode;
+  workflowTemplateId: string | null;
+  tasks: PlanPreviewTask[];
+  warnings: string[];
+};
+
+export function previewPlan(input: PlanRequest): PlanPreviewResult {
   const goal = input.goal?.trim();
   if (!goal) {
     throw new Error("Planning goal is required.");
   }
 
   const mode = input.mode || "sequential";
+  const workflowTemplate = input.workflowTemplateId ? getWorkflowTemplate(input.workflowTemplateId) : null;
+  if (input.workflowTemplateId && !workflowTemplate) {
+    throw new Error("Workflow template not found.");
+  }
+  const planItems = buildPlanItems(goal, mode, workflowTemplate);
+  const warnings = buildPlanWarnings(planItems.length);
+
+  return {
+    goal,
+    mode,
+    workflowTemplateId: workflowTemplate?.id || null,
+    tasks: planItems.map<PlanPreviewTask>((item, index) => ({
+      title: item.title,
+      role: item.role,
+      description: item.description,
+      acceptanceCriteria: item.acceptanceCriteria,
+      dependencyIndexes: mode === "sequential" && index > 0 ? [index - 1] : [],
+      status: mode === "sequential" && index > 0 ? "Blocked" : "Selected"
+    })),
+    warnings
+  };
+}
+
+export function createPlan(project: ProjectRecord, input: PlanRequest) {
+  const preview = previewPlan(input);
   const db = openProjectDb(project.path);
   try {
     const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
-    const workflowTemplate = input.workflowTemplateId ? getWorkflowTemplate(input.workflowTemplateId) : null;
-    if (input.workflowTemplateId && !workflowTemplate) {
-      throw new Error("Workflow template not found.");
-    }
-    const planItems = buildPlanItems(goal, mode, workflowTemplate);
     const inserted: TaskRecord[] = [];
 
-    for (const item of planItems) {
-      const dependencies = mode === "sequential" && inserted.length > 0 ? [inserted[inserted.length - 1].id] : [];
+    for (const item of preview.tasks) {
+      const dependencies = item.dependencyIndexes.map((index) => inserted[index]?.id).filter((id): id is string => Boolean(id));
       const agent = chooseAgentForRole(agents, item.role);
       const task = insertPlannedTask({
         title: item.title,
@@ -48,7 +85,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
         assigneeAgentId: agent?.id || null,
         assigneeAgent: agent || null,
         dependencyTaskIds: dependencies,
-        status: dependencies.length ? "Blocked" : "Selected"
+        status: item.status
       });
       inserted.push(task);
     }
@@ -60,18 +97,20 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       type: "plan.created",
       message: `PM Agent decomposed a goal into ${inserted.length} tasks.`,
       metadata: {
-        goal,
-        mode,
+        goal: preview.goal,
+        mode: preview.mode,
         sourceDocumentId: input.sourceDocumentId || null,
-        workflowTemplateId: workflowTemplate?.id || null,
-        taskIds: inserted.map((task) => task.id)
+        workflowTemplateId: preview.workflowTemplateId,
+        taskIds: inserted.map((task) => task.id),
+        warnings: preview.warnings
       }
     });
 
     return {
-      goal,
-      mode,
-      workflowTemplateId: workflowTemplate?.id || null,
+      goal: preview.goal,
+      mode: preview.mode,
+      workflowTemplateId: preview.workflowTemplateId,
+      warnings: preview.warnings,
       tasks: inserted.map<PlannedTaskSummary>((task) => ({
         id: task.id,
         title: task.title,
@@ -244,6 +283,19 @@ function parseExplicitItems(goal: string) {
     })
     .filter((line) => line.length >= 4)
     .slice(0, 20);
+}
+
+function buildPlanWarnings(taskCount: number) {
+  const warnings: string[] = [];
+  if (taskCount >= 10) {
+    warnings.push(
+      `This plan previews ${taskCount} tasks. Review the preview before creating tasks or split the goal into smaller documents.`
+    );
+  }
+  if (taskCount >= 20) {
+    warnings.push("Explicit bullet planning is capped at 20 tasks per request.");
+  }
+  return warnings;
 }
 
 function summarizeGoal(goal: string) {

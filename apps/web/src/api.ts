@@ -329,11 +329,27 @@ export type PlanResult = {
   goal: string;
   mode: "sequential" | "parallel";
   workflowTemplateId: string | null;
+  warnings: string[];
   tasks: Array<{
     id: string;
     title: string;
     role: string;
     dependencyTaskIds: string[];
+  }>;
+};
+
+export type PlanPreviewResult = {
+  goal: string;
+  mode: "sequential" | "parallel";
+  workflowTemplateId: string | null;
+  warnings: string[];
+  tasks: Array<{
+    title: string;
+    role: string;
+    description: string;
+    acceptanceCriteria: string;
+    dependencyIndexes: number[];
+    status: TaskStatus;
   }>;
 };
 

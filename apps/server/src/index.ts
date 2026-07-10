@@ -39,7 +39,7 @@ import {
   updateProjectRecord,
   updateProjectSettings
 } from "./db.js";
-import { createPlan } from "./planner.js";
+import { createPlan, previewPlan } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
@@ -275,6 +275,17 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "POST" && childPath === "plan-preview") {
+        const body = await readBody<{
+          goal?: string;
+          mode?: "sequential" | "parallel";
+          workflowTemplateId?: string;
+        }>(req);
+        const preview = previewPlan(body);
+        sendJson(res, { preview, overview: getProjectOverview(project) });
+        return;
+      }
+
       if (req.method === "POST" && childPath === "schedule") {
         const schedule = await startReadyTasks(project);
         sendJson(res, { schedule, overview: getProjectOverview(project) }, 202);
@@ -432,6 +443,22 @@ const server = http.createServer(async (req, res) => {
           const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
           const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
           sendJson(res, { document, plan, schedule, overview: getProjectOverview(project) }, 201);
+          return;
+        }
+
+        if (req.method === "POST" && action === "plan-preview") {
+          const body = await readBody<{
+            mode?: "sequential" | "parallel";
+            workflowTemplateId?: string;
+          }>(req);
+          const document = getDocument(project, documentId);
+          const preview = previewPlan({
+            goal: `Document: ${document.title}\n\n${document.content}`,
+            mode: body.mode,
+            workflowTemplateId: body.workflowTemplateId,
+            sourceDocumentId: document.id
+          });
+          sendJson(res, { document, preview, overview: getProjectOverview(project) });
           return;
         }
       }

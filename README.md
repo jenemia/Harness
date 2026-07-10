@@ -79,9 +79,11 @@ pnpm cli templates:agent-create --name "Docs Agent" --role writer --persona "Wri
 pnpm cli templates:workflow-create --name "Build, Review, Docs" --stepsFile ./workflow.steps.json
 pnpm cli templates:project-create --name "Frontend Team" --agentsFile ./project-template-agents.json
 pnpm cli agents:create --project <projectId> --name "Frontend Agent" --role programmer --persona "Build polished React UI" --capabilities frontend,react --allowedTools worktree,shell,tests --boundaries "Stay inside the task worktree" --maxParallel 2
+pnpm cli plans:preview --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
+pnpm cli documents:plan-preview --project <projectId> --document <documentId> --workflowTemplate <templateId>
 pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId>
 pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
 pnpm cli global-memories:create --title "User preferences" --content "Prefer small focused commits"
@@ -146,7 +148,7 @@ Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` 
 
 ## PM Planning
 
-Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
+Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. Use `POST /api/projects/:projectId/plan-preview` or `plans:preview` to inspect the same decomposition before any tasks are written. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
 
 Select a workflow template to make PM planning follow a reusable role chain. Harness seeds `Plan, Build, Review` and `Build and Review` templates, and exposes `/api/workflow-templates` for custom templates.
 
@@ -192,9 +194,9 @@ Harness also queues merge approvals when a completed task has worktree changes w
 
 Use the Documents panel to create and edit project-local notes, service plans, specs, and acceptance criteria. Documents are stored in the project-local Harness database and included in project overview state.
 
-Selected documents can be sent to PM planning to create detailed Kanban tickets from a spec or bullet list. The local deterministic planner treats explicit bullet and numbered lines as ticket candidates and caps each planning pass to keep large documents from flooding the board.
+Selected documents can be previewed or sent to PM planning to create detailed Kanban tickets from a spec or bullet list. The local deterministic planner treats explicit bullet and numbered lines as ticket candidates, warns when a preview contains many tasks, and caps each planning pass to keep large documents from flooding the board.
 
-The same document flow is available headlessly through `documents:list`, `documents:create`, `documents:update`, and `documents:plan`, so a local spec file can become tracked PM tickets without opening the web UI.
+The same document flow is available headlessly through `documents:list`, `documents:create`, `documents:update`, `documents:plan-preview`, and `documents:plan`, so a local spec file can become tracked PM tickets without opening the web UI.
 
 ## Memory
 

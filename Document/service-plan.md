@@ -77,7 +77,7 @@ The PM agent does not need to perform all work directly. Its primary job is orch
 
 The PM agent decides whether work can run in parallel or must proceed sequentially. When a task completes, the PM agent evaluates the result and chooses the next best agent or human handoff.
 
-Initial implementation: the PM planning endpoint can decompose a user goal into scoped Kanban tasks, assign them by agent role, and create sequential dependencies for planned handoff chains.
+Initial implementation: the PM planning endpoint can decompose a user goal into scoped Kanban tasks, assign them by agent role, and create sequential dependencies for planned handoff chains. The same planner can now preview the task breakdown before writing tasks, so large plans can be reviewed before board creation.
 
 ### Task
 
@@ -216,6 +216,8 @@ Certain actions should require user approval:
 Initial implementation: command-backed LLM providers still honor project-level command approval settings, but risky shell command detection is enforced by the policy provider independently of that setting. Risk tags and command previews are recorded in task events and approval request metadata. PM handoffs with risk/error completion signals also create approval requests so a human can approve or reject the next-agent transition before it runs.
 
 Initial implementation: the Approvals panel and headless `approvals:list` command can filter pending and recent decisions by approval kind, status, task, or agent, making command, merge, and risky handoff gates easier to review as projects accumulate requests.
+
+Initial implementation: PM planning and document planning expose preview endpoints and CLI commands that return the same task breakdown, dependency indexes, initial statuses, and large-plan warnings without creating tasks. A later approval gate can reuse this preview before allowing very large task creation.
 
 ### Review Agent
 
@@ -501,7 +503,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, run follow-up creation, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation with automatic or explicit workspace mode, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions for commands, merges, and risky PM handoffs, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents and run output into tracked tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, run follow-up creation, document create/update/list/plan/plan-preview flows, memory create/update/list flows, PM plan preview and creation, task creation with automatic or explicit workspace mode, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions for commands, merges, and risky PM handoffs, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, preview or create plans from goal text/files, maintain project memory, or turn saved documents and run output into tracked tickets.
 
 ## 8. Draft Product Structure
 
@@ -517,7 +519,7 @@ Initial implementation: the server package includes a JSON CLI for headless proj
 
 Initial implementation: project-local documents can be created and edited from the UI, stored in the project `.harness` database, and returned as part of the project overview.
 
-Documents can also be used as PM planning input so a stored spec or service plan can be decomposed into Kanban tickets.
+Documents can also be used as PM planning input so a stored spec or service plan can be previewed or decomposed into Kanban tickets.
 
 ### Board Columns
 
@@ -582,7 +584,7 @@ MVP features:
 - Show project-level task, blocker, approval, run, and merge summaries in the project list.
 - Create and edit agents with personas, capabilities, allowed tools, boundaries, model backends, CLI overrides, and concurrency limits.
 - Create/edit Kanban tasks.
-- Create a PM plan from a user goal and turn it into assigned Kanban tasks.
+- Preview a PM plan from a user goal, then turn it into assigned Kanban tasks.
 - Assign a task to an agent.
 - Show agent status on board cards.
 - Store project data in project-local SQLite and global app settings in a global database/config area.
