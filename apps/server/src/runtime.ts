@@ -739,7 +739,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const workspace = await providers.workspace().ensureTaskWorkspace(project.path, task);
     const snapshotRef = await providers.workspace().snapshotRef(workspace.worktreePath);
     const freshTask = getTask(db, task.id) ?? task;
-    const executionAgent = withProviderCommand(agent, freshTask, settings);
+    const execution = withProviderCommand(agent, freshTask, settings);
+    const executionAgent = execution.agent;
     const selectedProvider = providers.llm(executionAgent.modelBackend);
     const commandPreview = executionAgent.cliCommand || null;
     const startedAt = now();
@@ -786,7 +787,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
         snapshotRef,
         modelBackend: executionAgent.modelBackend,
         providerId: selectedProvider.definition.id,
-        commandPreview
+        commandPreview,
+        ...providerCommandMetadata(execution.commandResolution)
       }
     });
 
@@ -1263,7 +1265,9 @@ function ensureCommandApproval(
 ) {
   const effectiveBackend = getEffectiveModelBackend(agent, task);
   const provider = providers.llm(effectiveBackend);
-  const commandPreview = getEffectiveProviderCommand(agent, effectiveBackend, settings) || provider.definition.commandExample;
+  const commandResolution = resolveProviderCommand(agent, effectiveBackend, settings);
+  const commandPreview = commandResolution.command || provider.definition.commandExample;
+  const commandMetadata = providerCommandMetadata(commandResolution);
   const policy = providers.policy().evaluateLlmExecution({
     task,
     agent,
@@ -1278,7 +1282,7 @@ function ensureCommandApproval(
       agentId: agent.id,
       type: "policy.blocked",
       message: policy.reason,
-      metadata: policy.metadata
+      metadata: { ...policy.metadata, ...commandMetadata }
     });
     return policy.reason;
   }
@@ -1302,7 +1306,7 @@ function ensureCommandApproval(
       agentId: agent.id,
       type: "policy.risk_detected",
       message: commandRisk.reason || "Risky command policy requires approval.",
-      metadata: commandRisk.metadata
+      metadata: { ...commandRisk.metadata, ...commandMetadata }
     });
   }
 
@@ -1346,7 +1350,8 @@ function ensureCommandApproval(
     message: evaluation.reason,
     metadata: {
       approvalId,
-      ...evaluation.metadata
+      ...evaluation.metadata,
+      ...commandMetadata
     }
   });
   return evaluation.reason;
@@ -1393,12 +1398,16 @@ function ensureMergeApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRec
   return evaluation.reason;
 }
 
-function withProviderCommand(agent: AgentRecord, task: TaskRecord, settings: ProjectSettings): AgentRecord {
+function withProviderCommand(agent: AgentRecord, task: TaskRecord, settings: ProjectSettings) {
   const effectiveBackend = getEffectiveModelBackend(agent, task);
+  const commandResolution = resolveProviderCommand(agent, effectiveBackend, settings);
   return {
-    ...agent,
-    modelBackend: effectiveBackend,
-    cliCommand: getEffectiveProviderCommand(agent, effectiveBackend, settings)
+    agent: {
+      ...agent,
+      modelBackend: effectiveBackend,
+      cliCommand: commandResolution.command
+    },
+    commandResolution
   };
 }
 
@@ -1406,18 +1415,47 @@ function getEffectiveModelBackend(agent: AgentRecord, task: TaskRecord) {
   return task.modelBackend || agent.modelBackend;
 }
 
-function getEffectiveProviderCommand(agent: AgentRecord, modelBackend: string, settings: ProjectSettings) {
-  if (agent.cliCommand) {
-    return agent.cliCommand;
-  }
+type ProviderCommandResolution = {
+  command: string | null;
+  source: "agent" | "settings" | "none";
+  key: string | null;
+  platformProviderId: string;
+  nodePlatform: NodeJS.Platform;
+};
+
+function resolveProviderCommand(agent: AgentRecord, modelBackend: string, settings: ProjectSettings): ProviderCommandResolution {
   const platform = providers.platform();
+  if (agent.cliCommand) {
+    return {
+      command: agent.cliCommand,
+      source: "agent",
+      key: "agent.cliCommand",
+      platformProviderId: platform.id,
+      nodePlatform: platform.platform
+    };
+  }
   const commandKeys = [
     `${platform.id}.${modelBackend}`,
     `${platform.platform}.${modelBackend}`,
     modelBackend
   ];
   const matchingKey = commandKeys.find((key) => settings.providerCommands[key]?.trim());
-  return matchingKey ? settings.providerCommands[matchingKey] : null;
+  return {
+    command: matchingKey ? settings.providerCommands[matchingKey] : null,
+    source: matchingKey ? "settings" : "none",
+    key: matchingKey || null,
+    platformProviderId: platform.id,
+    nodePlatform: platform.platform
+  };
+}
+
+function providerCommandMetadata(resolution: ProviderCommandResolution) {
+  return {
+    providerCommandSource: resolution.source,
+    providerCommandKey: resolution.key,
+    platformProviderId: resolution.platformProviderId,
+    nodePlatform: resolution.nodePlatform
+  };
 }
 
 function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {

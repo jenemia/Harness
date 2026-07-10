@@ -177,7 +177,7 @@ Open a task from the board to inspect its status, assignee, labels, linked files
 
 The board can be filtered by task text, assignee, and label while preserving each task's column position and filtered column counts.
 
-Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files.
+Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files. Run and approval timeline events also record the selected provider command key and platform provider.
 
 Recent completed or failed runs for the same task are injected into the generated agent prompt and `HARNESS_TASK_RUN_SUMMARY`, giving reviewer or handoff agents the prior agent output and changed-file context.
 
