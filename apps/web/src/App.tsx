@@ -1352,6 +1352,18 @@ function TaskRuns(props: {
                 <span>snapshot {run.snapshotRef.slice(0, 12)}</span>
               </div>
             )}
+            {(run.modelBackend || run.providerId) && (
+              <div className="snapshot-line">
+                <Bot size={14} />
+                <span>{[run.modelBackend, run.providerId].filter(Boolean).join(" via ")}</span>
+              </div>
+            )}
+            {run.commandPreview && (
+              <div className="snapshot-line">
+                <Play size={14} />
+                <span>{run.commandPreview}</span>
+              </div>
+            )}
             {run.changedFiles.length > 0 && (
               <div className="changed-file-list">
                 {run.changedFiles.map((file) => (
@@ -1416,7 +1428,12 @@ function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {
       at: run.completedAt || run.startedAt,
       type: `run.${run.status}`,
       message: run.branchName || run.id.slice(0, 8),
-      detail: run.error || ""
+      detail: [
+        run.modelBackend || run.providerId ? `model: ${run.modelBackend || "-"} / provider: ${run.providerId || "-"}` : "",
+        run.error || ""
+      ]
+        .filter(Boolean)
+        .join("\n")
     }))
   ].sort((a, b) => b.at.localeCompare(a.at));
 
@@ -1890,6 +1907,7 @@ function RunPanel({ overview }: { overview: Overview }) {
               {run.status}
             </span>
             <span>{run.branchName || run.taskId.slice(0, 8)}</span>
+            {run.modelBackend && <span>{run.modelBackend}</span>}
           </div>
         ))}
       </div>

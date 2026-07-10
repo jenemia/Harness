@@ -474,13 +474,18 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
 
     const workspace = await providers.platform().ensureTaskWorktree(project.path, task);
     const snapshotRef = await providers.platform().snapshotRef(workspace.worktreePath);
+    const freshTask = getTask(db, task.id) ?? task;
+    const executionAgent = withProviderCommand(agent, freshTask, settings);
+    const selectedProvider = providers.llm(executionAgent.modelBackend);
+    const commandPreview = executionAgent.cliCommand || null;
     const startedAt = now();
     runId = randomUUID();
     db.prepare(`
       INSERT INTO runs (
         id, task_id, agent_id, status, branch_name, worktree_path, snapshot_ref,
-        output, error, changed_files, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        model_backend, provider_id, command_preview, output, error, changed_files,
+        started_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       runId,
       task.id,
@@ -489,6 +494,9 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       workspace.branchName,
       workspace.worktreePath,
       snapshotRef,
+      executionAgent.modelBackend,
+      selectedProvider.definition.id,
+      commandPreview,
       null,
       null,
       JSON.stringify([]),
@@ -508,13 +516,18 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       agentId: agent.id,
       type: "run.started",
       message: `${agent.name} started work in ${workspace.worktreePath}.`,
-      metadata: { branchName: workspace.branchName, worktreePath: workspace.worktreePath, snapshotRef }
+      metadata: {
+        branchName: workspace.branchName,
+        worktreePath: workspace.worktreePath,
+        snapshotRef,
+        modelBackend: executionAgent.modelBackend,
+        providerId: selectedProvider.definition.id,
+        commandPreview
+      }
     });
 
-    const freshTask = getTask(db, task.id) ?? task;
-    const executionAgent = withProviderCommand(agent, freshTask, settings);
     const projectMemory = db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory);
-    const result = await providers.llm(executionAgent.modelBackend).run(executionAgent, freshTask, workspace, {
+    const result = await selectedProvider.run(executionAgent, freshTask, workspace, {
       projectMemory
     });
     const completedAt = now();

@@ -220,6 +220,8 @@ Initial implementation: tasks can optionally override the agent's model backend.
 
 Every agent action should be auditable. Users should be able to answer: who did what, when, why, and with which model.
 
+Initial implementation: every run stores the assigned agent, effective model backend, provider id, command preview when applicable, worktree path, branch, snapshot ref, changed files, output, error, and timestamps. Task detail and timeline views expose this audit trail.
+
 ### Workspace Snapshots
 
 Before an agent starts risky work, Harness can create a lightweight snapshot such as a Git branch, stash, patch file, or checkpoint record.

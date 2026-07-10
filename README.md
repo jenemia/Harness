@@ -19,6 +19,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Git worktree per executable task.
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
+- Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Task-level model backend overrides for routing specific work to a different provider.
@@ -81,6 +82,8 @@ When the server starts, Harness scans registered projects for runs that were lef
 ## Task Tracking
 
 Open a task from the board to inspect its status, assignee, labels, parent/subtask links, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
+
+Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, worktree path, and changed files.
 
 ## Approvals
 

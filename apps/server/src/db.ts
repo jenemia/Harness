@@ -780,6 +780,9 @@ export function openProjectDb(projectPath: string) {
       branch_name TEXT,
       worktree_path TEXT,
       snapshot_ref TEXT,
+      model_backend TEXT,
+      provider_id TEXT,
+      command_preview TEXT,
       output TEXT,
       error TEXT,
       changed_files TEXT NOT NULL DEFAULT '[]',
@@ -844,6 +847,9 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
   ensureColumn(db, "runs", "snapshot_ref", "TEXT");
+  ensureColumn(db, "runs", "model_backend", "TEXT");
+  ensureColumn(db, "runs", "provider_id", "TEXT");
+  ensureColumn(db, "runs", "command_preview", "TEXT");
   ensureColumn(db, "runs", "changed_files", "TEXT NOT NULL DEFAULT '[]'");
   return db;
 }
@@ -1354,6 +1360,9 @@ export function mapRun(row: unknown): RunRecord {
     branchName: r.branch_name ? String(r.branch_name) : null,
     worktreePath: r.worktree_path ? String(r.worktree_path) : null,
     snapshotRef: r.snapshot_ref ? String(r.snapshot_ref) : null,
+    modelBackend: r.model_backend ? String(r.model_backend) : null,
+    providerId: r.provider_id ? String(r.provider_id) : null,
+    commandPreview: r.command_preview ? String(r.command_preview) : null,
     output: r.output ? String(r.output) : null,
     error: r.error ? String(r.error) : null,
     changedFiles: JSON.parse(String(r.changed_files || "[]")) as string[],

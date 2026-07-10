@@ -195,6 +195,9 @@ export type RunRecord = {
   branchName: string | null;
   worktreePath: string | null;
   snapshotRef: string | null;
+  modelBackend: string | null;
+  providerId: string | null;
+  commandPreview: string | null;
   output: string | null;
   error: string | null;
   changedFiles: string[];
