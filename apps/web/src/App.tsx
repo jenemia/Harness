@@ -26,7 +26,7 @@ import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Eve
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
-const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
+const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
 
 export function App() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -373,6 +373,7 @@ function ApprovalsPanel(props: {
 
 function ProjectHealthPanel({ overview }: { overview: Overview }) {
   const blockedTasks = overview.tasks.filter((task) => task.status === "Blocked");
+  const pausedTasks = overview.tasks.filter((task) => task.status === "Paused").length;
   const pendingApprovals = overview.approvals.filter((approval) => approval.status === "pending").length;
   const pendingMerges = overview.tasks.filter((task) => task.mergeStatus === "pending" || task.mergeStatus === "conflict").length;
   const failedRuns = overview.runs.filter((run) => run.status === "failed").length;
@@ -406,6 +407,10 @@ function ProjectHealthPanel({ overview }: { overview: Overview }) {
         <div className="compact-row">
           <strong>{blockedTasks.length}</strong>
           <span>blocked</span>
+        </div>
+        <div className="compact-row">
+          <strong>{pausedTasks}</strong>
+          <span>paused</span>
         </div>
         <div className="compact-row">
           <strong>{pendingApprovals}</strong>
@@ -1021,6 +1026,23 @@ function TaskCard(props: {
     });
   }
 
+  async function pause() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/pause`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Paused from board." })
+      });
+      await props.onChanged();
+    });
+  }
+
+  async function resume() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/resume`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
   async function merge() {
     await props.runAction(async () => {
       await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/merge`, { method: "POST" });
@@ -1104,9 +1126,22 @@ function TaskCard(props: {
             </option>
           ))}
         </select>
-        <button className="icon-button" type="button" onClick={() => void start()}>
-          <Play size={16} />
-        </button>
+        {props.task.status === "Paused" ? (
+          <button className="icon-button" title="Resume task" type="button" onClick={() => void resume()}>
+            <Play size={16} />
+          </button>
+        ) : (
+          <>
+            <button className="icon-button" title="Start task" type="button" onClick={() => void start()}>
+              <Play size={16} />
+            </button>
+            {props.task.status !== "In Progress" && props.task.status !== "In Review" && props.task.status !== "Done" && (
+              <button className="icon-button" title="Pause task" type="button" onClick={() => void pause()}>
+                <Clock3 size={16} />
+              </button>
+            )}
+          </>
+        )}
         {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
           <>
             <button className="merge-button" type="button" onClick={() => void merge()}>
@@ -1169,6 +1204,23 @@ function TaskDetailDrawer(props: {
   async function start() {
     await props.runAction(async () => {
       await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/start`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
+  async function pause() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/pause`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Paused from task detail." })
+      });
+      await props.onChanged();
+    });
+  }
+
+  async function resume() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/resume`, { method: "POST" });
       await props.onChanged();
     });
   }
@@ -1242,10 +1294,25 @@ function TaskDetailDrawer(props: {
             <Settings size={16} />
             <span>{isEditing ? "Close edit" : "Edit"}</span>
           </button>
-          <button className="secondary-button" type="button" onClick={() => void start()}>
-            <Play size={16} />
-            <span>Start</span>
-          </button>
+          {props.task.status === "Paused" ? (
+            <button className="secondary-button" type="button" onClick={() => void resume()}>
+              <Play size={16} />
+              <span>Resume</span>
+            </button>
+          ) : (
+            <>
+              <button className="secondary-button" type="button" onClick={() => void start()}>
+                <Play size={16} />
+                <span>Start</span>
+              </button>
+              {props.task.status !== "In Progress" && props.task.status !== "In Review" && props.task.status !== "Done" && (
+                <button className="secondary-button" type="button" onClick={() => void pause()}>
+                  <Clock3 size={16} />
+                  <span>Pause</span>
+                </button>
+              )}
+            </>
+          )}
           {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
             <>
               <button className="merge-button inline" type="button" onClick={() => void merge()}>

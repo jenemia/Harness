@@ -37,7 +37,9 @@ import {
   approveMerge,
   decideApproval,
   listRuntimeProviders,
+  pauseTask,
   requestMergeChanges,
+  resumeTask,
   startReadyTasks,
   startTask,
   unblockReadyDependents
@@ -46,7 +48,7 @@ import type { AgentRecord, DocumentRecord, MemoryRecord, ProjectRecord, TaskReco
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
-const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
+const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
 
 const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
@@ -91,6 +93,8 @@ const commands: Record<string, CommandHandler> = {
   "tasks:comment": commentTaskCommand,
   "tasks:merge": mergeTaskCommand,
   "tasks:request-changes": requestTaskChangesCommand,
+  "tasks:pause": pauseTaskCommand,
+  "tasks:resume": resumeTaskCommand,
   "tasks:start": startTaskCommand,
   "tasks:schedule": scheduleCommand
 };
@@ -392,6 +396,23 @@ async function startTaskCommand(args: string[]) {
   const project = getRequiredProject(args);
   const taskId = getRequiredOption(options, "task");
   const result = await startTask(project, taskId);
+  return { result, overview: getProjectOverview(project) };
+}
+
+function pauseTaskCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const reason = readOptionalText(options, "reason", "reasonFile") || undefined;
+  const result = pauseTask(project, taskId, reason);
+  return { result, overview: getProjectOverview(project) };
+}
+
+function resumeTaskCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const result = resumeTask(project, taskId);
   return { result, overview: getProjectOverview(project) };
 }
 
@@ -1209,11 +1230,13 @@ Usage:
   pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>
   pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]
   pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
-  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Blocked|Done]
+  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done]
   pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
   pnpm --filter @harness/server cli tasks:merge --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:request-changes --project <projectId> --task <taskId> [--reason <text>|--reasonFile <file>]
+  pnpm --filter @harness/server cli tasks:pause --project <projectId> --task <taskId> [--reason <text>|--reasonFile <file>]
+  pnpm --filter @harness/server cli tasks:resume --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:schedule --project <projectId>
   pnpm --filter @harness/server cli tasks:start --project <projectId> --task <taskId>
 

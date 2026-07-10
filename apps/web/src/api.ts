@@ -3,6 +3,7 @@ export type TaskStatus =
   | "Selected"
   | "In Progress"
   | "In Review"
+  | "Paused"
   | "Blocked"
   | "Done";
 

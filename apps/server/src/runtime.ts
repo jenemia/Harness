@@ -154,6 +154,10 @@ export async function startTask(project: ProjectRecord, taskId: string) {
       return { accepted: false, reason: "Task not found." };
     }
 
+    if (task.status === "Paused") {
+      return { accepted: false, reason: "Task is paused. Resume it before starting agent work." };
+    }
+
     const settings = getProjectSettingsFromDb(db);
     if (!hasProjectCapacity(db, project.path, settings)) {
       const reason = "Project has reached its parallel run limit.";
@@ -215,6 +219,85 @@ export async function startTask(project: ProjectRecord, taskId: string) {
     releaseProject(project.path);
   });
   return { accepted: true };
+}
+
+export function pauseTask(project: ProjectRecord, taskId: string, reason = "Paused by human.") {
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    if (!task) {
+      return { ok: false, reason: "Task not found." };
+    }
+
+    const running = db
+      .prepare("SELECT COUNT(*) AS count FROM runs WHERE task_id = ? AND status = ?")
+      .get(task.id, "running") as { count: number };
+    if (running.count > 0 || runningTasks.has(task.id)) {
+      return { ok: false, reason: "Task has a running agent run. Wait for it to finish before pausing." };
+    }
+
+    if (task.status === "Done") {
+      return { ok: false, reason: "Done tasks cannot be paused." };
+    }
+
+    if (task.status === "Paused") {
+      return { ok: true, taskId: task.id, status: task.status };
+    }
+
+    db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+      "Paused",
+      reason,
+      now(),
+      task.id
+    );
+    if (task.assigneeAgentId) {
+      refreshAgentStatus(db, task.assigneeAgentId);
+    }
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: task.assigneeAgentId,
+      type: "task.paused",
+      message: reason,
+      metadata: { previousStatus: task.status }
+    });
+    return { ok: true, taskId: task.id, status: "Paused" };
+  } finally {
+    db.close();
+  }
+}
+
+export function resumeTask(project: ProjectRecord, taskId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    if (!task) {
+      return { ok: false, reason: "Task not found." };
+    }
+
+    if (task.status !== "Paused") {
+      return { ok: false, reason: `Task status is ${task.status}.` };
+    }
+
+    db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+      "Selected",
+      null,
+      now(),
+      task.id
+    );
+    if (task.assigneeAgentId) {
+      refreshAgentStatus(db, task.assigneeAgentId);
+    }
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: task.assigneeAgentId,
+      type: "task.resumed",
+      message: "Task was resumed and returned to the selected queue.",
+      metadata: { previousStatus: task.status }
+    });
+    return { ok: true, taskId: task.id, status: "Selected" };
+  } finally {
+    db.close();
+  }
 }
 
 export async function startReadyTasks(project: ProjectRecord) {

@@ -40,8 +40,10 @@ import {
   approveMerge,
   decideApproval,
   listRuntimeProviders,
+  pauseTask,
   recoverInterruptedRuns,
   requestMergeChanges,
+  resumeTask,
   startReadyTasks,
   startTask,
   unblockReadyDependents
@@ -289,6 +291,19 @@ const server = http.createServer(async (req, res) => {
         if (req.method === "POST" && action === "start") {
           const result = await startTask(project, taskId);
           sendJson(res, { result, overview: getProjectOverview(project) }, result.accepted ? 202 : 409);
+          return;
+        }
+
+        if (req.method === "POST" && action === "pause") {
+          const body = await readBody<{ reason?: string }>(req);
+          const result = pauseTask(project, taskId, body.reason?.trim() || undefined);
+          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          return;
+        }
+
+        if (req.method === "POST" && action === "resume") {
+          const result = resumeTask(project, taskId);
+          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
           return;
         }
 

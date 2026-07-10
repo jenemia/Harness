@@ -1,7 +1,7 @@
 import { now } from "./db.js";
 import type { ProjectHealthReport, ProjectOverview, TaskStatus } from "./types.js";
 
-const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
+const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
 
 export function createProjectHealthReport(overview: ProjectOverview): ProjectHealthReport {
   const statusCounts = Object.fromEntries(taskStatuses.map((status) => [status, 0])) as Record<TaskStatus, number>;
