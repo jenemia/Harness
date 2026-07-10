@@ -55,7 +55,7 @@ Set `autoStart` on the planning request or use `POST /api/projects/:projectId/sc
 
 ## Task Tracking
 
-Open a task from the board to inspect its status, assignee, labels, parent/subtask links, worktree branch/path, dependencies, merge state, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
+Open a task from the board to inspect its status, assignee, labels, parent/subtask links, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
 
 ## Approvals
 

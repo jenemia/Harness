@@ -803,6 +803,16 @@ function TaskCard(props: {
     });
   }
 
+  async function requestChanges() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/request-changes`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Human requested changes before merge." })
+      });
+      await props.onChanged();
+    });
+  }
+
   return (
     <article className={`task-card priority-${props.task.priority.toLowerCase()}`}>
       <div className="task-card-top">
@@ -873,10 +883,16 @@ function TaskCard(props: {
           <Play size={16} />
         </button>
         {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
-          <button className="merge-button" type="button" onClick={() => void merge()}>
-            <GitMerge size={16} />
-            <span>Merge</span>
-          </button>
+          <>
+            <button className="merge-button" type="button" onClick={() => void merge()}>
+              <GitMerge size={16} />
+              <span>Merge</span>
+            </button>
+            <button className="request-changes-button" type="button" onClick={() => void requestChanges()}>
+              <RefreshCcw size={16} />
+              <span>Changes</span>
+            </button>
+          </>
         )}
       </div>
     </article>
@@ -939,6 +955,16 @@ function TaskDetailDrawer(props: {
     });
   }
 
+  async function requestChanges() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/request-changes`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Human requested changes before merge." })
+      });
+      await props.onChanged();
+    });
+  }
+
   async function saveTask(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
@@ -996,10 +1022,16 @@ function TaskDetailDrawer(props: {
             <span>Start</span>
           </button>
           {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
-            <button className="merge-button inline" type="button" onClick={() => void merge()}>
-              <GitMerge size={16} />
-              <span>Merge</span>
-            </button>
+            <>
+              <button className="merge-button inline" type="button" onClick={() => void merge()}>
+                <GitMerge size={16} />
+                <span>Merge</span>
+              </button>
+              <button className="request-changes-button inline" type="button" onClick={() => void requestChanges()}>
+                <RefreshCcw size={16} />
+                <span>Request changes</span>
+              </button>
+            </>
           )}
         </div>
 

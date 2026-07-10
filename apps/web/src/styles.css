@@ -420,7 +420,8 @@ h3 {
   gap: 8px;
 }
 
-.merge-button {
+.merge-button,
+.request-changes-button {
   grid-column: 1 / -1;
   border: 0;
   border-radius: 6px;
@@ -433,7 +434,13 @@ h3 {
   color: #ffffff;
 }
 
-.merge-button.inline {
+.request-changes-button {
+  background: #f1f2f4;
+  color: #172b4d;
+}
+
+.merge-button.inline,
+.request-changes-button.inline {
   grid-column: auto;
   padding: 0 12px;
 }

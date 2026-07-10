@@ -289,6 +289,8 @@ Default worktree policy:
 - The PM agent can recommend merge order when multiple completed tasks touch related areas.
 - The user can approve, reject, or request changes before merge.
 
+Initial implementation: pending or conflicted merges can be approved into the main checkout or sent back for changes. Requesting changes returns the task to Selected, clears the pending merge state, records the reason, and keeps the task worktree/branch available for another run.
+
 Benefits:
 
 - Safer parallel execution.

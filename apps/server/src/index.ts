@@ -26,7 +26,7 @@ import {
   updateProjectSettings
 } from "./db.js";
 import { createPlan } from "./planner.js";
-import { approveMerge, decideApproval, listRuntimeProviders, startReadyTasks, startTask } from "./runtime.js";
+import { approveMerge, decideApproval, listRuntimeProviders, requestMergeChanges, startReadyTasks, startTask } from "./runtime.js";
 import type { AgentRecord, AgentTemplateRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -194,6 +194,13 @@ const server = http.createServer(async (req, res) => {
 
         if (req.method === "POST" && action === "merge") {
           const result = await approveMerge(project, taskId);
+          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          return;
+        }
+
+        if (req.method === "POST" && action === "request-changes") {
+          const body = await readBody<{ reason?: string }>(req);
+          const result = await requestMergeChanges(project, taskId, body.reason?.trim() || undefined);
           sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
           return;
         }

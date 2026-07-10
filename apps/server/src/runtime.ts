@@ -242,6 +242,38 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
   }
 }
 
+export async function requestMergeChanges(project: ProjectRecord, taskId: string, reason = "Human requested changes before merge.") {
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    if (!task) {
+      return { ok: false, reason: "Task not found." };
+    }
+
+    if (task.mergeStatus !== "pending" && task.mergeStatus !== "conflict") {
+      return { ok: false, reason: `Task merge status is ${task.mergeStatus}.` };
+    }
+
+    db.prepare(`
+      UPDATE tasks
+      SET status = ?, merge_status = ?, merge_error = ?, blocked_reason = ?, updated_at = ?
+      WHERE id = ?
+    `).run("Selected", "none", null, reason, now(), task.id);
+
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: task.assigneeAgentId,
+      type: "merge.changes_requested",
+      message: reason,
+      metadata: { branchName: task.branchName, worktreePath: task.worktreePath }
+    });
+
+    return { ok: true };
+  } finally {
+    db.close();
+  }
+}
+
 export async function decideApproval(
   project: ProjectRecord,
   approvalId: string,
