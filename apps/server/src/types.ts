@@ -146,6 +146,7 @@ export type RunRecord = {
   status: "running" | "completed" | "failed";
   branchName: string | null;
   worktreePath: string | null;
+  snapshotRef: string | null;
   output: string | null;
   error: string | null;
   changedFiles: string[];

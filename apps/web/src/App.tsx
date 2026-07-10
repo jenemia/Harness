@@ -1238,6 +1238,12 @@ function TaskRuns({ runs }: { runs: Run[] }) {
               </span>
               <span>{formatDate(run.startedAt)}</span>
             </div>
+            {run.snapshotRef && (
+              <div className="snapshot-line">
+                <GitBranch size={14} />
+                <span>snapshot {run.snapshotRef.slice(0, 12)}</span>
+              </div>
+            )}
             {run.changedFiles.length > 0 && (
               <div className="changed-file-list">
                 {run.changedFiles.map((file) => (

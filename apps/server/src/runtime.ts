@@ -333,13 +333,14 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     setAgentBusy(db, agent.id, task.id);
 
     const workspace = await providers.platform().ensureTaskWorktree(project.path, task);
+    const snapshotRef = await providers.platform().snapshotRef(workspace.worktreePath);
     const startedAt = now();
     runId = randomUUID();
     db.prepare(`
       INSERT INTO runs (
-        id, task_id, agent_id, status, branch_name, worktree_path,
+        id, task_id, agent_id, status, branch_name, worktree_path, snapshot_ref,
         output, error, changed_files, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       runId,
       task.id,
@@ -347,6 +348,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       "running",
       workspace.branchName,
       workspace.worktreePath,
+      snapshotRef,
       null,
       null,
       JSON.stringify([]),
@@ -366,7 +368,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       agentId: agent.id,
       type: "run.started",
       message: `${agent.name} started work in ${workspace.worktreePath}.`,
-      metadata: { branchName: workspace.branchName, worktreePath: workspace.worktreePath }
+      metadata: { branchName: workspace.branchName, worktreePath: workspace.worktreePath, snapshotRef }
     });
 
     const freshTask = getTask(db, task.id) ?? task;

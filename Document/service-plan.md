@@ -222,6 +222,8 @@ Every agent action should be auditable. Users should be able to answer: who did 
 
 Before an agent starts risky work, Harness can create a lightweight snapshot such as a Git branch, stash, patch file, or checkpoint record.
 
+Initial implementation: every run records the task worktree's starting Git `HEAD` as a snapshot reference before the agent provider executes, and the task detail run list displays the short snapshot SHA.
+
 ### Templates
 
 Project templates and agent templates reduce setup friction.

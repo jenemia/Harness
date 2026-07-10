@@ -29,6 +29,7 @@ export type PlatformProvider = {
   commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null }>;
   mergeBranch(projectPath: string, branchName: string, message: string): Promise<CommandResult>;
   workingTreeStatus(projectPath: string): Promise<string>;
+  snapshotRef(cwd: string): Promise<string>;
   changedFiles(cwd: string): Promise<string[]>;
 };
 
@@ -213,6 +214,10 @@ function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => 
 
     async workingTreeStatus(projectPath) {
       return (await run("git", ["status", "--porcelain"], projectPath)).stdout;
+    },
+
+    async snapshotRef(cwd) {
+      return (await run("git", ["rev-parse", "HEAD"], cwd)).stdout.trim();
     },
 
     async changedFiles(cwd) {

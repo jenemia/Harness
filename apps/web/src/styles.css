@@ -862,6 +862,7 @@ textarea {
 .dependency-row,
 .handoff-row,
 .run-detail-top,
+.snapshot-line,
 .timeline-row {
   align-items: flex-start;
   display: flex;
@@ -977,6 +978,14 @@ textarea {
 .timeline-row small {
   color: #626f86;
   font-size: 12px;
+}
+
+.snapshot-line {
+  align-items: center;
+  color: #626f86;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  margin-top: -2px;
 }
 
 .changed-file-list {
