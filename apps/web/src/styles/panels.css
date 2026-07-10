@@ -268,6 +268,33 @@
   margin-top: 10px;
 }
 
+.mcp-settings {
+  grid-column: 1 / -1;
+}
+
+.mcp-client-row {
+  background: #fafafb;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(140px, 1fr) minmax(120px, 1fr) repeat(3, auto);
+  padding: 12px;
+}
+
+.mcp-client-row pre,
+.mcp-client-row small {
+  grid-column: 1 / -1;
+}
+
+.mcp-client-row pre {
+  background: #172b4d;
+  color: #f7f8f9;
+  margin: 0;
+  overflow: auto;
+  padding: 9px;
+}
+
 .language-setting > span {
   color: #44546f;
   font-size: 12px;

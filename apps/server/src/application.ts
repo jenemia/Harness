@@ -7,11 +7,14 @@ import {
   getProjectOverview,
   getProjectSettings,
   listAgentTemplates,
+  listMcpAudits,
+  listMcpClients,
   listProjectTemplates,
   listProjects,
   listProjectsWithSummaries,
   listWorkflowTemplates,
   moveTaskInBoard,
+  saveMcpClient,
   updateGlobalMemory,
   updateGlobalSettings,
   updateProjectSettings
@@ -152,6 +155,20 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
       return { schedule: await startReadyTasks(project), overview: getProjectOverview(project) };
     }
     case "providers:list": return listRuntimeProviders();
+    case "mcp:clients": return { clients: listMcpClients() };
+    case "mcp:client-save": {
+      const value = input(payload) as HarnessCommandInputs["mcp:client-save"];
+      return { client: saveMcpClient(value.payload), clients: listMcpClients() };
+    }
+    case "mcp:diagnose": {
+      const { applicationBridgeDiagnostics } = await import("./application-bridge.js");
+      return {
+        bridge: applicationBridgeDiagnostics(),
+        clients: listMcpClients(),
+        recentAudits: listMcpAudits(20),
+        command: "pnpm --filter @harness/server mcp -- --client <client-id>"
+      };
+    }
     case "templates:agents": return { templates: listAgentTemplates() };
     case "templates:agent-create": {
       const template = createAgentTemplate(input(payload).payload);

@@ -226,11 +226,15 @@ Status: 완료
 
 Depends on: A01, A02, A12, A15
 
+Status: 완료
+
 - stdio MCP entry point, versioned schemas와 read/write scope를 구현한다.
 - active desktop에는 local socket/named pipe, offline에는 writer lock service fallback을 사용한다.
 - 초기 board/task/run/interaction/approval tools와 dry-run·audit을 제공한다.
 
 완료 조건: Cursor 등 MCP client가 기존 policy를 우회하지 않고 board를 조회·변경한다.
+
+검증: versioned input/output schema와 15개 tool을 stdio로 조회하고, 미등록·read-only·project 제한 client의 거부, dry-run 무변경, 허용된 task 생성·comment·interaction 응답을 통합 테스트했다. active desktop bridge와 offline writer-lock fallback, global/project audit, bridge 종료 정리, Settings scope 변경 및 Electron 무포트 smoke를 확인했다.
 
 ### A17: OpenTelemetry tracing
 

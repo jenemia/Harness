@@ -2,12 +2,14 @@ import { Plus, Settings } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import type {
   GlobalSettings,
+  McpClient,
   Overview,
   ProjectSettings,
   ProviderCatalog,
 } from "../../api/contracts";
 import { supportedLocales, useI18n, type SupportedLocale } from "../../i18n";
 import { settingsService } from "../../services/settingsService";
+import { mcpService, type McpDiagnostics } from "../../services/mcpService";
 import { systemService } from "../../services/systemService";
 import { FolderPickerField } from "../../shared/FolderPickerField";
 import { parseStringMapText } from "../../shared/formParsing";
@@ -41,6 +43,9 @@ export function SettingsPanel(props: {
   );
   const [projectProviderCommandsText, setProjectProviderCommandsText] =
     useState(JSON.stringify(props.overview.settings.providerCommands, null, 2));
+  const [mcpClients, setMcpClients] = useState<McpClient[]>([]);
+  const [mcpDiagnostics, setMcpDiagnostics] = useState<McpDiagnostics | null>(null);
+  const [newMcpClientId, setNewMcpClientId] = useState("cursor");
 
   useEffect(() => {
     if (!props.settings) {
@@ -66,6 +71,13 @@ export function SettingsPanel(props: {
       JSON.stringify(props.overview.settings.providerCommands, null, 2),
     );
   }, [props.overview.settings]);
+
+  useEffect(() => {
+    void mcpService.diagnose().then((diagnostics) => {
+      setMcpDiagnostics(diagnostics);
+      setMcpClients(diagnostics.clients);
+    }).catch(() => undefined);
+  }, []);
 
   async function submitGlobal(event: FormEvent) {
     event.preventDefault();
@@ -117,6 +129,14 @@ export function SettingsPanel(props: {
         JSON.stringify(response.settings.providerCommands, null, 2),
       );
       await props.onProjectChanged();
+    });
+  }
+
+  async function saveMcpClient(client: Partial<McpClient> & { id: string }) {
+    await props.runAction(async () => {
+      const response = await mcpService.save(client);
+      setMcpClients(response.clients);
+      setMcpDiagnostics(await mcpService.diagnose());
     });
   }
 
@@ -416,46 +436,6 @@ export function SettingsPanel(props: {
           }
           placeholder="Large plan task threshold"
         />
-        <input
-          min={1}
-          max={1000}
-          type="number"
-          value={projectSettings.maxReviewFiles}
-          onChange={(event) => updateProjectSetting("maxReviewFiles", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Recommended review file limit"
-        />
-        <input
-          min={1}
-          max={1000000}
-          type="number"
-          value={projectSettings.maxReviewDiffLines}
-          onChange={(event) => updateProjectSetting("maxReviewDiffLines", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Recommended diff line limit"
-        />
-        <input
-          min={1}
-          max={1000}
-          type="number"
-          value={projectSettings.maxReviewBacklog}
-          onChange={(event) => updateProjectSetting("maxReviewBacklog", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Review backlog scheduler limit"
-        />
-        <input
-          min={1}
-          max={10000000}
-          type="number"
-          value={projectSettings.maxUnreviewedDiffLines}
-          onChange={(event) => updateProjectSetting("maxUnreviewedDiffLines", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Unreviewed line scheduler limit"
-        />
-        <select
-          value={projectSettings.workspaceProtectionMode}
-          onChange={(event) => updateProjectSetting("workspaceProtectionMode", event.target.value as ProjectSettings["workspaceProtectionMode"])}
-        >
-          <option value="pause">Pause on workspace violation</option>
-          <option value="block">Block on workspace violation</option>
-          <option value="warn">Warn on workspace violation</option>
-        </select>
         <textarea
           value={globalProviderCommandsText}
           onChange={(event) =>
@@ -564,6 +544,46 @@ export function SettingsPanel(props: {
           }
           placeholder="Large plan task threshold"
         />
+        <input
+          min={1}
+          max={1000}
+          type="number"
+          value={projectSettings.maxReviewFiles}
+          onChange={(event) => updateProjectSetting("maxReviewFiles", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Recommended review file limit"
+        />
+        <input
+          min={1}
+          max={1000000}
+          type="number"
+          value={projectSettings.maxReviewDiffLines}
+          onChange={(event) => updateProjectSetting("maxReviewDiffLines", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Recommended diff line limit"
+        />
+        <input
+          min={1}
+          max={1000}
+          type="number"
+          value={projectSettings.maxReviewBacklog}
+          onChange={(event) => updateProjectSetting("maxReviewBacklog", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Review backlog scheduler limit"
+        />
+        <input
+          min={1}
+          max={10000000}
+          type="number"
+          value={projectSettings.maxUnreviewedDiffLines}
+          onChange={(event) => updateProjectSetting("maxUnreviewedDiffLines", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Unreviewed line scheduler limit"
+        />
+        <select
+          value={projectSettings.workspaceProtectionMode}
+          onChange={(event) => updateProjectSetting("workspaceProtectionMode", event.target.value as ProjectSettings["workspaceProtectionMode"])}
+        >
+          <option value="pause">Pause on workspace violation</option>
+          <option value="block">Block on workspace violation</option>
+          <option value="warn">Warn on workspace violation</option>
+        </select>
         <label className="check-row">
           <input
             type="checkbox"
@@ -630,6 +650,51 @@ export function SettingsPanel(props: {
           <span>{t("settings.saveProject")}</span>
         </button>
       </form>
+      <div className="stack-form split-form mcp-settings">
+        <div className="form-group-title">Harness MCP</div>
+        <p className="provider-help">
+          {mcpDiagnostics?.bridge.active
+            ? `Desktop bridge active · PID ${mcpDiagnostics.bridge.pid}`
+            : "Desktop bridge offline · MCP writes use the project writer-lock fallback"}
+        </p>
+        <div className="provider-command-actions">
+          <input value={newMcpClientId} onChange={(event) => setNewMcpClientId(event.target.value)} placeholder="MCP client id" />
+          <button
+            className="secondary-button compact"
+            type="button"
+            disabled={!newMcpClientId.trim()}
+            onClick={() => void saveMcpClient({ id: newMcpClientId.trim(), label: newMcpClientId.trim(), readScope: true, writeScope: false, enabled: true, allowedProjectIds: [] })}
+          >
+            Add read-only client
+          </button>
+        </div>
+        {mcpClients.map((client) => (
+          <div className="mcp-client-row" key={client.id}>
+            <strong>{client.label}</strong>
+            <code>{client.id}</code>
+            <label className="check-row"><input type="checkbox" checked={client.enabled} onChange={(event) => void saveMcpClient({ ...client, enabled: event.target.checked })} /><span>enabled</span></label>
+            <label className="check-row"><input type="checkbox" checked={client.readScope} onChange={(event) => void saveMcpClient({ ...client, readScope: event.target.checked })} /><span>read</span></label>
+            <label className="check-row"><input type="checkbox" checked={client.writeScope} onChange={(event) => void saveMcpClient({ ...client, writeScope: event.target.checked })} /><span>write</span></label>
+            <button
+              className="secondary-button compact"
+              type="button"
+              onClick={() => void saveMcpClient({ ...client, allowedProjectIds: client.allowedProjectIds.includes(props.overview.project.id) ? client.allowedProjectIds.filter((id) => id !== props.overview.project.id) : [...client.allowedProjectIds, props.overview.project.id] })}
+            >
+              {client.allowedProjectIds.includes(props.overview.project.id) ? "Remove current project" : "Allow current project"}
+            </button>
+            <small>{client.allowedProjectIds.length ? `${client.allowedProjectIds.length} allowed project(s)` : "all projects"}</small>
+            <pre>{JSON.stringify({
+              mcpServers: {
+                harness: {
+                  command: "harness-mcp-server",
+                  args: ["--client", client.id]
+                }
+              }
+            }, null, 2)}</pre>
+          </div>
+        ))}
+        <p className="provider-help">Development command: {mcpDiagnostics?.command || "pnpm --filter @harness/server mcp -- --client <client-id>"}</p>
+      </div>
     </section>
   );
 }

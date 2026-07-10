@@ -13,10 +13,13 @@ import {
   getProjectSettings,
   listAgentTemplates,
   listGlobalMemories,
+  listMcpAudits,
+  listMcpClients,
   listProjectTemplates,
   listProjectsWithSummaries,
   listWorkflowTemplates,
   moveTaskInBoard,
+  saveMcpClient,
   updateGlobalMemory,
   updateGlobalSettings,
   updateProjectSettings
@@ -38,6 +41,7 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { listInteractions } from "./interactions.js";
+import { applicationBridgeDiagnostics } from "./application-bridge.js";
 import { parseWorkspaceModeOption } from "./workspace-mode.js";
 import { withProjectWriterLockAsync } from "./project-store.js";
 import {
@@ -112,6 +116,9 @@ const commands: Record<string, CommandHandler> = {
   "templates:workflow-create": createWorkflowTemplateCommand,
   "templates:project-create": createProjectTemplateCommand,
   "providers:list": listProvidersCommand,
+  "mcp:clients": listMcpClientsCommand,
+  "mcp:client-save": saveMcpClientCommand,
+  "mcp:diagnose": diagnoseMcpCommand,
   "agents:list": listAgentsCommand,
   "agents:create": createAgentCommand,
   "agents:update": updateAgentCommand,
@@ -259,6 +266,33 @@ function updateSettingsCommand(args: string[]) {
 function getProjectSettingsCommand(args: string[]) {
   const project = getRequiredProject(args);
   return { settings: getProjectSettings(project.path), overview: getProjectOverview(project) };
+}
+
+function listMcpClientsCommand() {
+  return { clients: listMcpClients() };
+}
+
+function saveMcpClientCommand(args: string[]) {
+  const options = parseOptions(args);
+  const id = getRequiredOption(options, "client");
+  const client = saveMcpClient({
+    id,
+    label: options.label,
+    readScope: parseOptionalBoolean(options.read, "read"),
+    writeScope: parseOptionalBoolean(options.write, "write"),
+    enabled: parseOptionalBoolean(options.enabled, "enabled"),
+    allowedProjectIds: options.projects ? parseCsv(options.projects) : undefined
+  });
+  return { client, clients: listMcpClients() };
+}
+
+function diagnoseMcpCommand() {
+  return {
+    bridge: applicationBridgeDiagnostics(),
+    clients: listMcpClients(),
+    recentAudits: listMcpAudits(20),
+    command: "pnpm --filter @harness/server mcp -- --client <client-id>"
+  };
 }
 
 function updateProjectSettingsCommand(args: string[]) {
@@ -1109,6 +1143,9 @@ Usage:
   pnpm --filter @harness/server cli templates:workflow-create --name <text> (--steps <json>|--stepsFile <file>) [--description <text>|--descriptionFile <file>]
   pnpm --filter @harness/server cli templates:project-create --name <text> (--agents <json>|--agentsFile <file>) [--description <text>|--descriptionFile <file>]
   pnpm --filter @harness/server cli providers:list
+  pnpm --filter @harness/server cli mcp:clients
+  pnpm --filter @harness/server cli mcp:client-save --client <id> [--label <name>] [--read true|false] [--write true|false] [--projects project1,project2] [--enabled true|false]
+  pnpm --filter @harness/server cli mcp:diagnose
   pnpm --filter @harness/server cli agents:list --project <projectId>
   pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
   pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]

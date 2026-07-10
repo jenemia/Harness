@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { ProviderEventEnvelope, ProviderEventType } from "@harness/core";
 import { ensureProjectLayout, projectHarnessPath, withProjectWriterLock } from "./project-store.js";
 import { syncProjectAgentDefinitions } from "./agent-store.js";
-import { assertNoCredentialMaterial, containsCredentialMaterial } from "./credential-security.js";
+import { assertNoCredentialMaterial, containsCredentialMaterial, redactCredentialMaterial } from "./credential-security.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -27,6 +27,7 @@ import type {
   InteractionRecord,
   InlineReviewCommentRecord,
   MemoryRecord,
+  McpClientRecord,
   ProjectListItem,
   ProjectImportCandidate,
   ProjectImportResult,
@@ -81,6 +82,31 @@ export function openGlobalDb() {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS mcp_clients (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      read_scope INTEGER NOT NULL,
+      write_scope INTEGER NOT NULL,
+      allowed_project_ids TEXT NOT NULL,
+      enabled INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS mcp_audits (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      project_id TEXT,
+      task_id TEXT,
+      dry_run INTEGER NOT NULL,
+      ok INTEGER NOT NULL,
+      error TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS mcp_audits_client_created
+      ON mcp_audits(client_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS agent_templates (
       id TEXT PRIMARY KEY,
@@ -518,6 +544,113 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
   } finally {
     db.close();
   }
+}
+
+export function listMcpClients(): McpClientRecord[] {
+  const db = openGlobalDb();
+  try {
+    return db.prepare("SELECT * FROM mcp_clients ORDER BY updated_at DESC").all().map(mapMcpClient);
+  } finally {
+    db.close();
+  }
+}
+
+export function getMcpClient(clientId: string): McpClientRecord | null {
+  const db = openGlobalDb();
+  try {
+    const row = db.prepare("SELECT * FROM mcp_clients WHERE id = ?").get(clientId);
+    return row ? mapMcpClient(row) : null;
+  } finally {
+    db.close();
+  }
+}
+
+export function getOrCreateMcpClient(clientId: string) {
+  const id = normalizeMcpClientId(clientId);
+  const existing = getMcpClient(id);
+  if (existing) return existing;
+  return saveMcpClient({ id, label: id, readScope: true, writeScope: false, allowedProjectIds: [], enabled: true });
+}
+
+export function saveMcpClient(input: Partial<McpClientRecord> & { id?: string }) {
+  const id = normalizeMcpClientId(input.id || "local-readonly");
+  const existing = getMcpClient(id);
+  const timestamp = now();
+  const client: McpClientRecord = {
+    id,
+    label: input.label?.trim() || existing?.label || id,
+    readScope: input.readScope ?? existing?.readScope ?? true,
+    writeScope: input.writeScope ?? existing?.writeScope ?? false,
+    allowedProjectIds: [...new Set((input.allowedProjectIds ?? existing?.allowedProjectIds ?? []).map((value) => value.trim()).filter(Boolean))],
+    enabled: input.enabled ?? existing?.enabled ?? true,
+    createdAt: existing?.createdAt || timestamp,
+    updatedAt: timestamp
+  };
+  const db = openGlobalDb();
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO mcp_clients (
+        id, label, read_scope, write_scope, allowed_project_ids, enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      client.id, client.label, client.readScope ? 1 : 0, client.writeScope ? 1 : 0,
+      JSON.stringify(client.allowedProjectIds), client.enabled ? 1 : 0, client.createdAt, client.updatedAt
+    );
+    return client;
+  } finally {
+    db.close();
+  }
+}
+
+export function recordMcpAudit(input: {
+  clientId: string;
+  toolName: string;
+  projectId?: string | null;
+  taskId?: string | null;
+  dryRun: boolean;
+  ok: boolean;
+  error?: string | null;
+}) {
+  const db = openGlobalDb();
+  try {
+    db.prepare(`
+      INSERT INTO mcp_audits (
+        id, client_id, tool_name, project_id, task_id, dry_run, ok, error, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      randomUUID(), input.clientId, input.toolName, input.projectId || null, input.taskId || null,
+      input.dryRun ? 1 : 0, input.ok ? 1 : 0,
+      input.error ? redactCredentialMaterial(input.error) : null,
+      now()
+    );
+  } finally {
+    db.close();
+  }
+}
+
+export function listMcpAudits(limit = 100) {
+  const db = openGlobalDb();
+  try {
+    return db.prepare("SELECT * FROM mcp_audits ORDER BY created_at DESC LIMIT ?").all(Math.min(1000, Math.max(1, limit)));
+  } finally {
+    db.close();
+  }
+}
+
+function mapMcpClient(row: unknown): McpClientRecord {
+  const value = row as Record<string, string | number>;
+  return {
+    id: String(value.id), label: String(value.label), readScope: Number(value.read_scope) !== 0,
+    writeScope: Number(value.write_scope) !== 0,
+    allowedProjectIds: parseJsonStringArray(value.allowed_project_ids), enabled: Number(value.enabled) !== 0,
+    createdAt: String(value.created_at), updatedAt: String(value.updated_at)
+  };
+}
+
+function normalizeMcpClientId(value: string) {
+  const id = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+  if (!id) throw new Error("MCP client id is invalid.");
+  return id;
 }
 
 export function listAgentTemplates(): AgentTemplateRecord[] {

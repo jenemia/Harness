@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { harnessIpcVersion, isHarnessCommand, isHarnessCommandPayload, isHarnessEventFilter, type DraftEventEnvelope, type HarnessEventFilters, type HarnessInvokeRequest, type ProviderEventEnvelope } from "@harness/core";
 import { invokeApplicationCommand, recoverApplicationState, subscribeApplicationDraftEvents, subscribeApplicationProviderEvents } from "@harness/server/application";
+import { startApplicationBridge, type ApplicationBridgeHandle } from "@harness/server/bridge";
 import { secureWindowOptions } from "./security.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -10,6 +11,8 @@ const preloadPath = path.join(currentDir, "preload.js");
 const rendererPath = process.env.HARNESS_RENDERER_PATH
   ? path.resolve(process.env.HARNESS_RENDERER_PATH)
   : path.resolve(currentDir, "../../web/dist/index.html");
+let applicationBridge: ApplicationBridgeHandle | null = null;
+let bridgeShutdownStarted = false;
 
 ipcMain.handle("harness:invoke", async (_event, request: HarnessInvokeRequest) => {
   if (!request || request.version !== harnessIpcVersion || !isHarnessCommand(request.command) ||
@@ -95,6 +98,7 @@ async function createWindow() {
 
 app.whenReady().then(async () => {
   recoverApplicationState();
+  applicationBridge = await startApplicationBridge();
   await createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
@@ -103,4 +107,14 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", (event) => {
+  if (!applicationBridge || bridgeShutdownStarted) return;
+  event.preventDefault();
+  bridgeShutdownStarted = true;
+  void applicationBridge.stop().finally(() => {
+    applicationBridge = null;
+    app.quit();
+  });
 });

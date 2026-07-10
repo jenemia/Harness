@@ -44,6 +44,10 @@ test("desktop window and IPC contract keep renderer privileges narrow", () => {
   assert.equal(isHarnessCommandPayload("reviews:comment-create", {
     projectId: "p", runId: "r", filePath: "src/index.ts", line: 0, side: "working", body: "invalid"
   }), false);
+  assert.equal(isHarnessCommandPayload("mcp:clients", {}), true);
+  assert.equal(isHarnessCommandPayload("mcp:client-save", {
+    payload: { id: "cursor", readScope: true, writeScope: false, allowedProjectIds: ["p"] }
+  }), true);
   assert.equal(isHarnessCommandPayload("drafts:submit-review", {
     projectId: "p", requestId: "r", payload: { comments: [{ kind: "unknown", body: "bad" }] }
   }), false);

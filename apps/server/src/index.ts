@@ -14,11 +14,14 @@ import {
   globalHarnessDir,
   listAgentTemplates,
   listGlobalMemories,
+  listMcpAudits,
+  listMcpClients,
   listProjectTemplates,
   listProjects,
   listProjectsWithSummaries,
   listWorkflowTemplates,
   moveTaskInBoard,
+  saveMcpClient,
   updateGlobalMemory,
   updateGlobalSettings,
   updateProjectSettings
@@ -44,6 +47,7 @@ import { selectFolder } from "./folder-picker.js";
 import { createDraftReply, createDraftSession, decideDraftApply, getDraftSnapshot, recordDraftApplyAttempt, recoverDraftReviewRequests, replayDraftEvents, restoreDraftRevision, undoDraftApply, updateDraftCommentStatus, updateDraftRevision } from "./drafts.js";
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
 import { listInteractions } from "./interactions.js";
+import { applicationBridgeDiagnostics } from "./application-bridge.js";
 import {
   createInlineReviewComment,
   createReviewFollowUp,
@@ -171,6 +175,27 @@ const server = http.createServer(async (req, res) => {
     if (route === "PATCH /api/settings") {
       const settings = updateGlobalSettings(await readBody(req));
       sendJson(res, { settings });
+      return;
+    }
+
+    if (route === "GET /api/mcp/clients") {
+      sendJson(res, { clients: listMcpClients() });
+      return;
+    }
+
+    if (route === "POST /api/mcp/clients") {
+      const client = saveMcpClient(await readBody(req));
+      sendJson(res, { client, clients: listMcpClients() }, 201);
+      return;
+    }
+
+    if (route === "GET /api/mcp/diagnose") {
+      sendJson(res, {
+        bridge: applicationBridgeDiagnostics(),
+        clients: listMcpClients(),
+        recentAudits: listMcpAudits(20),
+        command: "pnpm --filter @harness/server mcp -- --client <client-id>"
+      });
       return;
     }
 

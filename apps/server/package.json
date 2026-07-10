@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "bin": {
-    "harness": "./dist/cli.js"
+    "harness": "./dist/cli.js",
+    "harness-mcp": "./dist/mcp-server.js",
+    "harness-mcp-server": "./dist/mcp-server.js"
   },
   "exports": {
-    "./application": "./dist/application.js"
+    "./application": "./dist/application.js",
+    "./bridge": "./dist/application-bridge.js"
   },
   "scripts": {
     "cli": "tsx src/cli.ts",
+    "mcp": "tsx src/mcp-server.ts",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "tsx --test test/*.test.ts",

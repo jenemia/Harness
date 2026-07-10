@@ -11,6 +11,9 @@ export type HarnessCommandInputs = {
   "projects:init-git": { projectId: string };
   "projects:schedule": { projectId: string };
   "providers:list": Record<string, never>;
+  "mcp:clients": Record<string, never>;
+  "mcp:client-save": { payload: object };
+  "mcp:diagnose": Record<string, never>;
   "templates:agents": Record<string, never>;
   "templates:agent-create": { payload: object };
   "templates:workflows": Record<string, never>;
@@ -173,9 +176,9 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (!isRecord(payload)) return false;
   if (command === "projects:create") return isText(payload.path);
   if (command === "system:select-folder") return payload.initialPath === undefined || typeof payload.initialPath === "string";
-  if (command === "projects:list" || command === "providers:list" || command === "templates:agents" ||
+  if (command === "projects:list" || command === "providers:list" || command === "mcp:clients" || command === "mcp:diagnose" || command === "templates:agents" ||
       command === "templates:workflows" || command === "templates:projects" || command === "settings:get") return true;
-  if (command === "templates:agent-create" || command === "settings:update" || command === "global-memories:create") return isRecord(payload.payload);
+  if (command === "templates:agent-create" || command === "settings:update" || command === "global-memories:create" || command === "mcp:client-save") return isRecord(payload.payload);
   if (command === "global-memories:update") return isText(payload.memoryId) && isRecord(payload.payload);
   if (command === "projects:import") return true;
   if (!isText(payload.projectId)) return false;
@@ -236,6 +239,7 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
 const commandNames = new Set<HarnessCommand>([
   "projects:list", "projects:overview", "projects:create", "projects:update", "projects:remove", "projects:import",
   "projects:report", "projects:init-git", "projects:schedule", "providers:list", "templates:agents", "templates:workflows",
+  "mcp:clients", "mcp:client-save", "mcp:diagnose",
   "templates:projects", "templates:agent-create", "settings:get", "settings:update", "project-settings:update",
   "system:select-folder", "agents:save", "documents:create", "documents:update", "global-memories:create",
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",

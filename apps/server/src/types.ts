@@ -105,6 +105,17 @@ export type GlobalSettings = {
   updatedAt: string | null;
 };
 
+export type McpClientRecord = {
+  id: string;
+  label: string;
+  readScope: boolean;
+  writeScope: boolean;
+  allowedProjectIds: string[];
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProjectSettings = {
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;

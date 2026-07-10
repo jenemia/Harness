@@ -25,7 +25,7 @@
 - [x] 로그인되지 않은 provider에는 공식 CLI login command와 상태 확인 방법을 안내한다.
 - [ ] Harness가 provider API에 직접 접근해야 하는 예외 기능만 OAuth 2.1 PKCE 또는 device authorization을 사용한다.
 - [ ] OAuth credential은 OS keychain에 저장하고 `.harness/`에는 account reference와 비민감 metadata만 기록한다.
-- [ ] MCP 기본 연결은 stdio와 OS-local socket permission을 사용하고 persistent bearer token이나 API token을 요구하지 않는다.
+- [x] MCP 기본 연결은 stdio와 OS-local socket permission을 사용하고 persistent bearer token이나 API token을 요구하지 않는다.
 
 ### 완료 조건
 
@@ -264,28 +264,28 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### MCP server
 
-- [ ] 로컬 stdio 기반 `harness-mcp-server` entry point를 추가한다.
-- [ ] desktop이 실행 중이면 Unix domain socket 또는 Windows named pipe로 application service에 연결한다.
-- [ ] desktop이 꺼져 있으면 project lock을 확인하고 허용된 read 또는 write service만 직접 호출한다.
-- [ ] MCP tool input과 output schema를 versioning하고 기존 Harness API·CLI service를 재사용한다.
-- [ ] read tool과 write tool의 권한 scope를 분리한다.
-- [ ] project와 task 범위를 벗어나는 요청을 차단하고 호출 client, tool, 대상과 결과를 audit event로 기록한다.
-- [ ] MCP 호출이 command approval, dependency, scheduler와 merge approval을 우회하지 못하게 한다.
+- [x] 로컬 stdio 기반 `harness-mcp-server` entry point를 추가한다.
+- [x] desktop이 실행 중이면 Unix domain socket 또는 Windows named pipe로 application service에 연결한다.
+- [x] desktop이 꺼져 있으면 project lock을 확인하고 허용된 read 또는 write service만 직접 호출한다.
+- [x] MCP tool input과 output schema를 versioning하고 기존 Harness API·CLI service를 재사용한다.
+- [x] read tool과 write tool의 권한 scope를 분리한다.
+- [x] project와 task 범위를 벗어나는 요청을 차단하고 호출 client, tool, 대상과 결과를 audit event로 기록한다.
+- [x] MCP 호출이 command approval, dependency, scheduler와 merge approval을 우회하지 못하게 한다.
 
 ### 초기 tool 목록
 
-- [ ] `list_projects`, `get_project`, `get_project_health`를 제공한다.
-- [ ] `list_tasks`, `get_task`, `create_task`, `update_task`, `comment_task`를 제공한다.
-- [ ] `schedule_task`, `decompose_task`, `list_runs`, `get_run`을 제공한다.
-- [ ] `list_interactions`, `resolve_interaction`, `list_approvals`를 제공한다.
-- [ ] 변경 도구는 dry-run 또는 preview를 지원하고 위험 동작은 기존 approval을 생성한다.
+- [x] `list_projects`, `get_project`, `get_project_health`를 제공한다.
+- [x] `list_tasks`, `get_task`, `create_task`, `update_task`, `comment_task`를 제공한다.
+- [x] `schedule_task`, `decompose_task`, `list_runs`, `get_run`을 제공한다.
+- [x] `list_interactions`, `resolve_interaction`, `list_approvals`를 제공한다.
+- [x] 변경 도구는 dry-run 또는 preview를 지원하고 위험 동작은 기존 approval을 생성한다.
 
 ### Client 연결
 
-- [ ] Cursor의 MCP 설정에 Harness server를 등록하는 예시를 제공한다.
-- [ ] Claude Desktop, Codex와 범용 MCP client용 설정 예시를 제공한다.
-- [ ] client 연결 상태, 노출 tool과 permission scope를 Settings에서 확인하게 한다.
-- [ ] 연결 진단 command와 최소 read-only smoke test를 제공한다.
+- [x] Cursor의 MCP 설정에 Harness server를 등록하는 예시를 제공한다.
+- [x] Claude Desktop, Codex와 범용 MCP client용 설정 예시를 제공한다.
+- [x] client 연결 상태, 노출 tool과 permission scope를 Settings에서 확인하게 한다.
+- [x] 연결 진단 command와 최소 read-only smoke test를 제공한다.
 
 ### 완료 조건
 
