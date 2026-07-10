@@ -7,10 +7,6 @@
     grid-template-columns: 1fr;
   }
 
-  .task-composer {
-    grid-template-columns: 1fr 180px;
-  }
-
   .board-filters {
     grid-template-columns: 1fr 180px;
   }

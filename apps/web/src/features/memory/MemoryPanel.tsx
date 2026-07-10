@@ -2,12 +2,14 @@ import { Brain } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import type { MemoryRecord, Overview } from "../../api/contracts";
 import { memoryService } from "../../services/contentService";
+import { useI18n } from "../../i18n";
 
 export function MemoryPanel(props: {
   overview: Overview;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [scope, setScope] = useState<"project" | "global">("project");
   const [selectedMemoryId, setSelectedMemoryId] = useState("");
   const memories =
@@ -21,7 +23,7 @@ export function MemoryPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Brain size={17} />
-        <h2>Memory</h2>
+        <h2>{t("panel.memory")}</h2>
       </div>
       <MemoryEditor
         projectId={props.overview.project.id}

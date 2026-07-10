@@ -8,7 +8,6 @@ import type {
   ProjectTemplate,
   ProviderCatalog,
   ScheduleResult,
-  WorkflowTemplate,
 } from "../api/contracts";
 import { projectService } from "../services/projectService";
 import type { RunAction } from "./types";
@@ -23,9 +22,6 @@ export function useAppController() {
   const [providerCatalog, setProviderCatalog] =
     useState<ProviderCatalog | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
-  const [workflowTemplates, setWorkflowTemplates] = useState<
-    WorkflowTemplate[]
-  >([]);
   const [projectTemplates, setProjectTemplates] = useState<ProjectTemplate[]>(
     [],
   );
@@ -38,6 +34,7 @@ export function useAppController() {
   const [boardQuery, setBoardQuery] = useState("");
   const [boardAssigneeId, setBoardAssigneeId] = useState("");
   const [boardLabel, setBoardLabel] = useState("");
+  const [isTaskPromptOpen, setIsTaskPromptOpen] = useState(false);
 
   const runAction: RunAction = useCallback(async (action) => {
     setError("");
@@ -52,25 +49,17 @@ export function useAppController() {
   }, []);
 
   const loadProjects = useCallback(async () => {
-    const [
-      data,
-      providers,
-      agentResponse,
-      workflowResponse,
-      projectResponse,
-      settingsResponse,
-    ] = await Promise.all([
-      projectService.list(),
-      projectService.providers(),
-      projectService.agentTemplates(),
-      projectService.workflowTemplates(),
-      projectService.projectTemplates(),
-      projectService.globalSettings(),
-    ]);
+    const [data, providers, agentResponse, projectResponse, settingsResponse] =
+      await Promise.all([
+        projectService.list(),
+        projectService.providers(),
+        projectService.agentTemplates(),
+        projectService.projectTemplates(),
+        projectService.globalSettings(),
+      ]);
     setProjects(data.projects);
     setProviderCatalog(providers);
     setAgentTemplates(agentResponse.templates);
-    setWorkflowTemplates(workflowResponse.templates);
     setProjectTemplates(projectResponse.templates);
     setSettings(settingsResponse.settings);
     setSelectedProjectId((current) => current || data.projects[0]?.id || "");
@@ -258,7 +247,6 @@ export function useAppController() {
     providerCatalog,
     agentTemplates,
     setAgentTemplates,
-    workflowTemplates,
     projectTemplates,
     settings,
     setSettings,
@@ -275,6 +263,8 @@ export function useAppController() {
     setBoardAssigneeId,
     boardLabel,
     setBoardLabel,
+    isTaskPromptOpen,
+    setIsTaskPromptOpen,
     boardLabels,
     visibleTasks,
     hasBoardFilters: Boolean(boardQuery || boardAssigneeId || boardLabel),

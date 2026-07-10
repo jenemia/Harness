@@ -9,22 +9,16 @@ import {
   GitMerge,
   Link2,
   Play,
-  Plus,
   RefreshCcw,
   Search,
   Tag,
   UserRoundCog,
   X,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
-import type {
-  Agent,
-  Overview,
-  ProviderCatalog,
-  Task,
-} from "../../api/contracts";
+import type { Agent, Task } from "../../api/contracts";
 import { taskService } from "../../services/taskService";
-import { parseLabels, parseListText } from "../../shared/formParsing";
+import { useI18n } from "../../i18n";
+
 export function BoardFilters(props: {
   agents: Agent[];
   labels: string[];
@@ -38,6 +32,7 @@ export function BoardFilters(props: {
   onLabelChange: (value: string) => void;
   onClear: () => void;
 }) {
+  const { t } = useI18n();
   const hasFilters = Boolean(props.query || props.assigneeId || props.label);
   return (
     <div className="board-filters">
@@ -46,15 +41,15 @@ export function BoardFilters(props: {
         <input
           value={props.query}
           onChange={(event) => props.onQueryChange(event.target.value)}
-          placeholder="Search tasks"
+          placeholder={t("board.search")}
         />
       </label>
       <select
         value={props.assigneeId}
         onChange={(event) => props.onAssigneeChange(event.target.value)}
       >
-        <option value="">All assignees</option>
-        <option value="unassigned">Unassigned</option>
+        <option value="">{t("board.allAssignees")}</option>
+        <option value="unassigned">{t("board.unassigned")}</option>
         {props.agents.map((agent) => (
           <option key={agent.id} value={agent.id}>
             {agent.name}
@@ -65,7 +60,7 @@ export function BoardFilters(props: {
         value={props.label}
         onChange={(event) => props.onLabelChange(event.target.value)}
       >
-        <option value="">All labels</option>
+        <option value="">{t("board.allLabels")}</option>
         {props.labels.map((label) => (
           <option key={label} value={label}>
             {label}
@@ -82,133 +77,9 @@ export function BoardFilters(props: {
         disabled={!hasFilters}
       >
         <X size={15} />
-        <span>Clear</span>
+        <span>{t("board.clear")}</span>
       </button>
     </div>
-  );
-}
-
-export function TaskComposer(props: {
-  overview: Overview;
-  providerCatalog: ProviderCatalog | null;
-  runAction: (action: () => Promise<void>) => Promise<void>;
-  onChanged: () => Promise<void>;
-}) {
-  const [title, setTitle] = useState("");
-  const [modelBackend, setModelBackend] = useState("");
-  const [workspaceMode, setWorkspaceMode] = useState<
-    Task["workspaceMode"] | "auto"
-  >("auto");
-  const [assigneeAgentId, setAssigneeAgentId] = useState("");
-  const [dependencyTaskId, setDependencyTaskId] = useState("");
-  const [parentTaskId, setParentTaskId] = useState("");
-  const [labelsText, setLabelsText] = useState("");
-  const [linkedFilesText, setLinkedFilesText] = useState("");
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    await props.runAction(async () => {
-      await taskService.create(props.overview.project.id, {
-        title,
-        modelBackend: modelBackend || null,
-        ...(workspaceMode === "auto" ? {} : { workspaceMode }),
-        assigneeAgentId: assigneeAgentId || null,
-        parentTaskId: parentTaskId || null,
-        dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
-        labels: parseLabels(labelsText),
-        linkedFiles: parseListText(linkedFilesText),
-        status: "Backlog",
-        priority: "Medium",
-      });
-      setTitle("");
-      setModelBackend("");
-      setWorkspaceMode("auto");
-      setDependencyTaskId("");
-      setParentTaskId("");
-      setLabelsText("");
-      setLinkedFilesText("");
-      await props.onChanged();
-    });
-  }
-
-  return (
-    <form className="task-composer" onSubmit={submit}>
-      <input
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="Task title"
-      />
-      <select
-        value={modelBackend}
-        onChange={(event) => setModelBackend(event.target.value)}
-      >
-        <option value="">Agent default backend</option>
-        {(
-          props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]
-        ).map((provider) => (
-          <option key={provider.id} value={provider.id}>
-            {provider.label}
-          </option>
-        ))}
-      </select>
-      <select
-        value={workspaceMode}
-        onChange={(event) =>
-          setWorkspaceMode(event.target.value as Task["workspaceMode"] | "auto")
-        }
-      >
-        <option value="auto">Auto workspace</option>
-        <option value="worktree">Git worktree</option>
-        <option value="harness">Harness workspace</option>
-      </select>
-      <select
-        value={assigneeAgentId}
-        onChange={(event) => setAssigneeAgentId(event.target.value)}
-      >
-        <option value="">Unassigned</option>
-        {props.overview.agents.map((agent) => (
-          <option key={agent.id} value={agent.id}>
-            {agent.name}
-          </option>
-        ))}
-      </select>
-      <select
-        value={dependencyTaskId}
-        onChange={(event) => setDependencyTaskId(event.target.value)}
-      >
-        <option value="">No dependency</option>
-        {props.overview.tasks.map((task) => (
-          <option key={task.id} value={task.id}>
-            waits on: {task.title}
-          </option>
-        ))}
-      </select>
-      <select
-        value={parentTaskId}
-        onChange={(event) => setParentTaskId(event.target.value)}
-      >
-        <option value="">No parent</option>
-        {props.overview.tasks.map((task) => (
-          <option key={task.id} value={task.id}>
-            parent: {task.title}
-          </option>
-        ))}
-      </select>
-      <input
-        value={labelsText}
-        onChange={(event) => setLabelsText(event.target.value)}
-        placeholder="Labels, comma separated"
-      />
-      <input
-        value={linkedFilesText}
-        onChange={(event) => setLinkedFilesText(event.target.value)}
-        placeholder="Linked files, comma separated"
-      />
-      <button className="primary-button" type="submit">
-        <Plus size={16} />
-        <span>Create</span>
-      </button>
-    </form>
   );
 }
 

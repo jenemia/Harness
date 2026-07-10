@@ -6,15 +6,19 @@ import {
   RefreshCcw,
   X,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import type {
   GlobalSettings,
   Project,
   ProjectListItem,
   ProjectTemplate,
 } from "../../api/contracts";
+import type { RunAction } from "../../app/types";
+import { useI18n } from "../../i18n";
+import { systemService } from "../../services/systemService";
+import { FolderPickerField } from "../../shared/FolderPickerField";
 
-export function ProjectPanel(props: {
+export type ProjectPanelProps = {
   projects: ProjectListItem[];
   selectedProjectId: string;
   settings: GlobalSettings | null;
@@ -37,15 +41,37 @@ export function ProjectPanel(props: {
     projectTemplateId?: string;
   }) => Promise<void>;
   onInitializedGit: (id: string) => Promise<void>;
-  runAction: (action: () => Promise<void>) => Promise<void>;
-}) {
+  runAction: RunAction;
+};
+
+export function ProjectPanel(props: ProjectPanelProps) {
+  const { t } = useI18n();
   const [projectPath, setProjectPath] = useState("");
   const [projectTemplateId, setProjectTemplateId] = useState("");
   const [relinkPath, setRelinkPath] = useState("");
+  const [importRootPath, setImportRootPath] = useState("");
   const [includePlainFolders, setIncludePlainFolders] = useState(false);
   const selectedProject =
     props.projects.find((project) => project.id === props.selectedProjectId) ||
     null;
+
+  useEffect(() => {
+    setImportRootPath(
+      (current) => current || props.settings?.defaultProjectRoot || "",
+    );
+  }, [props.settings?.defaultProjectRoot]);
+
+  async function browse(
+    initialPath: string,
+    onSelected: (selectedPath: string) => void,
+  ) {
+    await props.runAction(async () => {
+      const result = await systemService.selectFolder(initialPath);
+      if (result.path) {
+        onSelected(result.path);
+      }
+    });
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -75,7 +101,7 @@ export function ProjectPanel(props: {
     event.preventDefault();
     await props.runAction(async () => {
       await props.onImportedRoot({
-        root: props.settings?.defaultProjectRoot,
+        root: importRootPath || props.settings?.defaultProjectRoot,
         includePlainFolders,
         seedDefaults: true,
         projectTemplateId: projectTemplateId || undefined,
@@ -87,7 +113,7 @@ export function ProjectPanel(props: {
     <section className="sidebar-section">
       <div className="section-title">
         <FolderOpen size={15} />
-        <span>Projects</span>
+        <span>{t("projects.heading")}</span>
       </div>
       <div className="project-list">
         {props.projects.map((project) => (
@@ -109,9 +135,9 @@ export function ProjectPanel(props: {
               <ProjectSummaryRow project={project} />
             </button>
             <button
-              aria-label={`Unregister ${project.name}`}
+              aria-label={t("projects.remove", { name: project.name })}
               className="project-remove"
-              title="Remove from Harness list. The folder stays on disk."
+              title={t("projects.removeHelp")}
               type="button"
               onClick={() =>
                 void props.runAction(() => props.onRemoved(project.id))
@@ -123,56 +149,81 @@ export function ProjectPanel(props: {
         ))}
       </div>
       <form className="stack-form" onSubmit={submit}>
-        <input
+        <FolderPickerField
           value={projectPath}
-          onChange={(event) => setProjectPath(event.target.value)}
-          placeholder={
-            props.settings
-              ? `${props.settings.defaultProjectRoot}/my-project`
-              : "/path/to/project"
+          placeholder={t("projects.chooseFolder")}
+          onBrowse={() =>
+            browse(
+              projectPath || props.settings?.defaultProjectRoot || "",
+              setProjectPath,
+            )
           }
         />
         <select
           value={projectTemplateId}
           onChange={(event) => setProjectTemplateId(event.target.value)}
         >
-          <option value="">Default agent team</option>
+          <option value="">{t("projects.defaultTeam")}</option>
           {props.projectTemplates.map((template) => (
             <option key={template.id} value={template.id}>
               {template.name} ({template.agents.length} agents)
             </option>
           ))}
         </select>
-        <button className="primary-button" type="submit">
+        <button
+          className="primary-button"
+          disabled={!projectPath}
+          type="submit"
+        >
           <Plus size={16} />
-          <span>Add</span>
+          <span>{t("projects.add")}</span>
         </button>
       </form>
       <form className="stack-form import-root-form" onSubmit={importRoot}>
+        <FolderPickerField
+          value={importRootPath}
+          placeholder={t("projects.chooseScanRoot")}
+          onBrowse={() =>
+            browse(
+              importRootPath || props.settings?.defaultProjectRoot || "",
+              setImportRootPath,
+            )
+          }
+        />
         <label className="checkbox-row">
           <input
             checked={includePlainFolders}
             onChange={(event) => setIncludePlainFolders(event.target.checked)}
             type="checkbox"
           />
-          <span>Plain folders</span>
+          <span>{t("projects.plainFolders")}</span>
         </label>
-        <button className="secondary-button" type="submit">
+        <button
+          className="secondary-button"
+          disabled={!importRootPath && !props.settings?.defaultProjectRoot}
+          type="submit"
+        >
           <RefreshCcw size={16} />
-          <span>Scan root</span>
+          <span>{t("projects.scanRoot")}</span>
         </button>
       </form>
       {selectedProject && (
         <>
           <form className="stack-form relink-form" onSubmit={relink}>
-            <input
+            <FolderPickerField
               value={relinkPath}
-              onChange={(event) => setRelinkPath(event.target.value)}
-              placeholder="Relink selected project path"
+              placeholder={t("projects.chooseMovedFolder")}
+              onBrowse={() =>
+                browse(relinkPath || selectedProject.path, setRelinkPath)
+              }
             />
-            <button className="secondary-button" type="submit">
+            <button
+              className="secondary-button"
+              disabled={!relinkPath}
+              type="submit"
+            >
               <Link2 size={16} />
-              <span>Relink</span>
+              <span>{t("projects.relink")}</span>
             </button>
           </form>
           <button
@@ -185,7 +236,7 @@ export function ProjectPanel(props: {
             }
           >
             <GitBranch size={16} />
-            <span>Init Git</span>
+            <span>{t("projects.initGit")}</span>
           </button>
         </>
       )}
@@ -194,52 +245,69 @@ export function ProjectPanel(props: {
 }
 
 export function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
+  const { t } = useI18n();
   const summary = project.summary;
   if (!summary.pathExists) {
     return (
       <div className="project-summary-row">
-        <b className="blocked">missing folder</b>
+        <b className="blocked">{t("projects.missingFolder")}</b>
       </div>
     );
   }
   if (!summary.harnessDbExists) {
     return (
       <div className="project-summary-row">
-        <b className="approval">missing harness db</b>
+        <b className="approval">{t("projects.missingDatabase")}</b>
       </div>
     );
   }
   if (summary.summaryError) {
     return (
       <div className="project-summary-row">
-        <b className="blocked">summary error</b>
+        <b className="blocked">{t("projects.summaryError")}</b>
       </div>
     );
   }
   return (
     <div className="project-summary-row">
-      <b>{summary.totalTasks} tasks</b>
+      <b>{t("projects.tasks", { count: summary.totalTasks })}</b>
       {summary.selectedTasks > 0 && (
-        <b className="selected">{summary.selectedTasks} selected</b>
+        <b className="selected">
+          {t("projects.selected", { count: summary.selectedTasks })}
+        </b>
       )}
-      {summary.backlogTasks > 0 && <b>{summary.backlogTasks} backlog</b>}
+      {summary.backlogTasks > 0 && (
+        <b>{t("projects.backlog", { count: summary.backlogTasks })}</b>
+      )}
       {summary.runningTasks > 0 && (
-        <b className="running">{summary.runningTasks} running</b>
+        <b className="running">
+          {t("projects.running", { count: summary.runningTasks })}
+        </b>
       )}
       {summary.failedRuns > 0 && (
-        <b className="blocked">{summary.failedRuns} failed</b>
+        <b className="blocked">
+          {t("projects.failed", { count: summary.failedRuns })}
+        </b>
       )}
       {summary.blockedTasks > 0 && (
-        <b className="blocked">{summary.blockedTasks} blocked</b>
+        <b className="blocked">
+          {t("projects.blocked", { count: summary.blockedTasks })}
+        </b>
       )}
       {summary.pendingApprovals > 0 && (
-        <b className="approval">{summary.pendingApprovals} approvals</b>
+        <b className="approval">
+          {t("projects.approvals", { count: summary.pendingApprovals })}
+        </b>
       )}
       {summary.pendingMerges > 0 && (
-        <b className="merge">{summary.pendingMerges} merges</b>
+        <b className="merge">
+          {t("projects.merges", { count: summary.pendingMerges })}
+        </b>
       )}
       {summary.followUpBacklogTasks > 0 && (
-        <b className="followup">{summary.followUpBacklogTasks} follow-ups</b>
+        <b className="followup">
+          {t("projects.followUps", { count: summary.followUpBacklogTasks })}
+        </b>
       )}
     </div>
   );

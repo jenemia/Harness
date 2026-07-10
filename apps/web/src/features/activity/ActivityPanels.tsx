@@ -1,6 +1,7 @@
 import { Activity, CheckCircle2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Overview } from "../../api/contracts";
+import { useI18n } from "../../i18n";
 export function ActivityPanels({ overview }: { overview: Overview }) {
   return (
     <>
@@ -11,6 +12,7 @@ export function ActivityPanels({ overview }: { overview: Overview }) {
 }
 
 export function RunPanel({ overview }: { overview: Overview }) {
+  const { t } = useI18n();
   const [statusFilter, setStatusFilter] = useState("");
   const [agentFilter, setAgentFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
@@ -57,7 +59,7 @@ export function RunPanel({ overview }: { overview: Overview }) {
     <section className="rail-panel">
       <div className="panel-header">
         <Activity size={17} />
-        <h2>Runs</h2>
+        <h2>{t("panel.runs")}</h2>
       </div>
       <div className="run-filters">
         <select
@@ -133,11 +135,12 @@ export function RunPanel({ overview }: { overview: Overview }) {
 }
 
 export function EventPanel({ overview }: { overview: Overview }) {
+  const { t } = useI18n();
   return (
     <section className="rail-panel">
       <div className="panel-header">
         <Activity size={17} />
-        <h2>Activity</h2>
+        <h2>{t("panel.activity")}</h2>
       </div>
       <div className="event-list">
         {overview.events.slice(0, 10).map((event) => (

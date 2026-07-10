@@ -8,6 +8,7 @@ import type {
 } from "../../api/contracts";
 import { agentService } from "../../services/agentService";
 import { formatDate } from "../../shared/format";
+import { useI18n } from "../../i18n";
 export function AgentPanel(props: {
   overview: Overview;
   providerCatalog: ProviderCatalog | null;
@@ -16,6 +17,7 @@ export function AgentPanel(props: {
   onTemplatesChanged: (templates: AgentTemplate[]) => void;
   onChanged: () => Promise<void>;
 }) {
+  const { locale, t } = useI18n();
   const [editingAgentId, setEditingAgentId] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("worker");
@@ -157,7 +159,7 @@ export function AgentPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Bot size={17} />
-        <h2>Agents</h2>
+        <h2>{t("panel.agents")}</h2>
       </div>
       <div className="agent-list">
         {props.overview.agents.map((agent) => {
@@ -173,7 +175,7 @@ export function AgentPanel(props: {
                     type="button"
                     onClick={() => editAgent(agent)}
                   >
-                    Edit
+                    {t("common.edit")}
                   </button>
                 </div>
                 <span>
@@ -199,7 +201,7 @@ export function AgentPanel(props: {
                 <span className="agent-context-line">
                   Recent:{" "}
                   {stats?.latestActivity
-                    ? `${stats.latestActivity.type} · ${formatDate(stats.latestActivity.createdAt)}`
+                    ? `${stats.latestActivity.type} · ${formatDate(stats.latestActivity.createdAt, locale)}`
                     : "None"}
                 </span>
               </div>

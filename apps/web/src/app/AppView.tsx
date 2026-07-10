@@ -4,17 +4,15 @@ import {
   Columns3,
   FolderOpen,
   Play,
+  Plus,
   RefreshCcw,
   Settings,
 } from "lucide-react";
 import { ActivityPanels } from "../features/activity/ActivityPanels";
+import { ScheduleResultLine } from "../features/activity/ScheduleResultLine";
 import { AgentPanel } from "../features/agents/AgentPanel";
 import { ApprovalsPanel } from "../features/approvals/ApprovalsPanel";
-import {
-  BoardFilters,
-  TaskCard,
-  TaskComposer,
-} from "../features/board/BoardComponents";
+import { BoardFilters, TaskCard } from "../features/board/BoardComponents";
 import {
   AttentionPanel,
   BacklogPanel,
@@ -22,17 +20,16 @@ import {
 } from "../features/dashboard/DashboardPanels";
 import { DocumentsPanel } from "../features/documents/DocumentsPanel";
 import { MemoryPanel } from "../features/memory/MemoryPanel";
-import {
-  PlanningPanel,
-  ScheduleResultLine,
-} from "../features/planning/PlanningPanel";
 import { ProjectPanel } from "../features/projects/ProjectPanel";
 import { SettingsPanel } from "../features/settings/SettingsPanel";
 import { TaskDetailDrawer } from "../features/tasks/TaskDetailDrawer";
+import { TaskPromptModal } from "../features/tasks/TaskPromptModal";
+import { statusMessageKey, useI18n } from "../i18n";
 import { taskStatuses } from "../shared/taskStatus";
 import type { AppController } from "./useAppController";
 
 export function AppView({ controller }: { controller: AppController }) {
+  const { t } = useI18n();
   const {
     projects,
     selectedProjectId,
@@ -42,7 +39,6 @@ export function AppView({ controller }: { controller: AppController }) {
     providerCatalog,
     agentTemplates,
     setAgentTemplates,
-    workflowTemplates,
     projectTemplates,
     settings,
     setSettings,
@@ -58,6 +54,8 @@ export function AppView({ controller }: { controller: AppController }) {
     setBoardAssigneeId,
     boardLabel,
     setBoardLabel,
+    isTaskPromptOpen,
+    setIsTaskPromptOpen,
     boardLabels,
     visibleTasks,
     hasBoardFilters,
@@ -79,26 +77,26 @@ export function AppView({ controller }: { controller: AppController }) {
           <div className="brand-mark">H</div>
           <div>
             <strong>Harness</strong>
-            <span>local agent board</span>
+            <span>{t("app.subtitle")}</span>
           </div>
         </div>
 
-        <nav className="nav-list" aria-label="Main">
+        <nav className="nav-list" aria-label={t("nav.main")}>
           <button className="nav-item active" type="button">
             <Columns3 size={17} />
-            <span>Board</span>
+            <span>{t("nav.board")}</span>
           </button>
           <button className="nav-item" type="button">
             <Bot size={17} />
-            <span>Agents</span>
+            <span>{t("nav.agents")}</span>
           </button>
           <button className="nav-item" type="button">
             <Activity size={17} />
-            <span>Runs</span>
+            <span>{t("nav.runs")}</span>
           </button>
           <button className="nav-item" type="button">
             <Settings size={17} />
-            <span>Settings</span>
+            <span>{t("nav.settings")}</span>
           </button>
         </nav>
 
@@ -120,24 +118,35 @@ export function AppView({ controller }: { controller: AppController }) {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Project</p>
-            <h1>{overview?.project.name || "No project selected"}</h1>
+            <p className="eyebrow">{t("top.project")}</p>
+            <h1>{overview?.project.name || t("top.noProject")}</h1>
             {overview && (
               <span className="path-line">{overview.project.path}</span>
             )}
           </div>
           <div className="topbar-actions">
             {overview && (
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => void scheduleReady()}
-              >
-                <Play size={16} />
-                <span>Run Ready</span>
-              </button>
+              <>
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => setIsTaskPromptOpen(true)}
+                >
+                  <Plus size={16} />
+                  <span>{t("top.addWork")}</span>
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => void scheduleReady()}
+                >
+                  <Play size={16} />
+                  <span>{t("top.runReady")}</span>
+                </button>
+              </>
             )}
             <button
+              aria-label={t("top.refresh")}
               className="icon-button"
               type="button"
               onClick={() => void runAction(refreshOverview)}
@@ -158,13 +167,7 @@ export function AppView({ controller }: { controller: AppController }) {
 
         {overview ? (
           <div className="content-grid">
-            <section className="board-area" aria-label="Kanban board">
-              <TaskComposer
-                overview={overview}
-                providerCatalog={providerCatalog}
-                runAction={runAction}
-                onChanged={refreshOverview}
-              />
+            <section className="board-area" aria-label={t("board.ariaLabel")}>
               <BoardFilters
                 agents={overview.agents}
                 labels={boardLabels}
@@ -186,7 +189,7 @@ export function AppView({ controller }: { controller: AppController }) {
                 {taskStatuses.map((column) => (
                   <section className="kanban-column" key={column}>
                     <div className="column-header">
-                      <span>{column}</span>
+                      <span>{t(statusMessageKey(column))}</span>
                       <b>
                         {
                           visibleTasks.filter((task) => task.status === column)
@@ -216,7 +219,9 @@ export function AppView({ controller }: { controller: AppController }) {
                       {hasBoardFilters &&
                         visibleTasks.filter((task) => task.status === column)
                           .length === 0 && (
-                          <div className="column-empty">No matching tasks</div>
+                          <div className="column-empty">
+                            {t("board.noMatchingTasks")}
+                          </div>
                         )}
                     </div>
                   </section>
@@ -240,12 +245,6 @@ export function AppView({ controller }: { controller: AppController }) {
                 onOpenTask={setSelectedTaskId}
                 onChanged={refreshOverview}
               />
-              <PlanningPanel
-                overview={overview}
-                workflowTemplates={workflowTemplates}
-                runAction={runAction}
-                onChanged={refreshOverview}
-              />
               <ApprovalsPanel
                 overview={overview}
                 runAction={runAction}
@@ -253,7 +252,6 @@ export function AppView({ controller }: { controller: AppController }) {
               />
               <DocumentsPanel
                 overview={overview}
-                workflowTemplates={workflowTemplates}
                 runAction={runAction}
                 onChanged={refreshOverview}
               />
@@ -284,11 +282,19 @@ export function AppView({ controller }: { controller: AppController }) {
         ) : (
           <div className="empty-state">
             <FolderOpen size={32} />
-            <h2>Select or create a project</h2>
+            <h2>{t("app.selectOrCreateProject")}</h2>
           </div>
         )}
 
-        {isBusy && <div className="busy-line">Working...</div>}
+        {isBusy && <div className="busy-line">{t("app.working")}</div>}
+        {overview && isTaskPromptOpen && (
+          <TaskPromptModal
+            projectId={overview.project.id}
+            onClose={() => setIsTaskPromptOpen(false)}
+            runAction={runAction}
+            onChanged={refreshOverview}
+          />
+        )}
         {overview && selectedTask && (
           <TaskDetailDrawer
             overview={overview}

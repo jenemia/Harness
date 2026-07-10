@@ -7,11 +7,13 @@ import {
   asRecord,
   formatProviderCommandResolution,
 } from "../../shared/providerCommands";
+import { useI18n } from "../../i18n";
 export function ApprovalsPanel(props: {
   overview: Overview;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { locale, t } = useI18n();
   const [kindFilter, setKindFilter] = useState("");
   const approvalKinds = useMemo(() => {
     return Array.from(
@@ -56,7 +58,7 @@ export function ApprovalsPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <AlertTriangle size={17} />
-        <h2>Approvals</h2>
+        <h2>{t("panel.approvals")}</h2>
       </div>
       <div className="approval-filters">
         <select
@@ -145,7 +147,7 @@ export function ApprovalsPanel(props: {
               <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
               <span>
                 {approval.kind.replace("_", " ")} · {approval.status} ·{" "}
-                {formatDate(approval.decidedAt || approval.createdAt)}
+                {formatDate(approval.decidedAt || approval.createdAt, locale)}
               </span>
               {providerResolution && <span>{providerResolution}</span>}
             </div>

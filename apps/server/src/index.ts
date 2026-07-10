@@ -58,6 +58,7 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
+import { selectFolder } from "./folder-picker.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -174,6 +175,12 @@ const server = http.createServer(async (req, res) => {
     if (route === "PATCH /api/settings") {
       const settings = updateGlobalSettings(await readBody(req));
       sendJson(res, { settings });
+      return;
+    }
+
+    if (route === "POST /api/system/select-folder") {
+      const body = await readBody<{ initialPath?: string }>(req);
+      sendJson(res, await selectFolder({ initialPath: body.initialPath }));
       return;
     }
 
@@ -316,6 +323,23 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && childPath === "tasks") {
         const task = createTask(project, await readBody(req));
         sendJson(res, { task, overview: getProjectOverview(project) }, 201);
+        return;
+      }
+
+      if (req.method === "POST" && childPath === "tasks/from-prompt") {
+        const body = await readBody<{ prompt?: string }>(req);
+        if (!body.prompt?.trim()) {
+          sendError(res, 400, "Work prompt is required.");
+          return;
+        }
+        const settings = getProjectSettings(project.path);
+        const plan = createPlan(project, {
+          goal: body.prompt,
+          mode: "auto",
+          allowLargePlan: true,
+          largePlanTaskThreshold: settings.largePlanTaskThreshold
+        });
+        sendJson(res, { plan, overview: getProjectOverview(project) }, 201);
         return;
       }
 

@@ -23,6 +23,7 @@ import {
   asRecord,
   formatProviderCommandResolution,
 } from "../../shared/providerCommands";
+import { useI18n } from "../../i18n";
 
 export function DetailItem({ label, value }: { label: string; value: string }) {
   return (
@@ -48,6 +49,7 @@ export function TaskComments(props: {
   onBodyChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
+  const { locale } = useI18n();
   return (
     <section className="drawer-section">
       <h3>Comments</h3>
@@ -70,7 +72,7 @@ export function TaskComments(props: {
           <div className="comment-row" key={comment.id}>
             <div>
               <strong>{comment.author}</strong>
-              <small>{formatDate(comment.createdAt)}</small>
+              <small>{formatDate(comment.createdAt, locale)}</small>
             </div>
             <p>{comment.body}</p>
           </div>
@@ -87,6 +89,7 @@ export function TaskRuns(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { locale } = useI18n();
   const runStartEvents = useMemo(() => {
     return new Map(
       props.events
@@ -152,7 +155,7 @@ export function TaskRuns(props: {
                   )}
                   {run.status}
                 </span>
-                <span>{formatDate(run.startedAt)}</span>
+                <span>{formatDate(run.startedAt, locale)}</span>
               </div>
               {run.snapshotRef && (
                 <div className="snapshot-line">
@@ -233,6 +236,7 @@ export function TaskHandoffs({
   agents: Agent[];
   events: Event[];
 }) {
+  const { locale } = useI18n();
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
   const handoffEvents = events.filter(
     (event) => event.type === "handoff.automatic",
@@ -271,7 +275,7 @@ export function TaskHandoffs({
                 )}
                 <span>{handoff.reason}</span>
               </div>
-              <small>{formatDate(handoff.createdAt)}</small>
+              <small>{formatDate(handoff.createdAt, locale)}</small>
             </div>
           );
         })}
@@ -318,6 +322,7 @@ export function TaskTimeline({
   events: Event[];
   runs: Run[];
 }) {
+  const { locale } = useI18n();
   const items = [
     ...events.map((event) => ({
       id: event.id,
@@ -355,7 +360,7 @@ export function TaskTimeline({
             <div>
               <strong>{item.type}</strong>
               <span>{item.message}</span>
-              <small>{formatDate(item.at)}</small>
+              <small>{formatDate(item.at, locale)}</small>
               {item.detail && item.detail !== "{}" && <pre>{item.detail}</pre>}
             </div>
           </div>

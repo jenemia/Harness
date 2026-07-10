@@ -2,16 +2,6 @@
   min-width: 0;
 }
 
-.task-composer {
-  display: grid;
-  grid-template-columns: minmax(210px, 1fr) 170px 170px 190px 170px minmax(
-      170px,
-      220px
-    ) 120px;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
 .board-filters {
   align-items: center;
   display: grid;

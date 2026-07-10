@@ -5,7 +5,8 @@ The web client keeps rendering replaceable by separating four responsibilities:
 - `api/`: transport-independent response and request contracts plus the HTTP client.
 - `services/`: feature-oriented API operations. URL and HTTP method details belong here.
 - `app/`: application state, polling, project selection, and the top-level view contract.
-- `features/`: feature containers and UI components for board, tasks, planning, agents, settings, and activity.
+- `features/`: feature containers and UI components for board, tasks, agents, settings, and activity.
+- `i18n/`: locale metadata, translation messages, locale persistence, and the React provider API.
 - `shared/`: presentation helpers used by more than one feature.
 - `styles/`: ordered style sheets grouped by UI area.
 
@@ -26,3 +27,4 @@ When adding a feature:
 2. Add endpoint operations to a focused service in `services/`.
 3. Keep server calls out of `app/AppView.tsx` and shared presentation helpers.
 4. Place feature state and rendering under a matching `features/<name>/` folder.
+5. Add user-facing copy to `i18n/messages.ts` and read it through `useI18n` instead of importing message tables directly.

@@ -81,6 +81,11 @@ export type ProjectImportResult = {
   projects: ProjectListItem[];
 };
 
+export type FolderPickerResult = {
+  path: string | null;
+  cancelled: boolean;
+};
+
 export type GlobalSettings = {
   defaultProjectRoot: string;
   defaultModelBackend: string;

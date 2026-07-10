@@ -16,6 +16,7 @@ import type {
   Task,
 } from "../../api/contracts";
 import { taskService } from "../../services/taskService";
+import { useI18n } from "../../i18n";
 import {
   findProviderCommandIssues,
   findSchedulerIssues,
@@ -30,6 +31,7 @@ export function ProjectHealthPanel({
   healthReport: ProjectHealthReport | null;
   providerCatalog: ProviderCatalog | null;
 }) {
+  const { t } = useI18n();
   const fallbackBlockedTasks = overview.tasks.filter(
     (task) => task.status === "Blocked",
   );
@@ -101,7 +103,7 @@ export function ProjectHealthPanel({
     <section className="rail-panel">
       <div className="panel-header">
         <Activity size={17} />
-        <h2>Health</h2>
+        <h2>{t("panel.health")}</h2>
       </div>
       <div className="compact-list">
         <div className="compact-row">
@@ -164,6 +166,7 @@ export function AttentionPanel(props: {
   overview: Overview;
   onOpenTask: (taskId: string) => void;
 }) {
+  const { t } = useI18n();
   const tasksById = useMemo(
     () => new Map(props.overview.tasks.map((task) => [task.id, task])),
     [props.overview.tasks],
@@ -254,7 +257,7 @@ export function AttentionPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <AlertTriangle size={17} />
-        <h2>Attention</h2>
+        <h2>{t("panel.attention")}</h2>
       </div>
       <div className="attention-list">
         {items.length === 0 && (
@@ -288,6 +291,7 @@ export function BacklogPanel(props: {
   onOpenTask: (taskId: string) => void;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const agentsById = useMemo(
     () => new Map(props.overview.agents.map((agent) => [agent.id, agent])),
     [props.overview.agents],
@@ -325,7 +329,7 @@ export function BacklogPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Columns3 size={17} />
-        <h2>Backlog</h2>
+        <h2>{t("panel.backlog")}</h2>
       </div>
       <div className="backlog-summary">
         <b>{backlogTasks.length}</b>

@@ -1,7 +1,12 @@
 import { api } from "../api/client";
-import type { CommentRecord, Task } from "../api/contracts";
+import type { CommentRecord, PlanResult, Task } from "../api/contracts";
 
 export const taskService = {
+  createFromPrompt: (projectId: string, prompt: string) =>
+    api<{ plan: PlanResult }>(`/api/projects/${projectId}/tasks/from-prompt`, {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    }),
   create: (projectId: string, payload: Partial<Task>) =>
     api(`/api/projects/${projectId}/tasks`, {
       method: "POST",

@@ -6,12 +6,14 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 
 - Local project registry with project-local `.harness/` storage.
 - Project root scanning for importing existing Harness folders and Git repositories.
+- Native OS folder selection for adding, scanning, and re-linking project folders without typing paths.
 - Git initialization flow for plain folders that need a baseline commit before agent worktrees can run.
 - Project sidebar summaries for task, backlog, selected, blocker, failed run, approval, running, follow-up, and merge counts across local folders.
 - Project health report for blockers, approvals, merges, failed runs, follow-up backlog items, scheduler readiness gaps, provider command setup gaps, and next recommended action.
 - Attention panel for pending approvals, merges, failed runs, blocked tasks, and follow-up backlog items.
 - Project templates for seeding new folders with a useful starter agent team.
 - Jira-like Kanban board and backlog queue with task search, assignee filtering, label filtering, ready selection, and board-order controls.
+- Single prompt-based work creation modal with plain text, Markdown lists, and structured Markdown ticket support.
 - Jira-like task detail drawer with editable metadata, labels, linked files, parent/subtask links, dependencies, runs, changed files, handoff decision badges, timeline, workspace, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.
 - Project-local and global Memory panel for conventions and preferences injected into agent prompts.
@@ -155,6 +157,8 @@ Moved folders can be re-linked with the sidebar relink form, `PATCH /api/project
 
 The project sidebar can scan the global default project root and import existing Harness folders or Git repositories. The same flow is available through `POST /api/projects/import-root` and `projects:import-root`; plain folders are included only when explicitly requested.
 
+Folder controls in the web app open the host OS picker: Finder on macOS, the Windows folder dialog, and Zenity or KDialog on Linux. Linux desktops need either `zenity` or `kdialog` installed.
+
 Projects without Git or without an initial commit can be initialized from the sidebar `Init Git` button, `POST /api/projects/:projectId/init-git`, or `projects:init-git`. Harness initializes the repository when needed, excludes `.harness/` from Git, and creates a baseline commit so task worktrees can be created safely.
 
 ## Agents
@@ -163,7 +167,7 @@ Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` 
 
 ## PM Planning
 
-Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition and expected assignees before any tasks are written. Plans at or above the project's large plan threshold require preview confirmation before creation; API and CLI callers pass `allowLargePlan` after reviewing the preview. The first planning provider is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, spreads assignments across matching agents by current and planned load, records assignment summaries in the plan event, and links sequential dependencies when requested.
+Use the dashboard's `Add work` button to turn a plain-language prompt or Markdown document into board tasks. The modal intentionally exposes no assignee, backend, priority, dependency, or planning-mode controls; `POST /api/projects/:projectId/tasks/from-prompt` applies automatic planning and assignment defaults. Advanced API and CLI callers can continue to use `/plan`, `/plan-preview`, and `plans:preview`. The first planning provider is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, spreads assignments across matching agents by current and planned load, records assignment summaries in the plan event, and links sequential dependencies when requested.
 
 Planning mode can be `auto`, `sequential`, or `parallel`. In `auto` mode, the PM planner records both the requested mode and the effective mode it chose: workflow templates and sequence/dependency wording become sequential chains, while independent bullet lists become parallel ready tasks.
 
@@ -211,9 +215,7 @@ Harness also queues merge approvals when a completed task has worktree changes w
 
 Use the Documents panel to create and edit project-local notes, service plans, specs, and acceptance criteria. Documents are stored in the project-local Harness database and included in project overview state.
 
-Selected documents can be previewed or sent to PM planning from the Documents panel to create detailed Kanban tickets from a spec, bullet list, or structured ticket document. The local deterministic planner treats explicit bullet and numbered lines as ticket candidates, and can also read Markdown ticket blocks such as `### T01: Title` with Role, Scope, Acceptance criteria, and Depends on fields. It warns when a preview contains many tasks and caps each planning pass to keep large documents from flooding the board.
-
-The same document flow is available headlessly through `documents:list`, `documents:create`, `documents:update`, `documents:plan-preview`, and `documents:plan`, so a local spec file can become tracked PM tickets without opening the web UI. `Document/implementation-tickets.md` is the first structured ticket backlog generated from the service plan.
+Document-to-plan workflows remain available headlessly through `documents:list`, `documents:create`, `documents:update`, `documents:plan-preview`, and `documents:plan`. The dashboard keeps document editing separate from work creation so all new work starts from the same simplified `Add work` modal.
 
 ## Memory
 

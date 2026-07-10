@@ -6,7 +6,10 @@ import type {
   ProjectSettings,
   ProviderCatalog,
 } from "../../api/contracts";
+import { supportedLocales, useI18n, type SupportedLocale } from "../../i18n";
 import { settingsService } from "../../services/settingsService";
+import { systemService } from "../../services/systemService";
+import { FolderPickerField } from "../../shared/FolderPickerField";
 import { parseStringMapText } from "../../shared/formParsing";
 import {
   formatProviderCommandPlaceholder,
@@ -21,6 +24,7 @@ export function SettingsPanel(props: {
   onChanged: (settings: GlobalSettings) => void;
   onProjectChanged: () => Promise<void>;
 }) {
+  const { locale, setLocale, t } = useI18n();
   const [defaultProjectRoot, setDefaultProjectRoot] = useState("");
   const [defaultModelBackend, setDefaultModelBackend] = useState("mock");
   const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
@@ -116,6 +120,15 @@ export function SettingsPanel(props: {
     });
   }
 
+  async function browseDefaultProjectRoot() {
+    await props.runAction(async () => {
+      const result = await systemService.selectFolder(defaultProjectRoot);
+      if (result.path) {
+        setDefaultProjectRoot(result.path);
+      }
+    });
+  }
+
   function updateProjectSetting<K extends keyof ProjectSettings>(
     key: K,
     value: ProjectSettings[K],
@@ -178,11 +191,28 @@ export function SettingsPanel(props: {
     <section className="rail-panel">
       <div className="panel-header">
         <Settings size={17} />
-        <h2>Settings</h2>
+        <h2>{t("panel.settings")}</h2>
       </div>
+      <label className="language-setting">
+        <span>{t("settings.interfaceLanguage")}</span>
+        <select
+          aria-label={t("settings.interfaceLanguage")}
+          value={locale}
+          onChange={(event) => setLocale(event.target.value as SupportedLocale)}
+        >
+          {supportedLocales.map((supportedLocale) => (
+            <option key={supportedLocale.code} value={supportedLocale.code}>
+              {supportedLocale.label}
+            </option>
+          ))}
+        </select>
+        <small>{t("settings.languageHelp")}</small>
+      </label>
       {props.providerCatalog && (
         <div className="provider-summary">
-          <div className="form-group-title">Runtime provider</div>
+          <div className="form-group-title">
+            {t("settings.runtimeProvider")}
+          </div>
           <strong>{props.providerCatalog.platform.label}</strong>
           <span>
             {props.providerCatalog.platform.id} on{" "}
@@ -293,7 +323,7 @@ export function SettingsPanel(props: {
           </span>
           {providerCommandKeyGuide && (
             <>
-              <strong>Provider command keys</strong>
+              <strong>{t("settings.providerCommandKeys")}</strong>
               <span>
                 {providerCommandKeyGuide.platformProviderId} on{" "}
                 {providerCommandKeyGuide.nodePlatform} |{" "}
@@ -309,11 +339,11 @@ export function SettingsPanel(props: {
         </div>
       )}
       <form className="stack-form" onSubmit={submitGlobal}>
-        <div className="form-group-title">Global defaults</div>
-        <input
+        <div className="form-group-title">{t("settings.globalDefaults")}</div>
+        <FolderPickerField
           value={defaultProjectRoot}
-          onChange={(event) => setDefaultProjectRoot(event.target.value)}
-          placeholder="Default project root"
+          placeholder={t("settings.chooseDefaultRoot")}
+          onBrowse={browseDefaultProjectRoot}
         />
         <select
           value={defaultModelBackend}
@@ -346,7 +376,7 @@ export function SettingsPanel(props: {
             checked={autoStartPlans}
             onChange={(event) => setAutoStartPlans(event.target.checked)}
           />
-          <span>Auto-start plans by default</span>
+          <span>{t("settings.autoStartGlobal")}</span>
         </label>
         <input
           min={5}
@@ -405,11 +435,11 @@ export function SettingsPanel(props: {
         )}
         <button className="secondary-button" type="submit">
           <Settings size={16} />
-          <span>Save global</span>
+          <span>{t("settings.saveGlobal")}</span>
         </button>
       </form>
       <form className="stack-form split-form" onSubmit={submitProject}>
-        <div className="form-group-title">Project defaults</div>
+        <div className="form-group-title">{t("settings.projectDefaults")}</div>
         <select
           value={projectSettings.defaultModelBackend}
           onChange={(event) =>
@@ -486,7 +516,7 @@ export function SettingsPanel(props: {
               updateProjectSetting("autoStartPlans", event.target.checked)
             }
           />
-          <span>Auto-start plans in this project</span>
+          <span>{t("settings.autoStartProject")}</span>
         </label>
         <label className="check-row">
           <input
@@ -499,7 +529,7 @@ export function SettingsPanel(props: {
               )
             }
           />
-          <span>Require command approvals</span>
+          <span>{t("settings.requireApprovals")}</span>
         </label>
         <textarea
           value={handoffRulesText}
@@ -541,7 +571,7 @@ export function SettingsPanel(props: {
         )}
         <button className="secondary-button" type="submit">
           <Settings size={16} />
-          <span>Save project</span>
+          <span>{t("settings.saveProject")}</span>
         </button>
       </form>
     </section>
