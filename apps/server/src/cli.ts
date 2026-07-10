@@ -11,6 +11,7 @@ import {
   listProjectsWithSummaries,
   listWorkflowTemplates,
   mapComment,
+  mapDocument,
   mapTask,
   now,
   openProjectDb,
@@ -28,7 +29,7 @@ import {
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
-import type { ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import type { DocumentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
@@ -41,6 +42,10 @@ const commands: Record<string, CommandHandler> = {
   "templates:workflows": listWorkflowTemplatesCommand,
   "templates:projects": listProjectTemplatesCommand,
   "plans:create": createPlanCommand,
+  "documents:list": listDocumentsCommand,
+  "documents:create": createDocumentCommand,
+  "documents:update": updateDocumentCommand,
+  "documents:plan": planDocumentCommand,
   "approvals:list": listApprovalsCommand,
   "approvals:approve": approveApprovalCommand,
   "approvals:reject": rejectApprovalCommand,
@@ -131,6 +136,49 @@ async function createPlanCommand(args: string[]) {
   const shouldAutoStart = options.autoStart === "true";
   const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
   return { plan, schedule, overview: getProjectOverview(project) };
+}
+
+function listDocumentsCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  return { documents: overview.documents, overview };
+}
+
+function createDocumentCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const document = createCliDocument(project, {
+    title: getRequiredOption(options, "title"),
+    content: readOptionalText(options, "content", "contentFile") || ""
+  });
+  return { document, overview: getProjectOverview(project) };
+}
+
+function updateDocumentCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const documentId = getRequiredOption(options, "document");
+  const document = updateCliDocument(project, documentId, {
+    title: options.title,
+    content: readOptionalText(options, "content", "contentFile")
+  });
+  return { document, overview: getProjectOverview(project) };
+}
+
+async function planDocumentCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const document = getCliDocument(project, getRequiredOption(options, "document"));
+  const mode = normalizeMode(options.mode);
+  const plan = createPlan(project, {
+    goal: `Document: ${document.title}\n\n${document.content}`,
+    mode,
+    workflowTemplateId: options.workflowTemplate,
+    sourceDocumentId: document.id
+  });
+  const shouldAutoStart = options.autoStart === "true";
+  const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
+  return { document, plan, schedule, overview: getProjectOverview(project) };
 }
 
 async function startTaskCommand(args: string[]) {
@@ -404,6 +452,80 @@ function createCliTaskComment(project: ProjectRecord, taskId: string, input: { a
   }
 }
 
+function createCliDocument(project: ProjectRecord, input: Pick<DocumentRecord, "title" | "content">) {
+  if (!input.title.trim()) {
+    throw new Error("Document title is required.");
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    const timestamp = now();
+    const id = randomUUID();
+    db.prepare("INSERT INTO documents VALUES (?, ?, ?, ?, ?)").run(
+      id,
+      input.title.trim(),
+      input.content,
+      timestamp,
+      timestamp
+    );
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "document.created",
+      message: `${input.title.trim()} was created from CLI.`,
+      metadata: { documentId: id }
+    });
+
+    return mapDocument(db.prepare("SELECT * FROM documents WHERE id = ?").get(id));
+  } finally {
+    db.close();
+  }
+}
+
+function updateCliDocument(project: ProjectRecord, documentId: string, input: Partial<Pick<DocumentRecord, "title" | "content">>) {
+  const db = openProjectDb(project.path);
+  try {
+    const existing = db.prepare("SELECT * FROM documents WHERE id = ?").get(documentId);
+    if (!existing) {
+      throw new Error("Document not found.");
+    }
+
+    db.prepare(`
+      UPDATE documents
+      SET title = COALESCE(?, title),
+          content = COALESCE(?, content),
+          updated_at = ?
+      WHERE id = ?
+    `).run(input.title?.trim() || null, input.content ?? null, now(), documentId);
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "document.updated",
+      message: "Document was updated from CLI.",
+      metadata: { documentId }
+    });
+
+    return mapDocument(db.prepare("SELECT * FROM documents WHERE id = ?").get(documentId));
+  } finally {
+    db.close();
+  }
+}
+
+function getCliDocument(project: ProjectRecord, documentId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const row = db.prepare("SELECT * FROM documents WHERE id = ?").get(documentId);
+    if (!row) {
+      throw new Error("Document not found.");
+    }
+    return mapDocument(row);
+  } finally {
+    db.close();
+  }
+}
+
 function parseOptions(args: string[]) {
   const options: Record<string, string> = {};
   for (let index = 0; index < args.length; index += 1) {
@@ -516,6 +638,10 @@ Usage:
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
+  pnpm --filter @harness/server cli documents:list --project <projectId>
+  pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
+  pnpm --filter @harness/server cli documents:update --project <projectId> --document <documentId> [--title <text>] [--content <text>|--contentFile <file>]
+  pnpm --filter @harness/server cli documents:plan --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
   pnpm --filter @harness/server cli approvals:list --project <projectId>
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>

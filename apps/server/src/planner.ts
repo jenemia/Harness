@@ -221,8 +221,12 @@ function renderTemplate(template: string, goal: string) {
 function parseExplicitItems(goal: string) {
   return goal
     .split(/\r?\n/)
-    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "").trim())
-    .filter((line) => line.length >= 4);
+    .map((line) => {
+      const item = line.match(/^\s*(?:[-*]|\d+[.)])\s+(.+)$/);
+      return item?.[1].trim() || "";
+    })
+    .filter((line) => line.length >= 4)
+    .slice(0, 20);
 }
 
 function summarizeGoal(goal: string) {

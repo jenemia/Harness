@@ -55,6 +55,8 @@ pnpm cli templates:projects
 pnpm cli templates:workflows
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
+pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
+pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
 pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
@@ -107,7 +109,9 @@ Harness blocks task execution before running shell-backed LLM providers until th
 
 Use the Documents panel to create and edit project-local notes, service plans, specs, and acceptance criteria. Documents are stored in the project-local Harness database and included in project overview state.
 
-Selected documents can be sent to PM planning to create detailed Kanban tickets from a spec or bullet list.
+Selected documents can be sent to PM planning to create detailed Kanban tickets from a spec or bullet list. The local deterministic planner treats explicit bullet and numbered lines as ticket candidates and caps each planning pass to keep large documents from flooding the board.
+
+The same document flow is available headlessly through `documents:list`, `documents:create`, `documents:update`, and `documents:plan`, so a local spec file can become tracked PM tickets without opening the web UI.
 
 ## Memory
 

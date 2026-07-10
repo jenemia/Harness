@@ -447,7 +447,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, template listing, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates or create plans from goal text/files.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, template listing, document create/update/list/plan flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, create plans from goal text/files, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 
