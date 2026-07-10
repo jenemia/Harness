@@ -414,6 +414,38 @@ export function SettingsPanel(props: {
           }
           placeholder="Large plan task threshold"
         />
+        <input
+          min={1}
+          max={1000}
+          type="number"
+          value={projectSettings.maxReviewFiles}
+          onChange={(event) => updateProjectSetting("maxReviewFiles", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Recommended review file limit"
+        />
+        <input
+          min={1}
+          max={1000000}
+          type="number"
+          value={projectSettings.maxReviewDiffLines}
+          onChange={(event) => updateProjectSetting("maxReviewDiffLines", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Recommended diff line limit"
+        />
+        <input
+          min={1}
+          max={1000}
+          type="number"
+          value={projectSettings.maxReviewBacklog}
+          onChange={(event) => updateProjectSetting("maxReviewBacklog", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Review backlog scheduler limit"
+        />
+        <input
+          min={1}
+          max={10000000}
+          type="number"
+          value={projectSettings.maxUnreviewedDiffLines}
+          onChange={(event) => updateProjectSetting("maxUnreviewedDiffLines", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Unreviewed line scheduler limit"
+        />
         <textarea
           value={globalProviderCommandsText}
           onChange={(event) =>

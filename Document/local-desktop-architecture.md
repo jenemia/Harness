@@ -363,13 +363,17 @@ provider process, PID, session id, last sequence와 workspace는 DB에 기록한
 
 ## HTML 완료 보고서
 
-완료 보고서는 provider가 임의 HTML 전체를 작성하게 하기보다 구조화된 completion result를 반환하고 main process가 고정 template으로 렌더링한다.
+완료 보고서는 provider가 임의 HTML 전체를 작성하지 않고 구조화된 completion result를 반환하며 main process가 고정 template으로 렌더링한다. summary, 완료 조건 근거, 결정, test/typecheck/lint/build 결과, 제한과 follow-up을 project DB에 run/task revision으로 저장한다. 구조화 결과가 없는 provider는 sanitized run output으로 같은 record를 만들고 report 파일 생성 실패는 run을 실패시키지 않으며 plain-text HTML로 fallback한다.
 
 - report는 `.harness/reports/<run-id>/completion-report.html`에 저장한다.
 - renderer는 sandboxed iframe 또는 동등한 격리 container에서 표시한다.
 - script, inline event handler, remote asset, 위험 URL과 parent 접근을 금지한다.
 - report hash와 생성 run id를 DB에 기록한다.
 - report 실패 시 plain-text summary를 표시하고 task 완료는 유지한다.
+
+완료 시점에는 start snapshot과 completion commit을 고정하고 `run_file_reviews`에 status, line 통계, binary/new/deleted/renamed 분류, risk와 최대 3개의 추천 순서를 저장한다. project의 권장 파일·line 한도를 초과하면 분할 경고를 내며 review backlog 카드 수와 미검토 line은 health/Attention과 scheduler gate에서 사용한다. 일반 작업은 backlog 한도에서 대기하지만 `review-follow-up`은 교착을 피하기 위해 실행할 수 있다.
+
+diff API는 DB에 등록된 run/file만 받고 Git의 `--` path boundary로 snapshot과 completion ref 사이를 계산한다. renderer는 제한된 chunk 응답, unified/split, 이전·다음, whitespace 무시, wrap과 binary/과대 diff 대체 표시를 제공한다. inline review comment는 terminal run에서만 만들며 run/file/line/side/snapshot/completion ref에 연결한다. 선택한 open comment는 review follow-up task로 묶이고 해당 task의 terminal report가 생성되면 원 comment를 addressed run과 함께 갱신한다.
 
 ## 보안 경계
 

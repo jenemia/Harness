@@ -19,6 +19,11 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
   const pendingMerges = overview.tasks.filter((task) => task.mergeStatus === "pending" || task.mergeStatus === "conflict").length;
   const failedRuns = overview.runs.filter((run) => run.status === "failed").length;
   const runningRuns = overview.runs.filter((run) => run.status === "running").length;
+  const unreviewedFiles = overview.runFileReviews.filter((file) => file.status === "unreviewed");
+  const reviewBacklogCards = new Set(unreviewedFiles.map((file) => file.taskId)).size;
+  const unreviewedDiffLines = unreviewedFiles.reduce((sum, file) => sum + file.additions + file.deletions, 0);
+  const reviewLimitReached = reviewBacklogCards >= overview.settings.maxReviewBacklog ||
+    unreviewedDiffLines >= overview.settings.maxUnreviewedDiffLines;
   const unassignedTasks = overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
   const followUpBacklogTasks = overview.tasks.filter((task) => task.status === "Backlog" && task.labels.includes("follow-up")).length;
   const busyAgents = overview.agents.filter((agent) => agent.status === "busy").length;
@@ -36,6 +41,10 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
     pendingMerges,
     failedRuns,
     runningRuns,
+    reviewBacklogCards,
+    unreviewedFiles: unreviewedFiles.length,
+    unreviewedDiffLines,
+    reviewLimitReached,
     unassignedTasks,
     followUpBacklogTasks,
     busyAgents,
@@ -49,6 +58,9 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
       pendingMerges,
       failedRuns,
       runningRuns,
+      reviewBacklogCards,
+      unreviewedDiffLines,
+      reviewLimitReached,
       unassignedTasks,
       followUpBacklogTasks,
       busyAgents,
@@ -80,8 +92,21 @@ function buildSchedulerIssues(overview: ProjectOverview): ProjectHealthReport["s
     .filter((agent) => agent.role !== "project-manager")
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   const issues: ProjectHealthReport["schedulerIssues"] = [];
+  const unreviewedFiles = overview.runFileReviews.filter((file) => file.status === "unreviewed");
+  const reviewBacklogCards = new Set(unreviewedFiles.map((file) => file.taskId)).size;
+  const unreviewedDiffLines = unreviewedFiles.reduce((sum, file) => sum + file.additions + file.deletions, 0);
+  const reviewLimitReached = reviewBacklogCards >= overview.settings.maxReviewBacklog ||
+    unreviewedDiffLines >= overview.settings.maxUnreviewedDiffLines;
 
   for (const task of readyTasks) {
+    if (reviewLimitReached) {
+      issues.push({
+        taskId: task.id,
+        title: task.title,
+        reason: `Review backlog limit reached (${reviewBacklogCards} cards / ${unreviewedDiffLines} unreviewed lines).`
+      });
+      continue;
+    }
     if (projectLoad >= overview.settings.maxProjectParallel) {
       issues.push({
         taskId: task.id,
@@ -225,6 +250,9 @@ function buildRecommendations(input: {
   pendingMerges: number;
   failedRuns: number;
   runningRuns: number;
+  reviewBacklogCards: number;
+  unreviewedDiffLines: number;
+  reviewLimitReached: boolean;
   unassignedTasks: number;
   followUpBacklogTasks: number;
   busyAgents: number;
@@ -233,6 +261,9 @@ function buildRecommendations(input: {
   providerCommandIssues: ProjectHealthReport["providerCommandIssues"];
 }) {
   const recommendations: string[] = [];
+  if (input.reviewLimitReached) {
+    recommendations.push(`Review ${input.reviewBacklogCards} completed card(s) covering ${input.unreviewedDiffLines} unreviewed line(s) before starting more work.`);
+  }
   if (input.providerCommandIssues.length > 0) {
     const firstIssue = input.providerCommandIssues[0];
     recommendations.push(

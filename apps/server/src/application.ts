@@ -20,6 +20,14 @@ import { selectFolder } from "./folder-picker.js";
 import { createPlan } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
+  createInlineReviewComment,
+  createReviewFollowUp,
+  readCompletionReportHtml,
+  readRunDiff,
+  updateInlineReviewComment,
+  updateRunFileReview
+} from "./completion-reviews.js";
+import {
   approveMerge,
   decideApproval,
   initializeProjectWorkspace,
@@ -213,6 +221,30 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
     case "interactions:respond": {
       const value = input(payload) as HarnessCommandInputs["interactions:respond"];
       return { result: await respondInteraction(requiredProject(value.projectId), value.interactionId, value) };
+    }
+    case "reviews:report": {
+      const value = input(payload) as HarnessCommandInputs["reviews:report"];
+      return readCompletionReportHtml(requiredProject(value.projectId), value.runId);
+    }
+    case "reviews:diff": {
+      const value = input(payload) as HarnessCommandInputs["reviews:diff"];
+      return readRunDiff(requiredProject(value.projectId), value.runId, value.filePath, value);
+    }
+    case "reviews:file-update": {
+      const value = input(payload) as HarnessCommandInputs["reviews:file-update"];
+      return { file: updateRunFileReview(requiredProject(value.projectId), value.runId, value.filePath, value) };
+    }
+    case "reviews:comment-create": {
+      const value = input(payload) as HarnessCommandInputs["reviews:comment-create"];
+      return { comment: createInlineReviewComment(requiredProject(value.projectId), value.runId, value) };
+    }
+    case "reviews:comment-update": {
+      const value = input(payload) as HarnessCommandInputs["reviews:comment-update"];
+      return { comment: updateInlineReviewComment(requiredProject(value.projectId), value.commentId, value.status) };
+    }
+    case "reviews:followup": {
+      const value = input(payload) as HarnessCommandInputs["reviews:followup"];
+      return createReviewFollowUp(requiredProject(value.projectId), value.runId, value.commentIds);
     }
     case "drafts:create": {
       const value = input(payload) as HarnessCommandInputs["drafts:create"];

@@ -15,12 +15,16 @@ import type {
   CommentRecord,
   Event,
   Handoff,
+  CompletionReport,
+  InlineReviewComment,
   Interaction,
   ProviderEvent,
   Run,
+  RunFileReview,
 } from "../../api/contracts";
 import { runService } from "../../services/runService";
 import { interactionService } from "../../services/interactionService";
+import { reviewService } from "../../services/reviewService";
 import { formatDate } from "../../shared/format";
 import {
   asRecord,
@@ -160,6 +164,9 @@ export function TaskRuns(props: {
   projectId: string;
   runs: Run[];
   events: Event[];
+  reports: CompletionReport[];
+  fileReviews: RunFileReview[];
+  reviewComments: InlineReviewComment[];
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -281,6 +288,15 @@ export function TaskRuns(props: {
                   ))}
                 </div>
               )}
+              <TaskCompletionReview
+                projectId={props.projectId}
+                run={run}
+                report={props.reports.find((report) => report.runId === run.id) || null}
+                files={props.fileReviews.filter((file) => file.runId === run.id)}
+                comments={props.reviewComments.filter((comment) => comment.runId === run.id)}
+                runAction={props.runAction}
+                onChanged={props.onChanged}
+              />
               {run.output && <pre>{run.output}</pre>}
               {run.error && <pre className="error-pre">{run.error}</pre>}
               <div className="run-actions">
@@ -298,6 +314,167 @@ export function TaskRuns(props: {
         })}
       </div>
     </section>
+  );
+}
+
+function TaskCompletionReview(props: {
+  projectId: string;
+  run: Run;
+  report: CompletionReport | null;
+  files: RunFileReview[];
+  comments: InlineReviewComment[];
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [reportHtml, setReportHtml] = useState<string | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [diff, setDiff] = useState("");
+  const [diffReason, setDiffReason] = useState<string | null>(null);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
+  const [split, setSplit] = useState(false);
+  const [wrap, setWrap] = useState(false);
+  const [commentLine, setCommentLine] = useState(1);
+  const [commentSide, setCommentSide] = useState<"old" | "new">("new");
+  const [commentBody, setCommentBody] = useState("");
+  const [selectedComments, setSelectedComments] = useState<Set<string>>(new Set());
+  const orderedFiles = useMemo(() => [...props.files].sort((left, right) =>
+    (left.recommendationOrder ?? 9999) - (right.recommendationOrder ?? 9999) || left.path.localeCompare(right.path)
+  ), [props.files]);
+
+  if (!props.report) return null;
+
+  async function openReport() {
+    if (reportHtml) return setReportHtml(null);
+    const response = await reviewService.report(props.projectId, props.run.id);
+    setReportHtml(response.html);
+  }
+
+  async function openDiff(filePath: string, ignore = ignoreWhitespace, offset = 0, append = false) {
+    const response = await reviewService.diff(props.projectId, props.run.id, filePath, ignore, offset);
+    setSelectedPath(filePath);
+    setDiff((current) => append ? `${current}\n${response.diff}` : response.diff);
+    setDiffReason(response.unavailableReason);
+    setNextOffset(response.nextOffset);
+  }
+
+  async function toggleWhitespace(checked: boolean) {
+    setIgnoreWhitespace(checked);
+    if (selectedPath) await openDiff(selectedPath, checked);
+  }
+
+  async function markReviewed(file: RunFileReview) {
+    await props.runAction(async () => {
+      await reviewService.updateFile(props.projectId, props.run.id, file.path, { status: file.status === "reviewed" ? "unreviewed" : "reviewed" });
+      await props.onChanged();
+    });
+  }
+
+  async function moveRecommendation(file: RunFileReview, direction: -1 | 1) {
+    const current = file.recommendationOrder ?? orderedFiles.indexOf(file) + 1;
+    await props.runAction(async () => {
+      await reviewService.updateFile(props.projectId, props.run.id, file.path, { recommendationOrder: Math.max(1, current + direction) });
+      await props.onChanged();
+    });
+  }
+
+  async function addInlineComment() {
+    if (!selectedPath || !commentBody.trim()) return;
+    await props.runAction(async () => {
+      await reviewService.createComment(props.projectId, props.run.id, { filePath: selectedPath, line: commentLine, side: commentSide, body: commentBody.trim() });
+      setCommentBody("");
+      await props.onChanged();
+    });
+  }
+
+  async function createReviewFollowUp() {
+    if (!selectedComments.size) return;
+    await props.runAction(async () => {
+      await reviewService.createFollowUp(props.projectId, props.run.id, [...selectedComments]);
+      setSelectedComments(new Set());
+      await props.onChanged();
+    });
+  }
+
+  async function setCommentStatus(commentId: string, status: "addressed" | "dismissed") {
+    await props.runAction(async () => {
+      await reviewService.updateComment(props.projectId, commentId, status);
+      await props.onChanged();
+    });
+  }
+
+  const selectedIndex = orderedFiles.findIndex((file) => file.path === selectedPath);
+  const oldDiff = diff.split("\n").filter((line) => !line.startsWith("+") || line.startsWith("+++" )).join("\n");
+  const newDiff = diff.split("\n").filter((line) => !line.startsWith("-") || line.startsWith("---" )).join("\n");
+  return (
+    <div className="completion-review">
+      <div className="completion-summary">
+        <strong>Completion report r{props.report.revision}</strong>
+        <span>{props.report.metrics.files} files · +{props.report.metrics.additions} −{props.report.metrics.deletions}</span>
+        <button className="secondary-button compact" type="button" onClick={() => void openReport()}>{reportHtml ? "Hide report" : "Open report"}</button>
+      </div>
+      {props.report.warning && <p className="review-warning">{props.report.warning}</p>}
+      {reportHtml && <iframe className="completion-report-frame" sandbox="" srcDoc={reportHtml} title={`Completion report ${props.report.revision}`} />}
+      <div className="review-file-list">
+        {orderedFiles.map((file) => (
+          <div className={`review-file ${file.status} ${file.risk}`} key={file.id}>
+            <button type="button" onClick={() => void openDiff(file.path)}>{file.path}</button>
+            <span>{file.changeType} · +{file.additions} −{file.deletions}</span>
+            {file.recommendationOrder && <small>Review #{file.recommendationOrder}: {file.recommendationReason}</small>}
+            <div className="review-file-actions">
+              <button type="button" onClick={() => void moveRecommendation(file, -1)}>↑</button>
+              <button type="button" onClick={() => void moveRecommendation(file, 1)}>↓</button>
+              <button type="button" onClick={() => void markReviewed(file)}>{file.status === "reviewed" ? "Reopen" : "Reviewed"}</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {selectedPath && (
+        <div className="diff-side-panel">
+          <header>
+            <button disabled={selectedIndex <= 0} type="button" onClick={() => void openDiff(orderedFiles[selectedIndex - 1]?.path)}>Previous</button>
+            <strong>{selectedPath}</strong>
+            <button disabled={selectedIndex < 0 || selectedIndex >= orderedFiles.length - 1} type="button" onClick={() => void openDiff(orderedFiles[selectedIndex + 1]?.path)}>Next</button>
+          </header>
+          <div className="diff-controls">
+            <label><input type="checkbox" checked={split} onChange={(event) => setSplit(event.target.checked)} /> Split</label>
+            <label><input type="checkbox" checked={ignoreWhitespace} onChange={(event) => void toggleWhitespace(event.target.checked)} /> Ignore whitespace</label>
+            <label><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} /> Wrap</label>
+          </div>
+          {diffReason ? <p>{diffReason}</p> : split ? (
+            <div className="split-diff"><pre className={wrap ? "wrap" : ""}>{oldDiff}</pre><pre className={wrap ? "wrap" : ""}>{newDiff}</pre></div>
+          ) : <pre className={wrap ? "wrap" : ""}>{diff}</pre>}
+          {nextOffset !== null && <button type="button" onClick={() => void openDiff(selectedPath, ignoreWhitespace, nextOffset, true)}>Load more</button>}
+          <div className="inline-comment-form">
+            <input min={1} type="number" value={commentLine} onChange={(event) => setCommentLine(Math.max(1, Number(event.target.value || 1)))} />
+            <select value={commentSide} onChange={(event) => setCommentSide(event.target.value as "old" | "new")}><option value="new">new</option><option value="old">old</option></select>
+            <input placeholder="Inline review comment" value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
+            <button disabled={!commentBody.trim()} type="button" onClick={() => void addInlineComment()}>Add comment</button>
+          </div>
+        </div>
+      )}
+      {props.comments.length > 0 && (
+        <div className="inline-comment-list">
+          {props.comments.map((comment) => (
+            <div className="inline-comment-row" key={comment.id}>
+              <label>
+                <input
+                  disabled={comment.status !== "open"}
+                  type="checkbox"
+                  checked={selectedComments.has(comment.id)}
+                  onChange={(event) => setSelectedComments((current) => {
+                    const next = new Set(current); if (event.target.checked) next.add(comment.id); else next.delete(comment.id); return next;
+                  })}
+                />
+                <span>{comment.filePath}:{comment.line} · {comment.status} — {comment.body}</span>
+              </label>
+              {comment.status === "open" && <div><button type="button" onClick={() => void setCommentStatus(comment.id, "addressed")}>Addressed</button><button type="button" onClick={() => void setCommentStatus(comment.id, "dismissed")}>Dismiss</button></div>}
+            </div>
+          ))}
+          <button className="secondary-button compact" disabled={!selectedComments.size} type="button" onClick={() => void createReviewFollowUp()}>Create review follow-up</button>
+        </div>
+      )}
+    </div>
   );
 }
 

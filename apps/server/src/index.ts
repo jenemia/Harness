@@ -45,6 +45,14 @@ import { createDraftReply, createDraftSession, decideDraftApply, getDraftSnapsho
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
 import { listInteractions } from "./interactions.js";
 import {
+  createInlineReviewComment,
+  createReviewFollowUp,
+  readCompletionReportHtml,
+  readRunDiff,
+  updateInlineReviewComment,
+  updateRunFileReview
+} from "./completion-reviews.js";
+import {
   createAgentService,
   createDocumentService,
   createFollowUpTasksService,
@@ -379,6 +387,49 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, {
           result: await respondInteraction(project, interactionResponseMatch[1], await readBody(req))
         });
+        return;
+      }
+
+      const runReportMatch = childPath.match(/^runs\/([^/]+)\/completion-report$/);
+      if (runReportMatch && req.method === "GET") {
+        sendJson(res, readCompletionReportHtml(project, runReportMatch[1]));
+        return;
+      }
+
+      const runDiffMatch = childPath.match(/^runs\/([^/]+)\/diff$/);
+      if (runDiffMatch && req.method === "GET") {
+        sendJson(res, readRunDiff(project, runDiffMatch[1], requestUrl.searchParams.get("filePath") || "", {
+          ignoreWhitespace: requestUrl.searchParams.get("ignoreWhitespace") === "true",
+          offset: Number(requestUrl.searchParams.get("offset") || 0),
+          limit: Number(requestUrl.searchParams.get("limit") || 400)
+        }));
+        return;
+      }
+
+      const runFileReviewMatch = childPath.match(/^runs\/([^/]+)\/file-review$/);
+      if (runFileReviewMatch && req.method === "PATCH") {
+        const body = await readBody<{ filePath: string; status?: "unreviewed" | "reviewed"; recommendationOrder?: number | null }>(req);
+        sendJson(res, { file: updateRunFileReview(project, runFileReviewMatch[1], body.filePath, body) });
+        return;
+      }
+
+      const runReviewCommentMatch = childPath.match(/^runs\/([^/]+)\/review-comments$/);
+      if (runReviewCommentMatch && req.method === "POST") {
+        sendJson(res, { comment: createInlineReviewComment(project, runReviewCommentMatch[1], await readBody(req)) }, 201);
+        return;
+      }
+
+      const reviewCommentMatch = childPath.match(/^review-comments\/([^/]+)$/);
+      if (reviewCommentMatch && req.method === "PATCH") {
+        const body = await readBody<{ status: "open" | "addressed" | "dismissed" }>(req);
+        sendJson(res, { comment: updateInlineReviewComment(project, reviewCommentMatch[1], body.status) });
+        return;
+      }
+
+      const reviewFollowUpMatch = childPath.match(/^runs\/([^/]+)\/review-followups$/);
+      if (reviewFollowUpMatch && req.method === "POST") {
+        const body = await readBody<{ commentIds: string[] }>(req);
+        sendJson(res, createReviewFollowUp(project, reviewFollowUpMatch[1], body.commentIds), 201);
         return;
       }
 

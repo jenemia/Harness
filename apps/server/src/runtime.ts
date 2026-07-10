@@ -23,6 +23,7 @@ import { createAgentRunSnapshot } from "./agent-store.js";
 import { assertNoCredentialMaterial, redactCredentialMaterial } from "./credential-security.js";
 import { appendProviderEvent, nextProviderEventSequence } from "./provider-events.js";
 import { createApprovalRecordInDb, recoverInteractions, respondInteractionInDb, suspendRunForInteractionInDb, type RespondInteractionInput } from "./interactions.js";
+import { generateCompletionReport } from "./completion-reviews.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -236,6 +237,11 @@ async function startTaskMutation(project: ProjectRecord, taskId: string) {
     }
 
     const settings = getProjectSettingsFromDb(db);
+    const reviewBlocker = getReviewCapacityBlocker(db, task, settings);
+    if (reviewBlocker) {
+      insertEvent(db, { taskId: task.id, agentId: task.assigneeAgentId, type: "task.queued", message: reviewBlocker, metadata: { reviewBacklog: true } });
+      return { accepted: false, reason: reviewBlocker };
+    }
     if (!hasProjectCapacity(db, project.path, settings)) {
       const reason = "Project has reached its parallel run limit.";
       insertEvent(db, {
@@ -399,6 +405,12 @@ async function startReadyTasksMutation(project: ProjectRecord) {
     for (const task of tasks) {
       if (runningTasks.has(task.id)) {
         skipped.push({ taskId: task.id, reason: "Task is already running." });
+        continue;
+      }
+
+      const reviewBlocker = getReviewCapacityBlocker(db, task, settings);
+      if (reviewBlocker) {
+        skipped.push({ taskId: task.id, reason: reviewBlocker });
         continue;
       }
 
@@ -1210,6 +1222,18 @@ async function executeTask(
         result.status === "completed" ? "completed" : "failed",
         resumeContext.interactionId
       );
+    }
+
+    try {
+      generateCompletionReport(project, runId, result.completion);
+    } catch (reportError) {
+      insertEvent(db, {
+        taskId: task.id,
+        agentId: agent.id,
+        type: "completion.report.failed",
+        message: "Completion report generation failed; the run result remains valid.",
+        metadata: { runId, error: redactCredentialMaterial(reportError instanceof Error ? reportError.message : String(reportError)) }
+      });
     }
 
     refreshAgentStatus(db, agent.id);
@@ -2097,6 +2121,16 @@ function hasAgentCapacity(db: DatabaseSync, agent: AgentRecord) {
 
 function hasProjectCapacity(db: DatabaseSync, projectPath: string, settings: ProjectSettings) {
   return getProjectLoad(db, projectPath) < settings.maxProjectParallel;
+}
+
+function getReviewCapacityBlocker(db: DatabaseSync, task: TaskRecord, settings: ProjectSettings) {
+  if (task.labels.includes("review-follow-up")) return null;
+  const row = db.prepare(`
+    SELECT COUNT(DISTINCT task_id) AS cards, COALESCE(SUM(additions + deletions), 0) AS lines
+    FROM run_file_reviews WHERE status = 'unreviewed'
+  `).get() as { cards: number; lines: number };
+  if (row.cards < settings.maxReviewBacklog && row.lines < settings.maxUnreviewedDiffLines) return null;
+  return `Review backlog limit reached (${row.cards} cards / ${row.lines} unreviewed lines).`;
 }
 
 function getAgentLoad(db: DatabaseSync, agentId: string) {

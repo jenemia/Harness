@@ -301,7 +301,8 @@ export function TaskDetailDrawer(props: {
               <Play size={16} />
               <span>Resume</span>
             </button>
-          ) : props.task.status !== "Paused" ? (
+          ) : props.task.status !== "Paused" && props.task.status !== "In Progress" &&
+            props.task.status !== "In Review" && props.task.status !== "Done" ? (
             <>
               <button
                 className="secondary-button"
@@ -311,18 +312,14 @@ export function TaskDetailDrawer(props: {
                 <Play size={16} />
                 <span>Start</span>
               </button>
-              {props.task.status !== "In Progress" &&
-                props.task.status !== "In Review" &&
-                props.task.status !== "Done" && (
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => void pause()}
-                  >
-                    <Clock3 size={16} />
-                    <span>Pause</span>
-                  </button>
-                )}
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void pause()}
+              >
+                <Clock3 size={16} />
+                <span>Pause</span>
+              </button>
             </>
           ) : null}
           {(props.task.mergeStatus === "pending" ||
@@ -649,6 +646,9 @@ export function TaskDetailDrawer(props: {
           projectId={props.overview.project.id}
           runs={runs}
           events={events}
+          reports={props.overview.completionReports.filter((report) => report.taskId === props.task.id)}
+          fileReviews={props.overview.runFileReviews.filter((file) => file.taskId === props.task.id)}
+          reviewComments={props.overview.inlineReviewComments.filter((comment) => comment.taskId === props.task.id)}
           runAction={props.runAction}
           onChanged={props.onChanged}
         />

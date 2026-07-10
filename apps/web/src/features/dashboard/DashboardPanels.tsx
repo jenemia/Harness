@@ -54,6 +54,9 @@ export function ProjectHealthPanel({
   const pendingInteractions = overview.interactions.filter(
     (interaction) => interaction.status === "pending" && interaction.kind !== "approval",
   ).length;
+  const unreviewedFiles = overview.runFileReviews.filter((file) => file.status === "unreviewed");
+  const reviewBacklogCards = healthReport?.reviewBacklogCards ?? new Set(unreviewedFiles.map((file) => file.taskId)).size;
+  const unreviewedDiffLines = healthReport?.unreviewedDiffLines ?? unreviewedFiles.reduce((sum, file) => sum + file.additions + file.deletions, 0);
   const pendingMerges =
     healthReport?.pendingMerges ??
     overview.tasks.filter(
@@ -86,6 +89,8 @@ export function ProjectHealthPanel({
   const recommendation =
     providerCommandIssues.length > 0
       ? "Configure provider commands"
+      : reviewBacklogCards > 0
+        ? "Review completed changes"
       : pendingInteractions > 0
         ? "Answer pending interactions"
       : schedulerIssues.length > 0
@@ -130,6 +135,10 @@ export function ProjectHealthPanel({
         <div className="compact-row">
           <strong>{pendingInteractions}</strong>
           <span>interactions</span>
+        </div>
+        <div className="compact-row">
+          <strong>{reviewBacklogCards}</strong>
+          <span>review cards · {unreviewedDiffLines} lines</span>
         </div>
         <div className="compact-row">
           <strong>{pendingMerges}</strong>
@@ -181,6 +190,19 @@ export function AttentionPanel(props: {
     [props.overview.tasks],
   );
   const items = useMemo(() => {
+    const reviewBacklog = [...new Set(props.overview.runFileReviews.filter((file) => file.status === "unreviewed").map((file) => file.taskId))]
+      .map((taskId) => {
+        const task = tasksById.get(taskId);
+        const files = props.overview.runFileReviews.filter((file) => file.taskId === taskId && file.status === "unreviewed");
+        return {
+          key: `review-${taskId}`,
+          tone: "approval",
+          kind: "review",
+          title: task?.title || taskId.slice(0, 8),
+          meta: `${files.length} files · ${files.reduce((sum, file) => sum + file.additions + file.deletions, 0)} unreviewed lines`,
+          taskId,
+        };
+      });
     const pendingInteractions = props.overview.interactions
       .filter((interaction) => interaction.status === "pending" && interaction.kind !== "approval" && interaction.taskId)
       .map((interaction) => {
@@ -268,6 +290,7 @@ export function AttentionPanel(props: {
         taskId: task.id,
       }));
     return [
+      ...reviewBacklog,
       ...pendingInteractions,
       ...pendingApprovals,
       ...mergeTasks,
@@ -279,6 +302,7 @@ export function AttentionPanel(props: {
     props.overview.approvals,
     props.overview.interactions,
     props.overview.runs,
+    props.overview.runFileReviews,
     props.overview.tasks,
     tasksById,
   ]);

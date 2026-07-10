@@ -12,6 +12,7 @@ import type {
   AgentTemplateRecord,
   ApprovalRecord,
   CommentRecord,
+  CompletionReportRecord,
   DocumentRecord,
   DraftApplyHistoryRecord,
   DraftCommentRecord,
@@ -24,6 +25,7 @@ import type {
   GlobalSettings,
   HandoffRecord,
   InteractionRecord,
+  InlineReviewCommentRecord,
   MemoryRecord,
   ProjectListItem,
   ProjectImportCandidate,
@@ -35,6 +37,7 @@ import type {
   ProjectTemplateAgent,
   ProjectTemplateRecord,
   RunRecord,
+  RunFileReviewRecord,
   TaskRecord,
   TaskMoveDirection,
   TaskStatus,
@@ -1074,6 +1077,71 @@ export function openProjectDb(projectPath: string) {
     CREATE UNIQUE INDEX IF NOT EXISTS interactions_correlation_kind
       ON interactions(project_id, correlation_id, kind);
 
+    CREATE TABLE IF NOT EXISTS completion_reports (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL UNIQUE,
+      task_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      completion_ref TEXT,
+      html_path TEXT,
+      html_hash TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      plain_text TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      acceptance_criteria TEXT NOT NULL,
+      decisions TEXT NOT NULL,
+      validations TEXT NOT NULL,
+      limitations TEXT NOT NULL,
+      follow_ups TEXT NOT NULL,
+      metrics TEXT NOT NULL,
+      warning TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(task_id, revision)
+    );
+    CREATE INDEX IF NOT EXISTS completion_reports_task_revision
+      ON completion_reports(task_id, revision DESC);
+
+    CREATE TABLE IF NOT EXISTS run_file_reviews (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      previous_path TEXT,
+      status TEXT NOT NULL,
+      change_type TEXT NOT NULL,
+      additions INTEGER NOT NULL,
+      deletions INTEGER NOT NULL,
+      binary INTEGER NOT NULL,
+      risk TEXT NOT NULL,
+      risk_reasons TEXT NOT NULL,
+      recommendation_order INTEGER,
+      recommendation_reason TEXT,
+      reviewed_at TEXT,
+      updated_at TEXT NOT NULL,
+      UNIQUE(run_id, path)
+    );
+    CREATE INDEX IF NOT EXISTS run_file_reviews_status
+      ON run_file_reviews(status, updated_at);
+
+    CREATE TABLE IF NOT EXISTS inline_review_comments (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      line INTEGER NOT NULL,
+      side TEXT NOT NULL,
+      snapshot_ref TEXT,
+      completion_ref TEXT,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL,
+      follow_up_task_id TEXT,
+      addressed_by_run_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS inline_review_comments_run_status
+      ON inline_review_comments(run_id, status, created_at);
+
     CREATE TABLE IF NOT EXISTS project_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -1088,6 +1156,8 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "interactions", "response_key", "TEXT");
   ensureColumn(db, "interactions", "resumed_run_id", "TEXT");
   ensureColumn(db, "interactions", "resume_state", "TEXT NOT NULL DEFAULT 'none'");
+  ensureColumn(db, "completion_reports", "html_hash", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "completion_reports", "mime_type", "TEXT NOT NULL DEFAULT 'text/html'");
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS runs_resumed_interaction_once
       ON runs(resumed_from_interaction_id) WHERE resumed_from_interaction_id IS NOT NULL;
@@ -1138,6 +1208,10 @@ export function defaultProjectSettings(): ProjectSettings {
     maxProjectParallel: 4,
     largePlanTaskThreshold: globalSettings.largePlanTaskThreshold,
     maxRunSeconds: globalSettings.maxRunSeconds,
+    maxReviewFiles: 20,
+    maxReviewDiffLines: 1000,
+    maxReviewBacklog: 5,
+    maxUnreviewedDiffLines: 5000,
     handoffRules: {
       programmer: "reviewer",
       worker: "reviewer"
@@ -1190,6 +1264,10 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "maxRunSeconds") {
       settings.maxRunSeconds = Math.max(5, Number(row.value || settings.maxRunSeconds));
     }
+    if (row.key === "maxReviewFiles") settings.maxReviewFiles = Math.max(1, Number(row.value || settings.maxReviewFiles));
+    if (row.key === "maxReviewDiffLines") settings.maxReviewDiffLines = Math.max(1, Number(row.value || settings.maxReviewDiffLines));
+    if (row.key === "maxReviewBacklog") settings.maxReviewBacklog = Math.max(1, Number(row.value || settings.maxReviewBacklog));
+    if (row.key === "maxUnreviewedDiffLines") settings.maxUnreviewedDiffLines = Math.max(1, Number(row.value || settings.maxUnreviewedDiffLines));
     if (row.key === "handoffRules") {
       settings.handoffRules = parseStringMap(row.value, settings.handoffRules);
     }
@@ -1229,6 +1307,10 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
       maxProjectParallel: Math.max(1, Number(input.maxProjectParallel || current.maxProjectParallel)),
       largePlanTaskThreshold: Math.max(1, Number(input.largePlanTaskThreshold || current.largePlanTaskThreshold)),
       maxRunSeconds: Math.max(5, Number(input.maxRunSeconds || current.maxRunSeconds)),
+      maxReviewFiles: Math.max(1, Number(input.maxReviewFiles || current.maxReviewFiles)),
+      maxReviewDiffLines: Math.max(1, Number(input.maxReviewDiffLines || current.maxReviewDiffLines)),
+      maxReviewBacklog: Math.max(1, Number(input.maxReviewBacklog || current.maxReviewBacklog)),
+      maxUnreviewedDiffLines: Math.max(1, Number(input.maxUnreviewedDiffLines || current.maxUnreviewedDiffLines)),
       handoffRules: normalizeStringMap(input.handoffRules || current.handoffRules),
       providerCommands: {
         ...defaultProjectSettings().providerCommands,
@@ -1245,6 +1327,10 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
     stmt.run("maxProjectParallel", String(next.maxProjectParallel), timestamp);
     stmt.run("largePlanTaskThreshold", String(next.largePlanTaskThreshold), timestamp);
     stmt.run("maxRunSeconds", String(next.maxRunSeconds), timestamp);
+    stmt.run("maxReviewFiles", String(next.maxReviewFiles), timestamp);
+    stmt.run("maxReviewDiffLines", String(next.maxReviewDiffLines), timestamp);
+    stmt.run("maxReviewBacklog", String(next.maxReviewBacklog), timestamp);
+    stmt.run("maxUnreviewedDiffLines", String(next.maxUnreviewedDiffLines), timestamp);
     stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
     stmt.run("providerCommands", JSON.stringify(providerCommandOverrides), timestamp);
     return next;
@@ -1759,7 +1845,10 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       draftComments: db.prepare("SELECT * FROM draft_comments ORDER BY created_at ASC LIMIT 1000").all().map(mapDraftComment),
       draftApplyHistory: db.prepare("SELECT * FROM draft_apply_history ORDER BY created_at DESC LIMIT 500").all().map(mapDraftApplyHistory),
       draftEvents: db.prepare("SELECT * FROM draft_events ORDER BY created_at DESC, sequence DESC LIMIT 1000").all().map(mapDraftEvent),
-      runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
+      runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun),
+      completionReports: db.prepare("SELECT * FROM completion_reports ORDER BY created_at DESC LIMIT 100").all().map(mapCompletionReport),
+      runFileReviews: db.prepare("SELECT * FROM run_file_reviews ORDER BY recommendation_order IS NULL, recommendation_order, path LIMIT 1000").all().map(mapRunFileReview),
+      inlineReviewComments: db.prepare("SELECT * FROM inline_review_comments ORDER BY created_at DESC LIMIT 1000").all().map(mapInlineReviewComment)
     };
   } finally {
     db.close();
@@ -2202,6 +2291,51 @@ export function mapRun(row: unknown): RunRecord {
     correlationId: r.correlation_id ? String(r.correlation_id) : null,
     parentRunId: r.parent_run_id ? String(r.parent_run_id) : null,
     resumedFromInteractionId: r.resumed_from_interaction_id ? String(r.resumed_from_interaction_id) : null
+  };
+}
+
+export function mapCompletionReport(row: unknown): CompletionReportRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id), runId: String(r.run_id), taskId: String(r.task_id), revision: Number(r.revision),
+    completionRef: r.completion_ref ? String(r.completion_ref) : null,
+    htmlPath: r.html_path ? String(r.html_path) : null,
+    htmlHash: String(r.html_hash || ""), mimeType: "text/html",
+    plainText: String(r.plain_text), summary: String(r.summary),
+    acceptanceCriteria: JSON.parse(String(r.acceptance_criteria || "[]")),
+    decisions: parseJsonStringArray(r.decisions), validations: JSON.parse(String(r.validations || "[]")),
+    limitations: parseJsonStringArray(r.limitations), followUps: parseJsonStringArray(r.follow_ups),
+    metrics: JSON.parse(String(r.metrics || "{}")), warning: r.warning ? String(r.warning) : null,
+    createdAt: String(r.created_at)
+  };
+}
+
+export function mapRunFileReview(row: unknown): RunFileReviewRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id), runId: String(r.run_id), taskId: String(r.task_id), path: String(r.path),
+    previousPath: r.previous_path ? String(r.previous_path) : null,
+    status: String(r.status) as RunFileReviewRecord["status"],
+    changeType: String(r.change_type) as RunFileReviewRecord["changeType"],
+    additions: Number(r.additions), deletions: Number(r.deletions), binary: Number(r.binary) !== 0,
+    risk: String(r.risk) as RunFileReviewRecord["risk"], riskReasons: parseJsonStringArray(r.risk_reasons),
+    recommendationOrder: r.recommendation_order === null ? null : Number(r.recommendation_order),
+    recommendationReason: r.recommendation_reason ? String(r.recommendation_reason) : null,
+    reviewedAt: r.reviewed_at ? String(r.reviewed_at) : null, updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapInlineReviewComment(row: unknown): InlineReviewCommentRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id), runId: String(r.run_id), taskId: String(r.task_id), filePath: String(r.file_path),
+    line: Number(r.line), side: String(r.side) as InlineReviewCommentRecord["side"],
+    snapshotRef: r.snapshot_ref ? String(r.snapshot_ref) : null,
+    completionRef: r.completion_ref ? String(r.completion_ref) : null,
+    body: String(r.body), status: String(r.status) as InlineReviewCommentRecord["status"],
+    followUpTaskId: r.follow_up_task_id ? String(r.follow_up_task_id) : null,
+    addressedByRunId: r.addressed_by_run_id ? String(r.addressed_by_run_id) : null,
+    createdAt: String(r.created_at), updatedAt: String(r.updated_at)
   };
 }
 

@@ -46,6 +46,10 @@ export type ProjectHealthReport = {
   pendingMerges: number;
   failedRuns: number;
   runningRuns: number;
+  reviewBacklogCards: number;
+  unreviewedFiles: number;
+  unreviewedDiffLines: number;
+  reviewLimitReached: boolean;
   unassignedTasks: number;
   followUpBacklogTasks: number;
   busyAgents: number;
@@ -105,6 +109,10 @@ export type ProjectSettings = {
   maxProjectParallel: number;
   largePlanTaskThreshold: number;
   maxRunSeconds: number;
+  maxReviewFiles: number;
+  maxReviewDiffLines: number;
+  maxReviewBacklog: number;
+  maxUnreviewedDiffLines: number;
   handoffRules: Record<string, string>;
   providerCommands: Record<string, string>;
   updatedAt: string | null;
@@ -365,6 +373,63 @@ export type Run = {
   resumedFromInteractionId: string | null;
 };
 
+export type CompletionReport = {
+  id: string;
+  runId: string;
+  taskId: string;
+  revision: number;
+  completionRef: string | null;
+  htmlPath: string | null;
+  htmlHash: string;
+  mimeType: "text/html";
+  plainText: string;
+  summary: string;
+  acceptanceCriteria: Array<{ criterion: string; met: boolean; evidence: string }>;
+  decisions: string[];
+  validations: Array<{ kind: "test" | "typecheck" | "lint" | "build"; ran: boolean; passed: boolean; evidence: string }>;
+  limitations: string[];
+  followUps: string[];
+  metrics: { files: number; additions: number; deletions: number; binaryFiles: number; newFiles: number; deletedFiles: number; renamedFiles: number; highRiskFiles: number };
+  warning: string | null;
+  createdAt: string;
+};
+
+export type RunFileReview = {
+  id: string;
+  runId: string;
+  taskId: string;
+  path: string;
+  previousPath: string | null;
+  status: "unreviewed" | "reviewed";
+  changeType: "modified" | "added" | "deleted" | "renamed" | "binary";
+  additions: number;
+  deletions: number;
+  binary: boolean;
+  risk: "normal" | "high";
+  riskReasons: string[];
+  recommendationOrder: number | null;
+  recommendationReason: string | null;
+  reviewedAt: string | null;
+  updatedAt: string;
+};
+
+export type InlineReviewComment = {
+  id: string;
+  runId: string;
+  taskId: string;
+  filePath: string;
+  line: number;
+  side: "old" | "new";
+  snapshotRef: string | null;
+  completionRef: string | null;
+  body: string;
+  status: "open" | "addressed" | "dismissed";
+  followUpTaskId: string | null;
+  addressedByRunId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProviderEvent = {
   version: 1;
   sequence: number;
@@ -401,6 +466,9 @@ export type Overview = {
   draftApplyHistory: DraftApplyHistory[];
   draftEvents: DraftEvent[];
   runs: Run[];
+  completionReports: CompletionReport[];
+  runFileReviews: RunFileReview[];
+  inlineReviewComments: InlineReviewComment[];
 };
 
 export type ProviderCatalog = {

@@ -28,6 +28,12 @@ export type HarnessCommandInputs = {
   "memories:update": { projectId: string; memoryId: string; payload: object };
   "approvals:decide": { projectId: string; approvalId: string; action: "approve" | "reject" };
   "runs:followups": { projectId: string; runId: string };
+  "reviews:report": { projectId: string; runId: string };
+  "reviews:diff": { projectId: string; runId: string; filePath: string; ignoreWhitespace?: boolean; offset?: number; limit?: number };
+  "reviews:file-update": { projectId: string; runId: string; filePath: string; status?: "unreviewed" | "reviewed"; recommendationOrder?: number | null };
+  "reviews:comment-create": { projectId: string; runId: string; filePath: string; line: number; side: "old" | "new"; body: string };
+  "reviews:comment-update": { projectId: string; commentId: string; status: "open" | "addressed" | "dismissed" };
+  "reviews:followup": { projectId: string; runId: string; commentIds: string[] };
   "interactions:list": {
     projectId: string;
     status?: "pending" | "resolved" | "rejected" | "expired";
@@ -190,6 +196,19 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "interactions:respond") return isText(payload.interactionId) &&
     (payload.action === "resolve" || payload.action === "reject") && isRecord(payload.responsePayload) &&
     isText(payload.idempotencyKey);
+  if (command === "reviews:report") return isText(payload.runId);
+  if (command === "reviews:diff") return isText(payload.runId) && isText(payload.filePath) &&
+    (payload.ignoreWhitespace === undefined || typeof payload.ignoreWhitespace === "boolean") &&
+    (payload.offset === undefined || isNonNegativeInteger(payload.offset)) &&
+    (payload.limit === undefined || isNonNegativeInteger(payload.limit));
+  if (command === "reviews:file-update") return isText(payload.runId) && isText(payload.filePath) &&
+    (payload.status === undefined || payload.status === "unreviewed" || payload.status === "reviewed") &&
+    (payload.recommendationOrder === undefined || payload.recommendationOrder === null || isNonNegativeInteger(payload.recommendationOrder));
+  if (command === "reviews:comment-create") return isText(payload.runId) && isText(payload.filePath) &&
+    Number.isInteger(payload.line) && Number(payload.line) > 0 && (payload.side === "old" || payload.side === "new") && isText(payload.body);
+  if (command === "reviews:comment-update") return isText(payload.commentId) &&
+    (payload.status === "open" || payload.status === "addressed" || payload.status === "dismissed");
+  if (command === "reviews:followup") return isText(payload.runId) && Array.isArray(payload.commentIds) && payload.commentIds.every(isText);
   if (command === "drafts:create") return isDraftCreatePayload(payload.payload);
   if (command === "drafts:get") return isText(payload.draftId);
   if (command === "drafts:update") return isText(payload.draftId) && isNonNegativeInteger(payload.expectedRevision) && typeof payload.content === "string";
@@ -221,6 +240,7 @@ const commandNames = new Set<HarnessCommand>([
   "system:select-folder", "agents:save", "documents:create", "documents:update", "global-memories:create",
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
   "interactions:list", "interactions:respond",
+  "reviews:report", "reviews:diff", "reviews:file-update", "reviews:comment-create", "reviews:comment-update", "reviews:followup",
   "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",

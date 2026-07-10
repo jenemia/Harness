@@ -58,6 +58,14 @@ export type LlmRunResult = {
   output: string;
   error: string | null;
   interaction?: ProviderInteractionRequest;
+  completion?: {
+    summary: string;
+    acceptanceCriteria: Array<{ criterion: string; met: boolean; evidence: string }>;
+    decisions: string[];
+    validations: Array<{ kind: "test" | "typecheck" | "lint" | "build"; ran: boolean; passed: boolean; evidence: string }>;
+    limitations: string[];
+    followUps: string[];
+  };
 };
 
 export type PlatformProvider = {
@@ -1035,7 +1043,29 @@ function createMockLlmProvider(): LlmProvider {
         `# Harness Agent Result\n\n${output}\n\nPrompt: ${files.promptFile}\n`,
         "utf8"
       );
-      return { status: "completed", ok: true, output, error: null };
+      return {
+        status: "completed",
+        ok: true,
+        output,
+        error: null,
+        completion: {
+          summary: `Mock provider completed ${task.title}.`,
+          acceptanceCriteria: task.acceptanceCriteria.split(/\n|;/).map((criterion) => criterion.trim()).filter(Boolean).map((criterion) => ({
+            criterion,
+            met: true,
+            evidence: "Deterministic mock execution completed."
+          })),
+          decisions: ["Used the deterministic mock provider."],
+          validations: [
+            { kind: "test", ran: false, passed: false, evidence: "No test command was configured for the mock provider." },
+            { kind: "typecheck", ran: false, passed: false, evidence: "No typecheck command was configured for the mock provider." },
+            { kind: "lint", ran: false, passed: false, evidence: "No lint command was configured for the mock provider." },
+            { kind: "build", ran: false, passed: false, evidence: "No build command was configured for the mock provider." }
+          ],
+          limitations: ["Mock execution does not verify project-specific behavior."],
+          followUps: []
+        }
+      };
     }
   };
 }

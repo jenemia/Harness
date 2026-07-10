@@ -98,6 +98,12 @@ export function ApprovalsPanel(props: {
           const providerResolution = formatProviderCommandResolution(
             asRecord(approvalEvents.get(approval.id)?.metadata),
           );
+          const reviewFiles = approval.kind === "merge"
+            ? props.overview.runFileReviews
+                .filter((file) => file.taskId === approval.taskId)
+                .sort((left, right) => (left.recommendationOrder ?? 9999) - (right.recommendationOrder ?? 9999))
+                .slice(0, 3)
+            : [];
           return (
             <div className="approval-row pending" key={approval.id}>
               <div>
@@ -112,6 +118,14 @@ export function ApprovalsPanel(props: {
               {providerResolution && <span>{providerResolution}</span>}
               {approval.commandPreview && approval.kind !== "handoff" && (
                 <code>{approval.commandPreview}</code>
+              )}
+              {reviewFiles.length > 0 && (
+                <div className="approval-review-files">
+                  <strong>Review first</strong>
+                  {reviewFiles.map((file) => (
+                    <span key={file.id}>#{file.recommendationOrder || "–"} {file.path} · {file.status}{file.recommendationReason ? ` — ${file.recommendationReason}` : ""}</span>
+                  ))}
+                </div>
               )}
               <div className="approval-actions">
                 <button

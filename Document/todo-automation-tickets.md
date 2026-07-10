@@ -198,11 +198,15 @@ Status: 완료
 
 Depends on: A02, A07, A12
 
+Status: 완료
+
 - 변경량·검증·고위험 지표와 먼저 검토할 파일 추천을 저장한다.
 - 고정 template의 sanitized HTML report와 plain-text fallback을 구현한다.
 - snapshot 기반 side diff, review 상태와 terminal run 전용 inline comment를 제공한다.
 
 완료 조건: 완료 카드에서 재현 가능한 report, 우선 파일, diff와 후속 수정 연결을 확인한다.
+
+검증: 실제 Git snapshot/commit fixture에서 추가·삭제·rename·binary·고위험 분류와 정량 지표, structured/fallback report revision, CSP/HTML escape, 최대 3개 추천과 검토 상태, snapshot 고정 diff, terminal-only inline comment와 review follow-up/addressed lineage, review backlog scheduler gate를 서버 통합 테스트로 검증했다. 브라우저 smoke에서 sandbox report, unified/split diff, whitespace 무시·wrap, inline comment, 검토 완료, follow-up 생성, health/Attention/merge 추천과 오류 없는 렌더링을 확인했다.
 
 ### A15: Multi-layer workspace protection
 

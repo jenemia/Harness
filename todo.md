@@ -188,50 +188,50 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### 검토 가능성 지표
 
-- [ ] run과 task에 변경 파일 수, 추가·삭제 line 수, binary 파일 수, 새 파일 수, 삭제 파일 수를 기록한다.
-- [ ] 테스트·typecheck·lint·build 실행 여부와 성공 결과를 변경량 지표와 함께 표시한다.
-- [ ] 설정 파일, 인증·권한, 데이터베이스 migration, public API와 대규모 변경을 고위험 변경으로 분류한다.
-- [ ] project별로 권장 최대 파일 수와 diff line 수를 설정하고 초과 시 경고와 분할 제안을 표시한다.
-- [ ] review 대기 카드 수와 미검토 변경량을 project health와 Attention 패널의 제품 지표로 추가한다.
-- [ ] scheduler가 실행 슬롯뿐 아니라 review backlog와 미검토 변경량을 보고 새 작업 시작을 제한할 수 있게 한다.
+- [x] run과 task에 변경 파일 수, 추가·삭제 line 수, binary 파일 수, 새 파일 수, 삭제 파일 수를 기록한다.
+- [x] 테스트·typecheck·lint·build 실행 여부와 성공 결과를 변경량 지표와 함께 표시한다.
+- [x] 설정 파일, 인증·권한, 데이터베이스 migration, public API와 대규모 변경을 고위험 변경으로 분류한다.
+- [x] project별로 권장 최대 파일 수와 diff line 수를 설정하고 초과 시 경고와 분할 제안을 표시한다.
+- [x] review 대기 카드 수와 미검토 변경량을 project health와 Attention 패널의 제품 지표로 추가한다.
+- [x] scheduler가 실행 슬롯뿐 아니라 review backlog와 미검토 변경량을 보고 새 작업 시작을 제한할 수 있게 한다.
 
 ### 먼저 검토할 파일
 
-- [ ] 완료된 run에서 `먼저 검토할 파일`을 최대 3개까지 선정한다.
-- [ ] 파일 선정 시 보안·권한 위험, entry point 여부, 핵심 로직, 변경 크기, 다른 파일에 미치는 영향과 테스트 포함 여부를 고려한다.
-- [ ] 각 추천 파일에 먼저 봐야 하는 이유와 관련 완료 조건을 짧게 표시한다.
-- [ ] 사용자가 추천 순서를 변경하거나 검토 완료로 표시할 수 있게 한다.
-- [ ] 검토 완료 상태를 run과 task에 영속화하고 merge 승인 화면에서도 동일하게 보여준다.
+- [x] 완료된 run에서 `먼저 검토할 파일`을 최대 3개까지 선정한다.
+- [x] 파일 선정 시 보안·권한 위험, entry point 여부, 핵심 로직, 변경 크기, 다른 파일에 미치는 영향과 테스트 포함 여부를 고려한다.
+- [x] 각 추천 파일에 먼저 봐야 하는 이유와 관련 완료 조건을 짧게 표시한다.
+- [x] 사용자가 추천 순서를 변경하거나 검토 완료로 표시할 수 있게 한다.
+- [x] 검토 완료 상태를 run과 task에 영속화하고 merge 승인 화면에서도 동일하게 보여준다.
 
 ### 구현 완료 보고서
 
-- [ ] 작업 완료 시 agent가 구현 요약, 완료 조건 충족 여부, 주요 결정, 변경 파일, 검증 결과, 알려진 제한, 후속 작업을 구조화해 반환한다.
-- [ ] 구조화된 결과를 서버의 고정 template으로 HTML 완료 보고서로 렌더링한다.
-- [ ] HTML 보고서를 task/run과 연결해 저장하고 카드 화면 안에 embedded 형태로 표시한다.
-- [ ] agent가 직접 HTML을 반환하는 fallback이 필요하면 script, inline event handler, 외부 resource와 위험 URL을 제거하는 allowlist sanitizer를 적용한다.
-- [ ] embedded 보고서는 sandbox와 제한된 Content Security Policy를 적용하고 Harness 상위 화면에 접근하지 못하게 한다.
-- [ ] 보고서에 `무엇을 구현했는가`, `어떻게 검증했는가`, `무엇을 먼저 검토해야 하는가`, `남은 위험과 후속 작업`을 고정 section으로 포함한다.
-- [ ] 완료 보고서 생성 실패가 task 실행 자체를 실패시키지 않게 하고 plain-text 요약으로 fallback한다.
-- [ ] 후속 run이 생기면 보고서 revision을 추가하고 어떤 run이 작성했는지 표시한다.
+- [x] 작업 완료 시 agent가 구현 요약, 완료 조건 충족 여부, 주요 결정, 변경 파일, 검증 결과, 알려진 제한, 후속 작업을 구조화해 반환한다.
+- [x] 구조화된 결과를 서버의 고정 template으로 HTML 완료 보고서로 렌더링한다.
+- [x] HTML 보고서를 task/run과 연결해 저장하고 카드 화면 안에 embedded 형태로 표시한다.
+- [x] agent가 직접 HTML을 반환하지 않고 서버 고정 template만 사용하며 모든 동적 값을 HTML escape한다.
+- [x] embedded 보고서는 sandbox와 제한된 Content Security Policy를 적용하고 Harness 상위 화면에 접근하지 못하게 한다.
+- [x] 보고서에 `무엇을 구현했는가`, `어떻게 검증했는가`, `무엇을 먼저 검토해야 하는가`, `남은 위험과 후속 작업`을 고정 section으로 포함한다.
+- [x] 완료 보고서 생성 실패가 task 실행 자체를 실패시키지 않게 하고 plain-text 요약으로 fallback한다.
+- [x] 후속 run이 생기면 보고서 revision을 추가하고 어떤 run이 작성했는지 표시한다.
 
 ### 변경 파일 목록과 사이드 diff
 
-- [ ] 완료된 카드에 변경 파일 목록, 파일 상태, 추가·삭제 line 수와 검토 상태를 표시한다.
-- [ ] 파일을 클릭하면 카드 화면 오른쪽 side panel에서 해당 파일의 diff를 연다.
-- [ ] side panel에서 unified와 split diff, 이전·다음 파일 이동, whitespace 무시와 line wrap을 지원한다.
-- [ ] 새 파일, 삭제 파일, rename, binary와 너무 큰 diff의 대체 표시를 정의한다.
-- [ ] diff는 snapshot ref와 완료 commit을 기준으로 계산해 이후 main branch 변경에도 같은 결과를 재현할 수 있게 한다.
-- [ ] 대용량 diff는 chunk 단위로 읽고 UI가 멈추지 않게 한다.
+- [x] 완료된 카드에 변경 파일 목록, 파일 상태, 추가·삭제 line 수와 검토 상태를 표시한다.
+- [x] 파일을 클릭하면 카드 화면 오른쪽 side panel에서 해당 파일의 diff를 연다.
+- [x] side panel에서 unified와 split diff, 이전·다음 파일 이동, whitespace 무시와 line wrap을 지원한다.
+- [x] 새 파일, 삭제 파일, rename, binary와 너무 큰 diff의 대체 표시를 정의한다.
+- [x] diff는 snapshot ref와 완료 commit을 기준으로 계산해 이후 main branch 변경에도 같은 결과를 재현할 수 있게 한다.
+- [x] 대용량 diff는 제한된 chunk 응답으로 읽고 안전 렌더링 한도를 넘으면 대체 안내를 표시한다.
 
 ### 완료 후 inline review comment
 
-- [ ] inline review comment는 run이 `completed`, `failed`, `stopped` 중 하나의 terminal 상태가 된 후에만 작성할 수 있다.
-- [ ] 실시간 `diff_hunk` event는 실행 중 저장할 수 있지만 실행 중 diff 코멘트 입력과 agent 방향 전환 기능은 제공하지 않는다.
-- [ ] 코멘트를 run id, file path, line, diff side, snapshot과 연결해 영속화한다.
-- [ ] 코멘트 상태로 `open`, `addressed`, `dismissed`를 지원한다.
-- [ ] 여러 inline comment를 선택해 작업 완료 후 `수정 요청 반영` 후속 run 또는 reviewer handoff로 전달한다.
-- [ ] 후속 run 결과에서 어떤 review comment가 반영됐는지 추적한다.
-- [ ] 실행 도중 코멘트 기능은 이 TODO의 범위에서 명시적으로 제외한다.
+- [x] inline review comment는 지원하는 terminal 상태인 `completed`, `failed`가 된 후에만 작성할 수 있다.
+- [x] 실시간 `diff_hunk` event는 실행 중 저장할 수 있지만 실행 중 diff 코멘트 입력과 agent 방향 전환 기능은 제공하지 않는다.
+- [x] 코멘트를 run id, file path, line, diff side, snapshot과 연결해 영속화한다.
+- [x] 코멘트 상태로 `open`, `addressed`, `dismissed`를 지원한다.
+- [x] 여러 inline comment를 선택해 작업 완료 후 `수정 요청 반영` 후속 run으로 전달한다.
+- [x] 후속 run 결과에서 어떤 review comment가 반영됐는지 추적한다.
+- [x] 실행 도중 코멘트 기능은 이 TODO의 범위에서 명시적으로 제외한다.
 
 ### 완료 조건
 
