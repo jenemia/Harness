@@ -15,7 +15,7 @@ import {
   Settings,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Overview, PlanResult, Project, ProviderCatalog, Task, TaskStatus } from "./api";
+import type { Agent, Overview, PlanResult, Project, ProviderCatalog, ScheduleResult, Task, TaskStatus } from "./api";
 import { api } from "./api";
 
 const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
@@ -59,6 +59,19 @@ export function App() {
     } finally {
       setIsBusy(false);
     }
+  }
+
+  async function scheduleReady() {
+    if (!overview) {
+      return;
+    }
+
+    await runAction(async () => {
+      await api<{ schedule: ScheduleResult }>(`/api/projects/${overview.project.id}/schedule`, {
+        method: "POST"
+      });
+      await loadOverview(overview.project.id);
+    });
   }
 
   useEffect(() => {
@@ -129,9 +142,17 @@ export function App() {
             <h1>{overview?.project.name || "No project selected"}</h1>
             {overview && <span className="path-line">{overview.project.path}</span>}
           </div>
-          <button className="icon-button" type="button" onClick={() => void runAction(() => loadOverview())}>
-            <RefreshCcw size={18} />
-          </button>
+          <div className="topbar-actions">
+            {overview && (
+              <button className="secondary-button" type="button" onClick={() => void scheduleReady()}>
+                <Play size={16} />
+                <span>Run Ready</span>
+              </button>
+            )}
+            <button className="icon-button" type="button" onClick={() => void runAction(() => loadOverview())}>
+              <RefreshCcw size={18} />
+            </button>
+          </div>
         </header>
 
         {error && <div className="error-line">{error}</div>}
@@ -203,16 +224,19 @@ function PlanningPanel(props: {
 }) {
   const [goal, setGoal] = useState("");
   const [mode, setMode] = useState<"sequential" | "parallel">("sequential");
+  const [autoStart, setAutoStart] = useState(false);
   const [lastPlan, setLastPlan] = useState<PlanResult | null>(null);
+  const [lastSchedule, setLastSchedule] = useState<ScheduleResult | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
-      const response = await api<{ plan: PlanResult }>(`/api/projects/${props.overview.project.id}/plan`, {
+      const response = await api<{ plan: PlanResult; schedule: ScheduleResult | null }>(`/api/projects/${props.overview.project.id}/plan`, {
         method: "POST",
-        body: JSON.stringify({ goal, mode })
+        body: JSON.stringify({ goal, mode, autoStart })
       });
       setLastPlan(response.plan);
+      setLastSchedule(response.schedule);
       setGoal("");
       await props.onChanged();
     });
@@ -234,6 +258,10 @@ function PlanningPanel(props: {
           <option value="sequential">Sequential handoff</option>
           <option value="parallel">Parallel where safe</option>
         </select>
+        <label className="check-row">
+          <input type="checkbox" checked={autoStart} onChange={(event) => setAutoStart(event.target.checked)} />
+          <span>Auto-start ready tasks</span>
+        </label>
         <button className="primary-button" type="submit">
           <Sparkles size={16} />
           <span>Plan</span>
@@ -242,7 +270,10 @@ function PlanningPanel(props: {
       {lastPlan && (
         <div className="plan-result">
           <strong>{lastPlan.tasks.length} tasks created</strong>
-          <span>{lastPlan.mode}</span>
+          <span>
+            {lastPlan.mode}
+            {lastSchedule ? ` · ${lastSchedule.started.length} started` : ""}
+          </span>
         </div>
       )}
     </section>
@@ -462,6 +493,7 @@ function AgentPanel(props: {
   const [modelBackend, setModelBackend] = useState("mock");
   const [persona, setPersona] = useState("");
   const [cliCommand, setCliCommand] = useState("");
+  const [maxParallel, setMaxParallel] = useState(1);
   const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
 
   async function submit(event: FormEvent) {
@@ -474,13 +506,15 @@ function AgentPanel(props: {
           role,
           persona,
           cliCommand: cliCommand || null,
-          modelBackend
+          modelBackend,
+          maxParallel
         })
       });
       setName("");
       setPersona("");
       setCliCommand("");
       setModelBackend("mock");
+      setMaxParallel(1);
       await props.onChanged();
     });
   }
@@ -497,7 +531,7 @@ function AgentPanel(props: {
             <span className={`status-dot ${agent.status}`} />
             <div>
               <strong>{agent.name}</strong>
-              <span>{agent.role} · {agent.modelBackend}</span>
+              <span>{agent.role} · {agent.modelBackend} · max {agent.maxParallel}</span>
             </div>
           </div>
         ))}
@@ -517,6 +551,14 @@ function AgentPanel(props: {
             </option>
           ))}
         </select>
+        <input
+          min={1}
+          max={8}
+          type="number"
+          value={maxParallel}
+          onChange={(event) => setMaxParallel(Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Max parallel"
+        />
         <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder="Persona" />
         <input
           value={cliCommand}

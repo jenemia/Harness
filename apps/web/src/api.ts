@@ -105,6 +105,14 @@ export type PlanResult = {
   }>;
 };
 
+export type ScheduleResult = {
+  started: string[];
+  skipped: Array<{
+    taskId: string;
+    reason: string;
+  }>;
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,

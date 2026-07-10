@@ -12,6 +12,7 @@ import { createDefaultProviders } from "./providers.js";
 import type { AgentRecord, ProjectRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
+const reservedAgentRuns = new Map<string, number>();
 const providers = createDefaultProviders(projectHarnessDir);
 
 export function listRuntimeProviders() {
@@ -29,6 +30,7 @@ export async function startTask(project: ProjectRecord, taskId: string) {
     return { accepted: false, reason: "Task is already running." };
   }
 
+  let reservedAgentId = "";
   const db = openProjectDb(project.path);
   try {
     const task = getTask(db, taskId);
@@ -48,13 +50,92 @@ export async function startTask(project: ProjectRecord, taskId: string) {
       });
       return { accepted: false, reason: dependencyBlocker };
     }
+
+    const agent = chooseAgentWithCapacity(db, task);
+    if (!agent) {
+      const reason = task.assigneeAgentId
+        ? "Assigned agent has reached its parallel run limit."
+        : "No agent has available execution capacity.";
+      insertEvent(db, {
+        taskId: task.id,
+        agentId: task.assigneeAgentId,
+        type: "task.queued",
+        message: reason,
+        metadata: {}
+      });
+      return { accepted: false, reason };
+    }
+
+    reservedAgentId = agent.id;
+    reserveAgent(agent.id);
   } finally {
     db.close();
   }
 
   runningTasks.add(taskId);
-  void executeTask(project, taskId).finally(() => runningTasks.delete(taskId));
+  void executeTask(project, taskId, reservedAgentId).finally(() => {
+    runningTasks.delete(taskId);
+    releaseAgent(reservedAgentId);
+  });
   return { accepted: true };
+}
+
+export async function startReadyTasks(project: ProjectRecord) {
+  const db = openProjectDb(project.path);
+  try {
+    const tasks = db
+      .prepare("SELECT * FROM tasks WHERE status IN (?, ?) ORDER BY created_at ASC")
+      .all("Selected", "Backlog")
+      .map(mapTask);
+    const started: string[] = [];
+    const skipped: Array<{ taskId: string; reason: string }> = [];
+
+    for (const task of tasks) {
+      if (runningTasks.has(task.id)) {
+        skipped.push({ taskId: task.id, reason: "Task is already running." });
+        continue;
+      }
+
+      const dependencyBlocker = getDependencyBlocker(db, task);
+      if (dependencyBlocker) {
+        setTaskBlocked(db, task.id, dependencyBlocker);
+        skipped.push({ taskId: task.id, reason: dependencyBlocker });
+        continue;
+      }
+
+      const agent = chooseAgentWithCapacity(db, task);
+      if (!agent) {
+        skipped.push({
+          taskId: task.id,
+          reason: task.assigneeAgentId
+            ? "Assigned agent has reached its parallel run limit."
+            : "No agent has available execution capacity."
+        });
+        continue;
+      }
+
+      assignTask(db, task.id, agent.id);
+      reservedAgentRuns.set(agent.id, (reservedAgentRuns.get(agent.id) || 0) + 1);
+      runningTasks.add(task.id);
+      started.push(task.id);
+      void executeTask(project, task.id, agent.id).finally(() => {
+        runningTasks.delete(task.id);
+        releaseAgent(agent.id);
+      });
+    }
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "scheduler.started",
+      message: `Scheduler started ${started.length} ready task(s).`,
+      metadata: { started, skipped }
+    });
+
+    return { started, skipped };
+  } finally {
+    db.close();
+  }
 }
 
 export async function approveMerge(project: ProjectRecord, taskId: string) {
@@ -121,7 +202,7 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
   }
 }
 
-async function executeTask(project: ProjectRecord, taskId: string) {
+async function executeTask(project: ProjectRecord, taskId: string, reservedAgentId?: string) {
   const db = openProjectDb(project.path);
   let runId = "";
 
@@ -131,7 +212,7 @@ async function executeTask(project: ProjectRecord, taskId: string) {
       return;
     }
 
-    const agent = task.assigneeAgentId ? getAgent(db, task.assigneeAgentId) : chooseAgent(db, task);
+    const agent = reservedAgentId ? getAgent(db, reservedAgentId) : chooseAgentWithCapacity(db, task);
     if (!agent) {
       updateTaskStatus(db, task.id, "Blocked");
       insertEvent(db, {
@@ -197,7 +278,7 @@ async function executeTask(project: ProjectRecord, taskId: string) {
       runId
     );
 
-    setAgentIdle(db, agent.id);
+    refreshAgentStatus(db, agent.id);
 
     if (!result.ok) {
       updateTaskStatus(db, task.id, "Blocked");
@@ -234,7 +315,7 @@ async function executeTask(project: ProjectRecord, taskId: string) {
     if (task) {
       updateTaskStatus(db, task.id, "Blocked");
       if (task.assigneeAgentId) {
-        setAgentIdle(db, task.assigneeAgentId);
+        refreshAgentStatus(db, task.assigneeAgentId);
       }
       insertEvent(db, {
         taskId: task.id,
@@ -338,6 +419,19 @@ function chooseAgent(db: DatabaseSync, task: TaskRecord): AgentRecord | null {
   return row ? mapAgent(row) : null;
 }
 
+function chooseAgentWithCapacity(db: DatabaseSync, task: TaskRecord): AgentRecord | null {
+  const assigned = task.assigneeAgentId ? getAgent(db, task.assigneeAgentId) : null;
+  if (assigned) {
+    return hasAgentCapacity(db, assigned) ? assigned : null;
+  }
+
+  const rows = db
+    .prepare("SELECT * FROM agents WHERE role != ? ORDER BY created_at ASC")
+    .all("project-manager")
+    .map(mapAgent);
+  return rows.find((agent) => hasAgentCapacity(db, agent)) || null;
+}
+
 function assignTask(db: DatabaseSync, taskId: string, agentId: string) {
   db.prepare("UPDATE tasks SET assignee_agent_id = ?, updated_at = ? WHERE id = ?").run(agentId, now(), taskId);
 }
@@ -369,10 +463,14 @@ function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {
   );
 }
 
-function setAgentIdle(db: DatabaseSync, agentId: string) {
+function refreshAgentStatus(db: DatabaseSync, agentId: string) {
+  const row = db
+    .prepare("SELECT task_id FROM runs WHERE agent_id = ? AND status = ? ORDER BY started_at DESC LIMIT 1")
+    .get(agentId, "running") as { task_id: string } | undefined;
+
   db.prepare("UPDATE agents SET status = ?, current_task_id = ?, updated_at = ? WHERE id = ?").run(
-    "idle",
-    null,
+    row ? "busy" : "idle",
+    row?.task_id || null,
     now(),
     agentId
   );
@@ -425,7 +523,31 @@ function scheduleReadyDependents(project: ProjectRecord, db: DatabaseSync, compl
       metadata: { completedTaskId }
     });
     setTimeout(() => {
-      void startTask(project, task.id);
+      void startReadyTasks(project);
     }, 0);
+  }
+}
+
+function hasAgentCapacity(db: DatabaseSync, agent: AgentRecord) {
+  return getAgentLoad(db, agent.id) < agent.maxParallel;
+}
+
+function getAgentLoad(db: DatabaseSync, agentId: string) {
+  const running = db
+    .prepare("SELECT COUNT(*) AS count FROM runs WHERE agent_id = ? AND status = ?")
+    .get(agentId, "running") as { count: number };
+  return running.count + (reservedAgentRuns.get(agentId) || 0);
+}
+
+function reserveAgent(agentId: string) {
+  reservedAgentRuns.set(agentId, (reservedAgentRuns.get(agentId) || 0) + 1);
+}
+
+function releaseAgent(agentId: string) {
+  const next = (reservedAgentRuns.get(agentId) || 0) - 1;
+  if (next > 0) {
+    reservedAgentRuns.set(agentId, next);
+  } else {
+    reservedAgentRuns.delete(agentId);
   }
 }

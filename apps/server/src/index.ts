@@ -14,7 +14,7 @@ import {
   seedDefaultAgents
 } from "./db.js";
 import { createPlan } from "./planner.js";
-import { approveMerge, listRuntimeProviders, startTask } from "./runtime.js";
+import { approveMerge, listRuntimeProviders, startReadyTasks, startTask } from "./runtime.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -83,8 +83,16 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "POST" && childPath === "plan") {
-        const plan = createPlan(project, await readBody(req));
-        sendJson(res, { plan, overview: getProjectOverview(project) }, 201);
+        const body = await readBody<{ goal?: string; mode?: "sequential" | "parallel"; autoStart?: boolean }>(req);
+        const plan = createPlan(project, body);
+        const schedule = body.autoStart ? await startReadyTasks(project) : null;
+        sendJson(res, { plan, schedule, overview: getProjectOverview(project) }, 201);
+        return;
+      }
+
+      if (req.method === "POST" && childPath === "schedule") {
+        const schedule = await startReadyTasks(project);
+        sendJson(res, { schedule, overview: getProjectOverview(project) }, 202);
         return;
       }
 

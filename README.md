@@ -9,6 +9,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Agent persona management.
 - Task assignment and execution.
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
+- Ready-task scheduler with agent `maxParallel` capacity checks.
 - Git worktree per executable task.
 - Automatic PM-driven handoff with risk gates reserved for merge/destructive actions.
 - Provider-based platform and LLM adapters.
@@ -29,3 +30,5 @@ The web app runs on `http://localhost:5173`.
 ## PM Planning
 
 Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
+
+Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit.

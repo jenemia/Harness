@@ -158,6 +158,12 @@ button {
   margin-bottom: 18px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: #626f86;
@@ -520,6 +526,20 @@ textarea {
 
 .plan-result strong {
   color: #172b4d;
+}
+
+.check-row {
+  align-items: center;
+  color: #44546f;
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+  min-height: 28px;
+}
+
+.check-row input {
+  min-height: auto;
+  width: auto;
 }
 
 .error-line,

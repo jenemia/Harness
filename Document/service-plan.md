@@ -235,6 +235,8 @@ Scheduling rules:
 - PM handoff decisions run automatically by default.
 - Users can set concurrency limits per project and per agent.
 
+Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan.
+
 ### Sequential Workflow Chains
 
 Some work should move through a planned chain of agents.
