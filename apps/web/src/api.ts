@@ -250,7 +250,18 @@ export type ProviderCatalog = {
     capabilities: {
       shell: string;
       processGroups: boolean;
+    };
+  };
+  workspace: {
+    id: string;
+    label: string;
+    kind: "git-worktree";
+    description: string;
+    capabilities: {
+      isolatedTaskWorkspace: boolean;
       gitWorktrees: boolean;
+      branchPerTask: boolean;
+      mergeIntoMainCheckout: boolean;
     };
   };
   llmProviders: Array<{

@@ -27,12 +27,24 @@ export type PlatformProvider = {
   capabilities: {
     shell: string;
     processGroups: boolean;
-    gitWorktrees: boolean;
   };
   run(command: string, args: string[], cwd: string, allowFailure?: boolean): Promise<CommandResult>;
   runShell(command: string, cwd: string, extraEnv: Record<string, string>, timeoutMs?: number): Promise<{ ok: boolean; output: string; error: string | null }>;
+};
+
+export type WorkspaceProvider = {
+  id: string;
+  label: string;
+  kind: "git-worktree";
+  description: string;
+  capabilities: {
+    isolatedTaskWorkspace: boolean;
+    gitWorktrees: boolean;
+    branchPerTask: boolean;
+    mergeIntoMainCheckout: boolean;
+  };
   ensureGitReady(projectPath: string): Promise<void>;
-  ensureTaskWorktree(projectPath: string, task: TaskRecord): Promise<TaskWorkspace>;
+  ensureTaskWorkspace(projectPath: string, task: TaskRecord): Promise<TaskWorkspace>;
   commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null }>;
   mergeBranch(projectPath: string, branchName: string, message: string): Promise<CommandResult>;
   workingTreeStatus(projectPath: string): Promise<string>;
@@ -63,11 +75,16 @@ export type LlmProviderDefinition = {
 export class ProviderRegistry {
   constructor(
     private readonly platformProvider: PlatformProvider,
+    private readonly workspaceProvider: WorkspaceProvider,
     private readonly llmProviders: LlmProvider[]
   ) {}
 
   platform() {
     return this.platformProvider;
+  }
+
+  workspace() {
+    return this.workspaceProvider;
   }
 
   llm(modelBackend: string) {
@@ -80,8 +97,9 @@ export class ProviderRegistry {
 }
 
 export function createDefaultProviders(projectHarnessDir: (projectPath: string) => string) {
-  const platformProvider = createPlatformProvider(projectHarnessDir);
-  return new ProviderRegistry(platformProvider, [
+  const platformProvider = createPlatformProvider();
+  const workspaceProvider = createGitWorktreeWorkspaceProvider(platformProvider, projectHarnessDir);
+  return new ProviderRegistry(platformProvider, workspaceProvider, [
     createMockLlmProvider(),
     createShellLlmProvider(platformProvider),
     createCliLlmProvider(platformProvider, {
@@ -117,9 +135,9 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
   ]);
 }
 
-function createPlatformProvider(projectHarnessDir: (projectPath: string) => string): PlatformProvider {
+function createPlatformProvider(): PlatformProvider {
   if (process.platform === "darwin") {
-    return createNodePlatformProvider(projectHarnessDir, {
+    return createNodePlatformProvider({
       id: "node-darwin",
       label: "Node macOS Platform",
       shell: process.env.SHELL || "/bin/zsh",
@@ -128,7 +146,7 @@ function createPlatformProvider(projectHarnessDir: (projectPath: string) => stri
   }
 
   if (process.platform === "win32") {
-    return createNodePlatformProvider(projectHarnessDir, {
+    return createNodePlatformProvider({
       id: "node-win32",
       label: "Node Windows Platform",
       shell: process.env.ComSpec || "cmd.exe",
@@ -136,7 +154,7 @@ function createPlatformProvider(projectHarnessDir: (projectPath: string) => stri
     });
   }
 
-  return createNodePlatformProvider(projectHarnessDir, {
+  return createNodePlatformProvider({
     id: `node-${process.platform}`,
     label: `Node ${process.platform} Platform`,
     shell: process.env.SHELL || "/bin/sh",
@@ -145,7 +163,6 @@ function createPlatformProvider(projectHarnessDir: (projectPath: string) => stri
 }
 
 function createNodePlatformProvider(
-  projectHarnessDir: (projectPath: string) => string,
   config: {
     id: string;
     label: string;
@@ -159,8 +176,7 @@ function createNodePlatformProvider(
     platform: process.platform,
     capabilities: {
       shell: config.shell,
-      processGroups: config.processGroups,
-      gitWorktrees: true
+      processGroups: config.processGroups
     },
 
     run,
@@ -211,23 +227,40 @@ function createNodePlatformProvider(
           ? `Command timed out after ${Math.round((timeoutMs || 0) / 1000)} seconds.`
           : result.error || (result.code === 0 ? null : `Command exited with code ${result.code}`)
       };
-    },
+    }
+  };
+}
 
+function createGitWorktreeWorkspaceProvider(
+  platformProvider: PlatformProvider,
+  projectHarnessDir: (projectPath: string) => string
+): WorkspaceProvider {
+  return {
+    id: "git-worktree",
+    label: "Git Worktree Workspace",
+    kind: "git-worktree",
+    description: "Creates one Git branch and worktree per executable task.",
+    capabilities: {
+      isolatedTaskWorkspace: true,
+      gitWorktrees: true,
+      branchPerTask: true,
+      mergeIntoMainCheckout: true
+    },
     async ensureGitReady(projectPath) {
-      const inside = await run("git", ["rev-parse", "--is-inside-work-tree"], projectPath, true);
+      const inside = await platformProvider.run("git", ["rev-parse", "--is-inside-work-tree"], projectPath, true);
       if (!inside.ok) {
-        await run("git", ["init"], projectPath);
+        await platformProvider.run("git", ["init"], projectPath);
       }
 
-      await ensureHarnessGitExclude(projectPath);
+      await ensureHarnessGitExclude(platformProvider, projectPath);
 
-      const hasHead = await run("git", ["rev-parse", "--verify", "HEAD"], projectPath, true);
+      const hasHead = await platformProvider.run("git", ["rev-parse", "--verify", "HEAD"], projectPath, true);
       if (!hasHead.ok) {
         throw new Error("Git worktree execution requires at least one commit in the project repository.");
       }
     },
 
-    async ensureTaskWorktree(projectPath, task) {
+    async ensureTaskWorkspace(projectPath, task) {
       if (task.worktreePath && task.branchName) {
         return {
           branchName: task.branchName,
@@ -246,22 +279,22 @@ function createNodePlatformProvider(
       const worktreePath = path.join(projectHarnessDir(projectPath), "worktrees", task.id);
       mkdirSync(path.dirname(worktreePath), { recursive: true });
 
-      const existingWorktree = await run("git", ["worktree", "list", "--porcelain"], projectPath);
+      const existingWorktree = await platformProvider.run("git", ["worktree", "list", "--porcelain"], projectPath);
       if (!existingWorktree.stdout.includes(worktreePath)) {
-        await run("git", ["worktree", "add", "-B", branchName, worktreePath, "HEAD"], projectPath);
+        await platformProvider.run("git", ["worktree", "add", "-B", branchName, worktreePath, "HEAD"], projectPath);
       }
 
       return { branchName, worktreePath };
     },
 
     async commitAll(cwd, message) {
-      const status = await run("git", ["status", "--porcelain"], cwd);
+      const status = await platformProvider.run("git", ["status", "--porcelain"], cwd);
       if (!status.stdout.trim()) {
         return { committed: false, output: "No file changes to commit.", error: null };
       }
 
-      await run("git", ["add", "-A"], cwd);
-      const commit = await run(
+      await platformProvider.run("git", ["add", "-A"], cwd);
+      const commit = await platformProvider.run(
         "git",
         [
           "-c",
@@ -279,19 +312,19 @@ function createNodePlatformProvider(
     },
 
     mergeBranch(projectPath, branchName, message) {
-      return run("git", ["merge", "--no-ff", branchName, "-m", message], projectPath, true);
+      return platformProvider.run("git", ["merge", "--no-ff", branchName, "-m", message], projectPath, true);
     },
 
     async workingTreeStatus(projectPath) {
-      return (await run("git", ["status", "--porcelain"], projectPath)).stdout;
+      return (await platformProvider.run("git", ["status", "--porcelain"], projectPath)).stdout;
     },
 
     async snapshotRef(cwd) {
-      return (await run("git", ["rev-parse", "HEAD"], cwd)).stdout.trim();
+      return (await platformProvider.run("git", ["rev-parse", "HEAD"], cwd)).stdout.trim();
     },
 
     async changedFiles(cwd) {
-      const status = await run("git", ["status", "--porcelain"], cwd);
+      const status = await platformProvider.run("git", ["status", "--porcelain"], cwd);
       return status.stdout
         .split("\n")
         .map((line) => line.trimEnd())
@@ -483,8 +516,8 @@ function formatProjectMemory(memories: MemoryRecord[]) {
     .join("\n\n");
 }
 
-async function ensureHarnessGitExclude(projectPath: string) {
-  const excludePath = await run("git", ["rev-parse", "--git-path", "info/exclude"], projectPath);
+async function ensureHarnessGitExclude(platformProvider: PlatformProvider, projectPath: string) {
+  const excludePath = await platformProvider.run("git", ["rev-parse", "--git-path", "info/exclude"], projectPath);
   const filePath = path.isAbsolute(excludePath.stdout.trim())
     ? excludePath.stdout.trim()
     : path.join(projectPath, excludePath.stdout.trim());

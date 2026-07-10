@@ -29,6 +29,13 @@ export function listRuntimeProviders() {
       platform: providers.platform().platform,
       capabilities: providers.platform().capabilities
     },
+    workspace: {
+      id: providers.workspace().id,
+      label: providers.workspace().label,
+      kind: providers.workspace().kind,
+      description: providers.workspace().description,
+      capabilities: providers.workspace().capabilities
+    },
     llmProviders: providers.llmDefinitions()
   };
 }
@@ -297,12 +304,12 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
       return { ok: false, reason: `Task merge status is ${task.mergeStatus}.` };
     }
 
-    const dirty = await providers.platform().workingTreeStatus(project.path);
+    const dirty = await providers.workspace().workingTreeStatus(project.path);
     if (dirty.trim()) {
       return { ok: false, reason: "Main project checkout has uncommitted changes. Commit or stash them before merging." };
     }
 
-    const merge = await providers.platform().mergeBranch(
+    const merge = await providers.workspace().mergeBranch(
       project.path,
       task.branchName,
       `Merge Harness task ${task.id.slice(0, 8)}`
@@ -474,8 +481,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     updateTaskStatus(db, task.id, agent.role === "reviewer" ? "In Review" : "In Progress");
     setAgentBusy(db, agent.id, task.id);
 
-    const workspace = await providers.platform().ensureTaskWorktree(project.path, task);
-    const snapshotRef = await providers.platform().snapshotRef(workspace.worktreePath);
+    const workspace = await providers.workspace().ensureTaskWorkspace(project.path, task);
+    const snapshotRef = await providers.workspace().snapshotRef(workspace.worktreePath);
     const freshTask = getTask(db, task.id) ?? task;
     const executionAgent = withProviderCommand(agent, freshTask, settings);
     const selectedProvider = providers.llm(executionAgent.modelBackend);
@@ -536,7 +543,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const completedAt = now();
     const changedFiles = await collectChangedFiles(workspace.worktreePath);
     const commitResult = result.ok
-      ? await providers.platform().commitAll(
+      ? await providers.workspace().commitAll(
           workspace.worktreePath,
           `Harness task ${task.id.slice(0, 8)}: ${task.title}`
         )
@@ -605,7 +612,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
 
 async function collectChangedFiles(worktreePath: string) {
   try {
-    return await providers.platform().changedFiles(worktreePath);
+    return await providers.workspace().changedFiles(worktreePath);
   } catch {
     return [];
   }

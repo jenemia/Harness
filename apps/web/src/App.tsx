@@ -1921,8 +1921,16 @@ function SettingsPanel(props: {
           </span>
           <span>
             shell {props.providerCatalog.platform.capabilities.shell} | process groups{" "}
-            {props.providerCatalog.platform.capabilities.processGroups ? "on" : "off"} | git worktrees{" "}
-            {props.providerCatalog.platform.capabilities.gitWorktrees ? "on" : "off"}
+            {props.providerCatalog.platform.capabilities.processGroups ? "on" : "off"}
+          </span>
+          <strong>{props.providerCatalog.workspace.label}</strong>
+          <span>
+            {props.providerCatalog.workspace.id} | {props.providerCatalog.workspace.description}
+          </span>
+          <span>
+            isolated workspace {props.providerCatalog.workspace.capabilities.isolatedTaskWorkspace ? "on" : "off"} | git
+            worktrees {props.providerCatalog.workspace.capabilities.gitWorktrees ? "on" : "off"} | branch per task{" "}
+            {props.providerCatalog.workspace.capabilities.branchPerTask ? "on" : "off"}
           </span>
         </div>
       )}

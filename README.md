@@ -22,7 +22,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
 - Configurable run timeout for command-backed providers.
-- Provider-based platform and LLM adapters.
+- Provider-based platform, workspace, and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Task-level model backend overrides for routing specific work to a different provider.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
@@ -94,7 +94,7 @@ Provider commands are a provider-to-command map. Agent-specific `cliCommand` val
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`; roles without a matching rule move to Done after successful completion.
 
-The provider catalog exposes the active OS platform provider, its shell/process/worktree capabilities, and the available LLM providers through `/api/providers` and `providers:list`.
+The provider catalog exposes the active OS platform provider, workspace isolation provider, and available LLM providers through `/api/providers` and `providers:list`.
 
 ## Project Templates
 
