@@ -110,6 +110,14 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     }
 
     const pmAgent = agents.find((agent) => agent.role === "project-manager") || null;
+    const assignmentSummary = inserted.map((task) => ({
+      taskId: task.id,
+      title: task.title,
+      role: task.labels.find((label) => label.startsWith("role:"))?.replace("role:", "") || "worker",
+      assigneeAgentId: task.assigneeAgentId,
+      assigneeAgentName: task.assigneeAgentId ? agentsById.get(task.assigneeAgentId)?.name || null : null,
+      dependencyTaskIds: task.dependencyTaskIds
+    }));
     insertEvent(db, {
       taskId: null,
       agentId: pmAgent?.id || null,
@@ -121,6 +129,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
         sourceDocumentId: input.sourceDocumentId || null,
         workflowTemplateId: preview.workflowTemplateId,
         taskIds: inserted.map((task) => task.id),
+        assignments: assignmentSummary,
         warnings: preview.warnings
       }
     });
@@ -224,7 +233,13 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       agentId: task.assigneeAgentId,
       type: "task.created",
       message: `${task.title} was created by PM planning.`,
-      metadata: { status: task.status, role: inputTask.role, dependencyTaskIds: task.dependencyTaskIds }
+      metadata: {
+        status: task.status,
+        role: inputTask.role,
+        assigneeAgentId: task.assigneeAgentId,
+        assigneeAgentName: inputTask.assigneeAgent?.name || null,
+        dependencyTaskIds: task.dependencyTaskIds
+      }
     });
 
     return mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(task.id));
