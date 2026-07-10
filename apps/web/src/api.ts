@@ -21,10 +21,14 @@ export type ProjectSummary = {
   harnessDbExists: boolean;
   summaryError: string | null;
   totalTasks: number;
+  backlogTasks: number;
+  selectedTasks: number;
   blockedTasks: number;
   runningTasks: number;
+  failedRuns: number;
   pendingApprovals: number;
   pendingMerges: number;
+  followUpBacklogTasks: number;
   busyAgents: number;
 };
 

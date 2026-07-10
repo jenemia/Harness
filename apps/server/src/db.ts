@@ -1095,10 +1095,14 @@ function getProjectSummary(projectPath: string) {
     harnessDbExists,
     summaryError: null,
     totalTasks: 0,
+    backlogTasks: 0,
+    selectedTasks: 0,
     blockedTasks: 0,
     runningTasks: 0,
+    failedRuns: 0,
     pendingApprovals: 0,
     pendingMerges: 0,
+    followUpBacklogTasks: 0,
     busyAgents: 0
   };
 
@@ -1120,10 +1124,18 @@ function getProjectSummary(projectPath: string) {
       harnessDbExists,
       summaryError: null,
       totalTasks: count("SELECT COUNT(*) AS count FROM tasks"),
+      backlogTasks: count("SELECT COUNT(*) AS count FROM tasks WHERE status = ?", "Backlog"),
+      selectedTasks: count("SELECT COUNT(*) AS count FROM tasks WHERE status = ?", "Selected"),
       blockedTasks: count("SELECT COUNT(*) AS count FROM tasks WHERE status = ?", "Blocked"),
       runningTasks: count("SELECT COUNT(*) AS count FROM runs WHERE status = ?", "running"),
+      failedRuns: count("SELECT COUNT(*) AS count FROM runs WHERE status = ?", "failed"),
       pendingApprovals: count("SELECT COUNT(*) AS count FROM approvals WHERE status = ?", "pending"),
       pendingMerges: count("SELECT COUNT(*) AS count FROM tasks WHERE merge_status IN (?, ?)", "pending", "conflict"),
+      followUpBacklogTasks: count(
+        "SELECT COUNT(*) AS count FROM tasks WHERE status = ? AND labels LIKE ?",
+        "Backlog",
+        '%"follow-up"%'
+      ),
       busyAgents: count("SELECT COUNT(*) AS count FROM agents WHERE status = ?", "busy")
     };
   } catch (error) {

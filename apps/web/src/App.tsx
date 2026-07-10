@@ -1141,10 +1141,14 @@ function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
   return (
     <div className="project-summary-row">
       <b>{summary.totalTasks} tasks</b>
+      {summary.selectedTasks > 0 && <b className="selected">{summary.selectedTasks} selected</b>}
+      {summary.backlogTasks > 0 && <b>{summary.backlogTasks} backlog</b>}
       {summary.runningTasks > 0 && <b className="running">{summary.runningTasks} running</b>}
+      {summary.failedRuns > 0 && <b className="blocked">{summary.failedRuns} failed</b>}
       {summary.blockedTasks > 0 && <b className="blocked">{summary.blockedTasks} blocked</b>}
       {summary.pendingApprovals > 0 && <b className="approval">{summary.pendingApprovals} approvals</b>}
       {summary.pendingMerges > 0 && <b className="merge">{summary.pendingMerges} merges</b>}
+      {summary.followUpBacklogTasks > 0 && <b className="followup">{summary.followUpBacklogTasks} follow-ups</b>}
     </div>
   );
 }
