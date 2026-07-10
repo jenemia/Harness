@@ -497,20 +497,23 @@ function ProjectHealthPanel({ overview, providerCatalog }: { overview: Overview;
     () => findProviderCommandIssues(overview, providerCatalog),
     [overview, providerCatalog]
   );
+  const schedulerIssues = useMemo(() => findSchedulerIssues(overview), [overview]);
   const recommendation =
     providerCommandIssues.length > 0
       ? "Configure provider commands"
-      : pendingApprovals > 0
-      ? "Review approvals"
-      : pendingMerges > 0
-        ? "Resolve merges"
-        : blockedTasks.length > 0
-          ? "Clear blockers"
-          : failedRuns > 0
-            ? "Review failed runs"
-            : readyTasks > 0 && idleAgents > 0
-              ? "Run ready tasks"
-              : "No immediate blockers";
+      : schedulerIssues.length > 0
+        ? "Fix ready task blockers"
+        : pendingApprovals > 0
+          ? "Review approvals"
+          : pendingMerges > 0
+            ? "Resolve merges"
+            : blockedTasks.length > 0
+              ? "Clear blockers"
+              : failedRuns > 0
+                ? "Review failed runs"
+                : readyTasks > 0 && idleAgents > 0
+                  ? "Run ready tasks"
+                  : "No immediate blockers";
 
   return (
     <section className="rail-panel">
@@ -548,6 +551,10 @@ function ProjectHealthPanel({ overview, providerCatalog }: { overview: Overview;
           <span>provider commands</span>
         </div>
         <div className="compact-row">
+          <strong>{schedulerIssues.length}</strong>
+          <span>scheduler</span>
+        </div>
+        <div className="compact-row">
           <strong>{recommendation}</strong>
           <span>next</span>
         </div>
@@ -557,8 +564,111 @@ function ProjectHealthPanel({ overview, providerCatalog }: { overview: Overview;
           Set {providerCommandIssues[0].candidateKeys.join(", ")} for {providerCommandIssues[0].modelBackend}.
         </p>
       )}
+      {!providerCommandIssues[0] && schedulerIssues[0] && (
+        <p className="provider-help">
+          {schedulerIssues[0].title}: {schedulerIssues[0].reason}
+        </p>
+      )}
     </section>
   );
+}
+
+function findSchedulerIssues(overview: Overview) {
+  const tasksById = new Map(overview.tasks.map((task) => [task.id, task]));
+  const agentsById = new Map(overview.agents.map((agent) => [agent.id, agent]));
+  const agentLoads = new Map<string, number>();
+  let projectLoad = 0;
+
+  for (const run of overview.runs) {
+    if (run.status !== "running") {
+      continue;
+    }
+    projectLoad += 1;
+    agentLoads.set(run.agentId, (agentLoads.get(run.agentId) || 0) + 1);
+  }
+
+  const readyTasks = overview.tasks
+    .filter((task) => task.status === "Selected" || task.status === "Backlog")
+    .sort((left, right) => left.taskOrder - right.taskOrder || left.createdAt.localeCompare(right.createdAt));
+  const workerAgents = overview.agents.filter((agent) => agent.role !== "project-manager");
+  const issues: Array<{ taskId: string; title: string; reason: string }> = [];
+
+  for (const task of readyTasks) {
+    if (projectLoad >= overview.settings.maxProjectParallel) {
+      issues.push({ taskId: task.id, title: task.title, reason: "Project has reached its parallel run limit." });
+      continue;
+    }
+
+    const dependencyBlocker = getDependencyBlocker(task, tasksById);
+    if (dependencyBlocker) {
+      issues.push({ taskId: task.id, title: task.title, reason: dependencyBlocker });
+      continue;
+    }
+
+    const agentResult = chooseSchedulableAgent(task, agentsById, workerAgents, agentLoads);
+    if (!agentResult.agent) {
+      issues.push({ taskId: task.id, title: task.title, reason: agentResult.reason });
+      continue;
+    }
+
+    projectLoad += 1;
+    agentLoads.set(agentResult.agent.id, (agentLoads.get(agentResult.agent.id) || 0) + 1);
+  }
+
+  return issues;
+}
+
+function chooseSchedulableAgent(
+  task: Task,
+  agentsById: Map<string, Agent>,
+  workerAgents: Agent[],
+  agentLoads: Map<string, number>
+): { agent: Agent | null; reason: string } {
+  if (task.assigneeAgentId) {
+    const assigned = agentsById.get(task.assigneeAgentId);
+    if (!assigned) {
+      return { agent: null, reason: "Assigned agent is missing." };
+    }
+    if ((agentLoads.get(assigned.id) || 0) >= assigned.maxParallel) {
+      return { agent: null, reason: "Assigned agent has reached its parallel run limit." };
+    }
+    return { agent: assigned, reason: "" };
+  }
+
+  if (!workerAgents.length) {
+    return { agent: null, reason: "No worker agents are available for scheduling." };
+  }
+
+  const agent = workerAgents.find((candidate) => (agentLoads.get(candidate.id) || 0) < candidate.maxParallel) || null;
+  return {
+    agent,
+    reason: agent ? "" : "No agent has available execution capacity."
+  };
+}
+
+function getDependencyBlocker(task: Task, tasksById: Map<string, Task>) {
+  if (!task.dependencyTaskIds.length) {
+    return null;
+  }
+
+  const waivedIds = new Set(task.waivedDependencyTaskIds);
+  const activeDependencyIds = task.dependencyTaskIds.filter((id) => !waivedIds.has(id));
+  if (!activeDependencyIds.length) {
+    return null;
+  }
+
+  const dependencies = activeDependencyIds.map((id) => tasksById.get(id)).filter((dependency): dependency is Task => Boolean(dependency));
+  const doneIds = new Set(dependencies.filter((dependency) => dependency.status === "Done").map((dependency) => dependency.id));
+  const missingIds = activeDependencyIds.filter((id) => !tasksById.has(id));
+  const blocked = dependencies.filter((dependency) => dependency.status !== "Done");
+
+  if (!missingIds.length && !blocked.length && doneIds.size === activeDependencyIds.length) {
+    return null;
+  }
+
+  const blockedTitles = blocked.map((dependency) => `${dependency.title} (${dependency.status})`);
+  const missing = missingIds.map((id) => `${id.slice(0, 8)} (missing)`);
+  return `Waiting on dependencies: ${[...blockedTitles, ...missing].join(", ")}`;
 }
 
 function findProviderCommandIssues(overview: Overview, providerCatalog: ProviderCatalog | null) {

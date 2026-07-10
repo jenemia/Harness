@@ -8,7 +8,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Project root scanning for importing existing Harness folders and Git repositories.
 - Git initialization flow for plain folders that need a baseline commit before agent worktrees can run.
 - Project sidebar summaries for task, blocker, approval, running, and merge counts across local folders.
-- Project health report for blockers, approvals, merges, failed runs, provider command setup gaps, and next recommended action.
+- Project health report for blockers, approvals, merges, failed runs, scheduler readiness gaps, provider command setup gaps, and next recommended action.
 - Project templates for seeding new folders with a useful starter agent team.
 - Jira-like Kanban board with task search, assignee filtering, and label filtering.
 - Jira-like task detail drawer with editable metadata, labels, linked files, parent/subtask links, dependencies, runs, changed files, handoff decision badges, timeline, workspace, and merge state.
@@ -134,7 +134,7 @@ Provider commands are a provider-to-command map. Agent-specific `cliCommand` val
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. Dynamic handoffs with risk or error signals pause for human approval before the next agent starts. If no configured or dynamic handoff applies, the task moves to Done.
 
-The provider catalog exposes the active OS platform provider, workspace isolation provider, planning provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including planning and approval capabilities. Project health reports also flag command-backed model backends that do not have an agent override or matching provider command key configured.
+The provider catalog exposes the active OS platform provider, workspace isolation provider, planning provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including planning and approval capabilities. Project health reports also flag command-backed model backends that do not have an agent override or matching provider command key configured, plus ready tasks that the scheduler cannot start because of dependency, project capacity, or agent capacity gaps.
 
 ## Project Templates
 
