@@ -827,6 +827,7 @@ textarea {
 }
 
 .path-list,
+.comment-list,
 .dependency-list,
 .handoff-list,
 .run-list,
@@ -837,6 +838,7 @@ textarea {
 }
 
 .path-line-row,
+.comment-row,
 .drawer-warning,
 .dependency-row,
 .handoff-row,
@@ -863,6 +865,41 @@ textarea {
   font-size: 12px;
   line-height: 1.35;
   padding: 8px;
+}
+
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment-form textarea {
+  min-height: 78px;
+}
+
+.comment-row {
+  background: #f7f8f9;
+  border-radius: 6px;
+  flex-direction: column;
+  padding: 9px 10px;
+}
+
+.comment-row strong,
+.comment-row small {
+  display: inline-block;
+  font-size: 12px;
+}
+
+.comment-row small {
+  color: #626f86;
+  margin-left: 8px;
+}
+
+.comment-row p {
+  color: #44546f;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .dependency-row {

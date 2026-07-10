@@ -11,6 +11,7 @@ import {
   insertEvent,
   listProjectsWithSummaries,
   mapAgent,
+  mapComment,
   mapDocument,
   now,
   openProjectDb,
@@ -165,6 +166,12 @@ const server = http.createServer(async (req, res) => {
         if (req.method === "POST" && action === "merge") {
           const result = await approveMerge(project, taskId);
           sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          return;
+        }
+
+        if (req.method === "POST" && action === "comments") {
+          const comment = createTaskComment(project, taskId, await readBody(req));
+          sendJson(res, { comment, overview: getProjectOverview(project) }, 201);
           return;
         }
       }
@@ -440,6 +447,42 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
     });
 
     return db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+  } finally {
+    db.close();
+  }
+}
+
+function createTaskComment(project: ProjectRecord, taskId: string, input: { author?: string; body?: string }) {
+  if (!input.body?.trim()) {
+    throw new Error("Comment body is required.");
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    const task = db.prepare("SELECT id FROM tasks WHERE id = ?").get(taskId);
+    if (!task) {
+      throw new Error("Task not found.");
+    }
+
+    const timestamp = now();
+    const id = randomUUID();
+    const author = input.author?.trim() || "human";
+    db.prepare("INSERT INTO comments VALUES (?, ?, ?, ?, ?)").run(
+      id,
+      taskId,
+      author,
+      input.body.trim(),
+      timestamp
+    );
+    insertEvent(db, {
+      taskId,
+      agentId: null,
+      type: "comment.created",
+      message: `${author} commented on this task.`,
+      metadata: { commentId: id }
+    });
+
+    return mapComment(db.prepare("SELECT * FROM comments WHERE id = ?").get(id));
   } finally {
     db.close();
   }

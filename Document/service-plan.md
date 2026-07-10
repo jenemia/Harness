@@ -467,7 +467,7 @@ The task detail view should include:
 - Comments
 - Human approval prompts
 
-Initial implementation: board cards can open a task detail drawer showing editable metadata, dependencies, branch/worktree, merge state, task-scoped runs, run output/errors, handoff history, and an activity timeline.
+Initial implementation: board cards can open a task detail drawer showing editable metadata, dependencies, branch/worktree, merge state, task-scoped comments, task-scoped runs, run output/errors, handoff history, and an activity timeline.
 
 ### Agent Directory
 

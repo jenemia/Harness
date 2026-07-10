@@ -110,6 +110,14 @@ export type Handoff = {
   createdAt: string;
 };
 
+export type CommentRecord = {
+  id: string;
+  taskId: string;
+  author: string;
+  body: string;
+  createdAt: string;
+};
+
 export type Event = {
   id: string;
   taskId: string | null;
@@ -141,6 +149,7 @@ export type Overview = {
   documents: DocumentRecord[];
   approvals: Approval[];
   handoffs: Handoff[];
+  comments: CommentRecord[];
   events: Event[];
   runs: Run[];
 };

@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type {
   AgentRecord,
   ApprovalRecord,
+  CommentRecord,
   DocumentRecord,
   EventRecord,
   GlobalSettings,
@@ -217,6 +218,14 @@ export function openProjectDb(projectPath: string) {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS comments (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      author TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS approvals (
@@ -464,6 +473,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
       handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
+      comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
       runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
     };
@@ -659,6 +669,17 @@ export function mapHandoff(row: unknown): HandoffRecord {
     toAgentId: r.to_agent_id ? String(r.to_agent_id) : null,
     reason: String(r.reason),
     createdAt: String(r.created_at)
+  };
+}
+
+export function mapComment(row: unknown): CommentRecord {
+  const r = row as Record<string, string>;
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    author: r.author,
+    body: r.body,
+    createdAt: r.created_at
   };
 }
 

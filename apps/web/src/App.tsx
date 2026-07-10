@@ -19,7 +19,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Approval, DocumentRecord, Event, Handoff, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, Approval, CommentRecord, DocumentRecord, Event, Handoff, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -755,9 +755,11 @@ function TaskDetailDrawer(props: {
   const [editStatus, setEditStatus] = useState<TaskStatus>(props.task.status);
   const [editPriority, setEditPriority] = useState<Task["priority"]>(props.task.priority);
   const [editAssigneeAgentId, setEditAssigneeAgentId] = useState(props.task.assigneeAgentId || "");
+  const [commentBody, setCommentBody] = useState("");
   const runs = props.overview.runs.filter((run) => run.taskId === props.task.id);
   const events = props.overview.events.filter((event) => event.taskId === props.task.id);
   const handoffs = props.overview.handoffs.filter((handoff) => handoff.taskId === props.task.id);
+  const comments = props.overview.comments.filter((comment) => comment.taskId === props.task.id);
   const dependencies = props.task.dependencyTaskIds
     .map((id) => props.overview.tasks.find((task) => task.id === id))
     .filter(Boolean) as Task[];
@@ -800,6 +802,18 @@ function TaskDetailDrawer(props: {
         })
       });
       setIsEditing(false);
+      await props.onChanged();
+    });
+  }
+
+  async function addComment(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: commentBody, author: "human" })
+      });
+      setCommentBody("");
       await props.onChanged();
     });
   }
@@ -933,6 +947,7 @@ function TaskDetailDrawer(props: {
           </section>
         )}
 
+        <TaskComments comments={comments} body={commentBody} onBodyChange={setCommentBody} onSubmit={addComment} />
         <TaskRuns runs={runs} />
         <TaskHandoffs handoffs={handoffs} agents={props.overview.agents} />
         <TaskTimeline events={events} runs={runs} />
@@ -956,6 +971,42 @@ function PathLine({ icon, value }: { icon: ReactNode; value: string }) {
       {icon}
       <span>{value}</span>
     </div>
+  );
+}
+
+function TaskComments(props: {
+  comments: CommentRecord[];
+  body: string;
+  onBodyChange: (value: string) => void;
+  onSubmit: (event: FormEvent) => void;
+}) {
+  return (
+    <section className="drawer-section">
+      <h3>Comments</h3>
+      <form className="comment-form" onSubmit={props.onSubmit}>
+        <textarea
+          value={props.body}
+          onChange={(event) => props.onBodyChange(event.target.value)}
+          placeholder="Leave a note"
+        />
+        <button className="secondary-button" type="submit">
+          <Plus size={16} />
+          <span>Comment</span>
+        </button>
+      </form>
+      <div className="comment-list">
+        {props.comments.length === 0 && <p className="drawer-copy">No comments yet.</p>}
+        {props.comments.map((comment) => (
+          <div className="comment-row" key={comment.id}>
+            <div>
+              <strong>{comment.author}</strong>
+              <small>{formatDate(comment.createdAt)}</small>
+            </div>
+            <p>{comment.body}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
