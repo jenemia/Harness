@@ -110,10 +110,10 @@ export function ProjectPanel(props: ProjectPanelProps) {
   }
 
   return (
-    <section className="sidebar-section">
-      <div className="section-title">
-        <FolderOpen size={15} />
-        <span>{t("projects.heading")}</span>
+    <section className="settings-card project-management-panel">
+      <div className="panel-header">
+        <FolderOpen size={17} />
+        <h2>{t("projects.heading")}</h2>
       </div>
       <div className="project-list">
         {props.projects.map((project) => (

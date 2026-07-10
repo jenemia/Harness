@@ -556,6 +556,19 @@ textarea {
   min-height: 28px;
 }
 
+.checkbox-row {
+  align-items: center;
+  color: #555b66;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  min-height: auto;
+  width: auto;
+}
+
 .check-row input {
   min-height: auto;
   width: auto;
@@ -579,4 +592,245 @@ textarea {
   bottom: 18px;
   background: #172b4d;
   color: #ffffff;
+}
+
+/* Workspace layout */
+.rail-panel,
+.settings-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+  padding: 16px;
+}
+
+.panel-header {
+  align-items: center;
+  border-bottom: 1px solid #f0f1f3;
+  color: #30333a;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding-bottom: 11px;
+}
+
+.panel-header h2 {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.compact-list,
+.approval-list,
+.event-list,
+.agent-list,
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-page {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(320px, 0.7fr) minmax(480px, 1.3fr);
+}
+
+.feature-page > .rail-panel,
+.settings-page > .rail-panel,
+.settings-page > .settings-card {
+  padding: 18px;
+}
+
+.activity-page {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agents-page .agent-list {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agents-page .agent-row {
+  background: #fbfbfc;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px;
+}
+
+.project-management-panel .project-item {
+  align-items: center;
+  background: #fafafb;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  padding: 4px 5px 4px 9px;
+}
+
+.project-management-panel .project-item.active {
+  background: var(--accent-soft);
+  border-color: #ffc7dd;
+}
+
+.project-management-panel .project-select {
+  align-items: flex-start;
+  background: transparent;
+  border: 0;
+  color: #282b32;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px 0;
+  text-align: left;
+}
+
+.project-management-panel .project-select > span {
+  color: var(--muted);
+  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-remove {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #8a8e97;
+  display: flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.project-remove:hover {
+  background: #fff0f0;
+  color: #b42318;
+}
+
+.project-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.project-summary-row b {
+  background: #f0f1f3;
+  border-radius: 999px;
+  color: #686d77;
+  font-size: 9px;
+  padding: 4px 6px;
+}
+
+.project-summary-row b.running,
+.project-summary-row b.selected {
+  background: #e8fbf2;
+  color: #008f5d;
+}
+
+.project-summary-row b.blocked {
+  background: #fff0ed;
+  color: #ad2e1f;
+}
+
+.project-summary-row b.approval,
+.project-summary-row b.merge {
+  background: #fff7dc;
+  color: #805d00;
+}
+
+.project-management-panel .import-root-form,
+.project-management-panel .relink-form,
+.split-form {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.language-setting {
+  background: #fafafb;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+input,
+select,
+textarea {
+  background: #ffffff;
+  border: 1px solid #dfe1e5;
+  border-radius: 7px;
+  color: #292c33;
+  min-height: 36px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #f199bc;
+  box-shadow: 0 0 0 3px rgb(230 0 103 / 8%);
+  outline: 0;
+}
+
+.primary-button,
+.secondary-button,
+.icon-button {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 7px;
+  justify-content: center;
+  min-height: 35px;
+  padding: 0 11px;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.primary-button:hover {
+  background: #ca005b;
+}
+
+.secondary-button,
+.icon-button {
+  background: #ffffff;
+  border-color: var(--border);
+  color: #34373e;
+}
+
+.secondary-button:hover,
+.icon-button:hover {
+  background: #f7f7f8;
+}
+
+.icon-button {
+  padding: 0;
+  width: 35px;
+}
+
+.mini-button {
+  background: #f2f3f5;
+  border: 0;
+  border-radius: 6px;
+  color: #555b66;
+  font-size: 10px;
+  min-height: 26px;
+  padding: 0 8px;
 }
