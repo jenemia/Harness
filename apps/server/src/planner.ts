@@ -19,6 +19,7 @@ export type PlannedTaskSummary = {
   id: string;
   title: string;
   role: string;
+  assigneeAgentId: string | null;
   dependencyTaskIds: string[];
 };
 
@@ -49,6 +50,7 @@ export type PlanningProviderDefinition = {
     workflowTemplates: boolean;
     sequentialDependencies: boolean;
     parallelMode: boolean;
+    loadAwareAssignment: boolean;
     largePlanWarnings: boolean;
   };
 };
@@ -78,11 +80,12 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
   const db = openProjectDb(project.path);
   try {
     const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
+    const agentLoads = createAgentPlanningLoads(db);
     const inserted: TaskRecord[] = [];
 
     for (const item of preview.tasks) {
       const dependencies = item.dependencyIndexes.map((index) => inserted[index]?.id).filter((id): id is string => Boolean(id));
-      const agent = chooseAgentForRole(agents, item.role);
+      const agent = chooseAgentForRole(agents, item.role, agentLoads);
       const task = insertPlannedTask({
         title: item.title,
         description: item.description,
@@ -94,6 +97,9 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
         status: item.status
       });
       inserted.push(task);
+      if (agent) {
+        incrementPlannedAgentLoad(agentLoads, agent.id);
+      }
     }
 
     const pmAgent = agents.find((agent) => agent.role === "project-manager") || null;
@@ -121,6 +127,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
         id: task.id,
         title: task.title,
         role: task.labels.find((label) => label.startsWith("role:"))?.replace("role:", "") || "worker",
+        assigneeAgentId: task.assigneeAgentId,
         dependencyTaskIds: task.dependencyTaskIds
       }))
     };
@@ -230,6 +237,7 @@ function createDeterministicPlanningProvider(): PlanningProvider {
         workflowTemplates: true,
         sequentialDependencies: true,
         parallelMode: true,
+        loadAwareAssignment: true,
         largePlanWarnings: true
       }
     },
@@ -363,12 +371,65 @@ function summarizeGoal(goal: string) {
   return firstLine.length > 72 ? `${firstLine.slice(0, 69)}...` : firstLine;
 }
 
-function chooseAgentForRole(agents: AgentRecord[], role: string) {
-  return (
-    agents.find((agent) => agent.role === role) ||
-    agents.find((agent) => agent.capabilities.includes(role)) ||
-    agents.find((agent) => role === "programmer" && agent.role === "worker") ||
-    agents.find((agent) => agent.role !== "project-manager") ||
-    null
+type AgentPlanningLoad = {
+  existing: number;
+  planned: number;
+};
+
+function createAgentPlanningLoads(db: ReturnType<typeof openProjectDb>) {
+  const rows = db
+    .prepare(`
+      SELECT assignee_agent_id AS agent_id, COUNT(*) AS count
+      FROM tasks
+      WHERE assignee_agent_id IS NOT NULL AND status != ?
+      GROUP BY assignee_agent_id
+    `)
+    .all("Done") as Array<{ agent_id: string; count: number }>;
+  return new Map<string, AgentPlanningLoad>(
+    rows.map((row) => [String(row.agent_id), { existing: Number(row.count || 0), planned: 0 }])
   );
+}
+
+function incrementPlannedAgentLoad(loads: Map<string, AgentPlanningLoad>, agentId: string) {
+  const current = loads.get(agentId) || { existing: 0, planned: 0 };
+  loads.set(agentId, { ...current, planned: current.planned + 1 });
+}
+
+function chooseAgentForRole(agents: AgentRecord[], role: string, loads: Map<string, AgentPlanningLoad>) {
+  const candidateGroups = [
+    agents.filter((agent) => agent.role === role),
+    agents.filter((agent) => agent.capabilities.includes(role)),
+    role === "programmer" ? agents.filter((agent) => agent.role === "worker") : [],
+    agents.filter((agent) => agent.role !== "project-manager")
+  ];
+  const candidates = candidateGroups.find((group) => group.length > 0) || [];
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const originalOrder = new Map(agents.map((agent, index) => [agent.id, index]));
+  return [...candidates].sort((left, right) => {
+    const leftScore = agentPlanningScore(left, loads);
+    const rightScore = agentPlanningScore(right, loads);
+    if (leftScore.normalizedLoad !== rightScore.normalizedLoad) {
+      return leftScore.normalizedLoad - rightScore.normalizedLoad;
+    }
+    if (leftScore.totalLoad !== rightScore.totalLoad) {
+      return leftScore.totalLoad - rightScore.totalLoad;
+    }
+    if (leftScore.busyPenalty !== rightScore.busyPenalty) {
+      return leftScore.busyPenalty - rightScore.busyPenalty;
+    }
+    return (originalOrder.get(left.id) || 0) - (originalOrder.get(right.id) || 0);
+  })[0];
+}
+
+function agentPlanningScore(agent: AgentRecord, loads: Map<string, AgentPlanningLoad>) {
+  const load = loads.get(agent.id) || { existing: 0, planned: 0 };
+  const totalLoad = load.existing + load.planned;
+  return {
+    totalLoad,
+    normalizedLoad: totalLoad / Math.max(1, agent.maxParallel),
+    busyPenalty: agent.status === "busy" ? 1 : 0
+  };
 }

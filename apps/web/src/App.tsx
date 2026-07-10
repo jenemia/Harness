@@ -2573,7 +2573,8 @@ function SettingsPanel(props: {
           </span>
           <span>
             workflow templates {props.providerCatalog.planning.capabilities.workflowTemplates ? "on" : "off"} | explicit
-            lists {props.providerCatalog.planning.capabilities.explicitItems ? "on" : "off"} | large plan warnings{" "}
+            lists {props.providerCatalog.planning.capabilities.explicitItems ? "on" : "off"} | load-aware assignment{" "}
+            {props.providerCatalog.planning.capabilities.loadAwareAssignment ? "on" : "off"} | large plan warnings{" "}
             {props.providerCatalog.planning.capabilities.largePlanWarnings ? "on" : "off"}
           </span>
           <strong>{props.providerCatalog.approval.label}</strong>

@@ -77,7 +77,7 @@ The PM agent does not need to perform all work directly. Its primary job is orch
 
 The PM agent decides whether work can run in parallel or must proceed sequentially. When a task completes, the PM agent evaluates the result and chooses the next best agent or human handoff.
 
-Initial implementation: the PM planning endpoint can decompose a user goal into scoped Kanban tasks, assign them by agent role, and create sequential dependencies for planned handoff chains. The same planner can now preview the task breakdown before writing tasks, so large plans can be reviewed before board creation.
+Initial implementation: the PM planning endpoint can decompose a user goal into scoped Kanban tasks, assign them by agent role, spread same-role assignments across matching agents by current and planned load, and create sequential dependencies for planned handoff chains. The same planner can now preview the task breakdown before writing tasks, so large plans can be reviewed before board creation.
 
 ### Task
 
@@ -424,7 +424,7 @@ Initial providers:
 - `git-worktree` workspace provider for one branch and worktree per executable code task, plus Harness-managed workspaces for non-Git tasks.
 - `local-human` approval provider for command execution and merge approval gates.
 - `local-agent-policy` provider for checking agent allowed tools before command-backed LLM execution.
-- `deterministic-local` planning provider for workflow templates, explicit lists, sequential dependencies, parallel mode, and large-plan warnings.
+- `deterministic-local` planning provider for workflow templates, explicit lists, sequential dependencies, parallel mode, load-aware assignment, and large-plan warnings.
 - `mock` LLM provider for deterministic local testing.
 - `shell` LLM provider for user-configured CLI commands.
 - `codex` LLM CLI provider slot.

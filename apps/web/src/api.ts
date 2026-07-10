@@ -302,6 +302,7 @@ export type ProviderCatalog = {
       workflowTemplates: boolean;
       sequentialDependencies: boolean;
       parallelMode: boolean;
+      loadAwareAssignment: boolean;
       largePlanWarnings: boolean;
     };
   };
@@ -349,6 +350,7 @@ export type PlanResult = {
     id: string;
     title: string;
     role: string;
+    assigneeAgentId: string | null;
     dependencyTaskIds: string[];
   }>;
 };
