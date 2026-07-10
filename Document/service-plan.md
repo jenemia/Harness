@@ -507,6 +507,8 @@ Initial implementation: when the server starts, Harness scans registered project
 
 Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, run follow-up creation, document create/update/list/plan/plan-preview flows, memory create/update/list flows, PM plan preview and creation, task creation with automatic or explicit workspace mode, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions for commands, merges, and risky PM handoffs, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, preview or create plans from goal text/files, maintain project memory, or turn saved documents and run output into tracked tickets.
 
+Initial implementation: after `pnpm build`, `pnpm start` runs the Node server as a single local web/API process and serves the built React app from `apps/web/dist`, with `HARNESS_WEB_DIST` available for custom packaged web assets.
+
 ## 8. Draft Product Structure
 
 ### Main Navigation

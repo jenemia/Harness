@@ -59,6 +59,15 @@ The server runs on `http://localhost:4000`.
 The web app runs on `http://localhost:5173`.
 If port 4000 is already busy, start the server with another `PORT` and run the web app with `VITE_API_PROXY_TARGET=http://localhost:<port>`.
 
+For a single local server after building:
+
+```bash
+pnpm build
+pnpm start
+```
+
+`pnpm start` serves the built web app and API from the server on `http://localhost:4000`. Set `PORT=<port>` to use another port, or `HARNESS_WEB_DIST=<folder>` to serve a custom web build.
+
 ## CLI
 
 The server package also exposes a local JSON CLI for headless automation:

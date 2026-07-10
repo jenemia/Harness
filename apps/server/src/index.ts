@@ -1,7 +1,8 @@
-import { mkdirSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createAgentTemplate,
   createGlobalMemory,
@@ -67,6 +68,9 @@ import type {
 } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
+const webDistDir = process.env.HARNESS_WEB_DIST
+  ? path.resolve(process.env.HARNESS_WEB_DIST)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/dist");
 type DecompositionMode = "parallel" | "sequential";
 type DecompositionItemInput =
   | string
@@ -478,6 +482,10 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, { memory, overview: getProjectOverview(project) });
         return;
       }
+    }
+
+    if (serveWebAsset(req, res, requestUrl)) {
+      return;
     }
 
     sendError(res, 404, `No route for ${req.method} ${requestUrl.pathname}.`);
@@ -1193,6 +1201,65 @@ async function readBody<T>(req: http.IncomingMessage): Promise<T> {
 function sendJson(res: http.ServerResponse, payload: unknown, status = 200) {
   res.writeHead(status, { "Content-Type": "application/json" });
   res.end(JSON.stringify(payload));
+}
+
+function serveWebAsset(req: http.IncomingMessage, res: http.ServerResponse, requestUrl: URL) {
+  if ((req.method !== "GET" && req.method !== "HEAD") || requestUrl.pathname.startsWith("/api")) {
+    return false;
+  }
+
+  const indexPath = path.join(webDistDir, "index.html");
+  if (!existsSync(indexPath)) {
+    return false;
+  }
+
+  const requestedAsset = requestUrl.pathname === "/"
+    ? "index.html"
+    : decodeURIComponent(requestUrl.pathname.slice(1));
+  const normalizedAsset = path.normalize(requestedAsset);
+  if (normalizedAsset.startsWith("..") || path.isAbsolute(normalizedAsset)) {
+    sendError(res, 400, "Invalid asset path.");
+    return true;
+  }
+
+  const candidatePath = path.resolve(webDistDir, normalizedAsset);
+  const assetPath = isFile(candidatePath) && isInsideDirectory(candidatePath, webDistDir) ? candidatePath : indexPath;
+  const contentType = contentTypeFor(assetPath);
+  res.writeHead(200, { "Content-Type": contentType });
+  if (req.method === "HEAD") {
+    res.end();
+    return true;
+  }
+  createReadStream(assetPath).pipe(res);
+  return true;
+}
+
+function isFile(filePath: string) {
+  try {
+    return statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function isInsideDirectory(filePath: string, directory: string) {
+  const relative = path.relative(directory, filePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function contentTypeFor(filePath: string) {
+  const extension = path.extname(filePath).toLowerCase();
+  const types: Record<string, string> = {
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".map": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp"
+  };
+  return types[extension] || "application/octet-stream";
 }
 
 function sendError(res: http.ServerResponse, status: number, message: string) {
