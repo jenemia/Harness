@@ -128,7 +128,7 @@ Initial implementation: completed task worktree changes create merge approval re
 
 Initial implementation: the local policy provider detects risky shell commands and forces a command approval request even when project-wide command approvals are disabled. The first risk rules cover recursive forced deletes, hard Git resets, Git clean, Git push, sudo, package install/update commands, and remote scripts piped into a shell.
 
-Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list. Follow-ups are created as child tasks with a dependency on the source task so PM output can become tracked work.
+Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list, API, or `runs:followups`. Follow-ups are created as child tasks with a dependency on the source task and inherit linked files, workspace mode, and model override context so PM output can become tracked work.
 
 Risk boundaries can include:
 
@@ -497,7 +497,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation with automatic or explicit workspace mode, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions for commands, merges, and risky PM handoffs, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, run follow-up creation, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation with automatic or explicit workspace mode, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions for commands, merges, and risky PM handoffs, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents and run output into tracked tickets.
 
 ## 8. Draft Product Structure
 

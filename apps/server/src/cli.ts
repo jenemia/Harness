@@ -22,6 +22,7 @@ import {
   mapComment,
   mapDocument,
   mapMemory,
+  mapRun,
   mapTask,
   moveTaskInBoard,
   nextTaskOrder,
@@ -98,6 +99,7 @@ const commands: Record<string, CommandHandler> = {
   "board:show": showBoardCommand,
   "runs:list": listRunsCommand,
   "runs:show": showRunCommand,
+  "runs:followups": createRunFollowUpsCommand,
   "tasks:list": listTasksCommand,
   "tasks:show": showTaskCommand,
   "tasks:create": createTaskCommand,
@@ -554,6 +556,14 @@ function showRunCommand(args: string[]) {
   };
 }
 
+function createRunFollowUpsCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const runId = getRequiredOption(options, "run");
+  const tasks = createCliFollowUpTasks(project, runId);
+  return { tasks, overview: getProjectOverview(project) };
+}
+
 function listTasksCommand(args: string[]) {
   const options = parseOptions(args);
   const project = getRequiredProject(args);
@@ -810,6 +820,86 @@ function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatu
     return null;
   }
   return `Waiting on dependencies: ${dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`;
+}
+
+function createCliFollowUpTasks(project: ProjectRecord, runId: string) {
+  const db = openProjectDb(project.path);
+  let runAgentId = "";
+  let sourceTask: TaskRecord;
+  let candidates: Array<{ title: string; description: string }> = [];
+  try {
+    const runRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(runId);
+    if (!runRow) {
+      throw new Error("Run not found.");
+    }
+
+    const run = mapRun(runRow);
+    const sourceTaskRow = db.prepare("SELECT * FROM tasks WHERE id = ?").get(run.taskId);
+    if (!sourceTaskRow) {
+      throw new Error("Source task not found.");
+    }
+
+    sourceTask = mapTask(sourceTaskRow);
+    runAgentId = run.agentId;
+    candidates = parseFollowUpCandidates(run.output || run.error || "", sourceTask.title);
+  } finally {
+    db.close();
+  }
+
+  const tasks = candidates.map((candidate) =>
+    createCliTask(project, {
+      title: candidate.title,
+      description: candidate.description,
+      status: "Backlog",
+      priority: "Medium",
+      modelBackend: sourceTask.modelBackend,
+      assigneeAgentId: null,
+      reporter: "pm-agent",
+      parentTaskId: sourceTask.id,
+      dependencyTaskIds: [sourceTask.id],
+      waivedDependencyTaskIds: [],
+      labels: ["follow-up"],
+      linkedFiles: sourceTask.linkedFiles,
+      acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale.",
+      workspaceMode: sourceTask.workspaceMode,
+      blockedReason: null
+    })
+  );
+
+  const eventDb = openProjectDb(project.path);
+  try {
+    insertEvent(eventDb, {
+      taskId: sourceTask.id,
+      agentId: runAgentId,
+      type: "followups.created",
+      message: `${tasks.length} follow-up task(s) were created from run output.`,
+      metadata: { runId, followUpTaskIds: tasks.map((task) => task.id) }
+    });
+  } finally {
+    eventDb.close();
+  }
+
+  return tasks;
+}
+
+function parseFollowUpCandidates(output: string, sourceTitle: string) {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const candidates = lines
+    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^(todo|follow[- ]?up|next)\s*:\s*/i, "").trim())
+    .filter((line) => line.length >= 8 && /todo|follow|next|fix|add|implement|review|test|update|create|document/i.test(line))
+    .slice(0, 5);
+
+  if (candidates.length === 0 && output.trim()) {
+    candidates.push(`Review follow-up from ${sourceTitle}`);
+  }
+
+  return candidates.map((title) => ({
+    title,
+    description: `Created from agent run output for ${sourceTitle}.`
+  }));
 }
 
 function createCliTask(
@@ -1469,6 +1559,7 @@ Usage:
   pnpm --filter @harness/server cli board:show --project <projectId>
   pnpm --filter @harness/server cli runs:list --project <projectId> [--status running,completed,failed] [--task <taskId>] [--agent <agentId>] [--provider <providerId>] [--modelBackend <id>]
   pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>
+  pnpm --filter @harness/server cli runs:followups --project <projectId> --run <runId>
   pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]
   pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--workspaceMode auto|worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1] [--linkedFiles path1,path2]

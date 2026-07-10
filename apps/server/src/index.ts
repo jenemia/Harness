@@ -882,6 +882,7 @@ function createFollowUpTasks(project: ProjectRecord, runId: string) {
   let runAgentId = "";
   let sourceTaskId = "";
   let sourceTitle = "";
+  let sourceTask: TaskRecord;
   let candidates: Array<{ title: string; description: string }> = [];
   try {
     const runRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(runId);
@@ -894,7 +895,7 @@ function createFollowUpTasks(project: ProjectRecord, runId: string) {
     if (!sourceTaskRow) {
       throw new Error("Source task not found.");
     }
-    const sourceTask = mapTask(sourceTaskRow);
+    sourceTask = mapTask(sourceTaskRow);
     runAgentId = run.agentId;
     sourceTaskId = sourceTask.id;
     sourceTitle = sourceTask.title;
@@ -909,11 +910,14 @@ function createFollowUpTasks(project: ProjectRecord, runId: string) {
       description: candidate.description,
       status: "Backlog",
       priority: "Medium",
+      modelBackend: sourceTask.modelBackend,
       reporter: "pm-agent",
       parentTaskId: sourceTaskId,
       dependencyTaskIds: [sourceTaskId],
       waivedDependencyTaskIds: [],
       labels: ["follow-up"],
+      linkedFiles: sourceTask.linkedFiles,
+      workspaceMode: sourceTask.workspaceMode,
       acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale."
     })
   );

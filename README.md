@@ -88,6 +88,7 @@ pnpm cli global-memories:create --title "User preferences" --content "Prefer sma
 pnpm cli board:show --project <projectId>
 pnpm cli runs:list --project <projectId> --status completed,failed
 pnpm cli runs:show --project <projectId> --run <runId>
+pnpm cli runs:followups --project <projectId> --run <runId>
 pnpm cli tasks:list --project <projectId> --status Selected,Blocked
 pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
@@ -177,7 +178,7 @@ Recent completed or failed runs for the same task are injected into the generate
 
 Linked files are injected into the generated agent prompt and exposed to command-backed providers as `HARNESS_LINKED_FILES`, so model-specific CLI wrappers can use the same task context.
 
-The Runs panel can be filtered by status, agent, provider, and model backend. Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, and run-scoped `runs:show`.
+The Runs panel can be filtered by status, agent, provider, and model backend. Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, run-scoped `runs:show`, and `runs:followups` for turning agent output into child tasks.
 
 ## Approvals
 
