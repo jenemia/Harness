@@ -499,6 +499,8 @@ instructionFiles:
 
 ## 권장 구현 순서
 
+> 자동 진행 티켓과 티켓별 검증 기준: [Harness TODO Automation Tickets](Document/todo-automation-tickets.md)
+
 1. [Local Desktop Architecture](Document/local-desktop-architecture.md)에 따른 application service, store와 runtime 경계 분리
 2. project `.harness/` layout, lock, migration과 recovery 확정
 3. `.harness/agent` Markdown schema, 기존 DB agent migration과 agent application service
