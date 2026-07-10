@@ -451,7 +451,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, provider catalog inspection, template listing, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, provider catalog inspection, template listing, agent create/update/list flows, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, configure agents, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 
@@ -512,6 +512,8 @@ The agent directory should include:
 - Performance metrics
 
 Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, templates, and per-agent parallelism. The agent directory also shows current work, recent activity, and completed/failed/running run counts per agent.
+
+Initial implementation: agents can also be listed, created, and updated from the headless CLI so automation can configure persona-driven worker pools before planning or scheduling work.
 
 ## 9. MVP Scope Proposal
 

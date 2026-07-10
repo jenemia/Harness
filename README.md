@@ -54,6 +54,7 @@ pnpm cli projects:report --project <projectId>
 pnpm cli providers:list
 pnpm cli templates:projects
 pnpm cli templates:workflows
+pnpm cli agents:create --project <projectId> --name "Frontend Agent" --role programmer --persona "Build polished React UI" --capabilities frontend,react --maxParallel 2
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
@@ -86,6 +87,10 @@ The provider catalog exposes the active OS platform provider, its shell/process/
 ## Project Templates
 
 Use the project create form or `/api/project-templates` to start a folder with a reusable team shape. Harness seeds software engineering, research, and content production project templates; each one creates the starter agents for that workflow.
+
+## Agents
+
+Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` CLI commands to manage persona-driven worker profiles, model backend defaults, CLI overrides, capabilities, and per-agent concurrency.
 
 ## PM Planning
 

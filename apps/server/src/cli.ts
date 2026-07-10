@@ -5,11 +5,13 @@ import path from "node:path";
 import {
   getProject,
   getProjectOverview,
+  getProjectSettings,
   insertEvent,
   listAgentTemplates,
   listProjectTemplates,
   listProjectsWithSummaries,
   listWorkflowTemplates,
+  mapAgent,
   mapComment,
   mapDocument,
   mapMemory,
@@ -31,7 +33,7 @@ import {
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
-import type { DocumentRecord, MemoryRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import type { AgentRecord, DocumentRecord, MemoryRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
@@ -44,6 +46,9 @@ const commands: Record<string, CommandHandler> = {
   "templates:workflows": listWorkflowTemplatesCommand,
   "templates:projects": listProjectTemplatesCommand,
   "providers:list": listProvidersCommand,
+  "agents:list": listAgentsCommand,
+  "agents:create": createAgentCommand,
+  "agents:update": updateAgentCommand,
   "plans:create": createPlanCommand,
   "documents:list": listDocumentsCommand,
   "documents:create": createDocumentCommand,
@@ -131,6 +136,43 @@ function listProjectTemplatesCommand() {
 
 function listProvidersCommand() {
   return listRuntimeProviders();
+}
+
+function listAgentsCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  return { agents: overview.agents, overview };
+}
+
+function createAgentCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const agent = createCliAgent(project, {
+    name: getRequiredOption(options, "name"),
+    role: options.role || "worker",
+    persona: readOptionalText(options, "persona", "personaFile") || "Perform assigned work carefully and report the result.",
+    modelBackend: options.modelBackend || undefined,
+    cliCommand: options.cliCommand || null,
+    capabilities: parseCsv(options.capabilities),
+    maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
+  });
+  return { agent, overview: getProjectOverview(project) };
+}
+
+function updateAgentCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const agentId = getRequiredOption(options, "agent");
+  const agent = updateCliAgent(project, agentId, {
+    name: options.name,
+    role: options.role,
+    persona: readOptionalText(options, "persona", "personaFile"),
+    modelBackend: options.modelBackend,
+    cliCommand: optionPatchValue(options, "cliCommand", "clearCliCommand"),
+    capabilities: options.capabilities !== undefined ? parseCsv(options.capabilities) : undefined,
+    maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
+  });
+  return { agent, overview: getProjectOverview(project) };
 }
 
 async function createPlanCommand(args: string[]) {
@@ -395,6 +437,124 @@ function createCliTask(
     });
 
     return task;
+  } finally {
+    db.close();
+  }
+}
+
+function createCliAgent(
+  project: ProjectRecord,
+  input: Pick<
+    AgentRecord,
+    "name" | "role" | "persona" | "cliCommand" | "capabilities"
+  > & {
+    modelBackend?: string;
+    maxParallel?: number;
+  }
+) {
+  if (!input.name.trim()) {
+    throw new Error("Agent name is required.");
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    const settings = getProjectSettings(project.path);
+    const timestamp = now();
+    const agent: AgentRecord = {
+      id: randomUUID(),
+      name: input.name.trim(),
+      role: input.role.trim() || "worker",
+      persona: input.persona.trim() || "Perform assigned work carefully and report the result.",
+      modelBackend: input.modelBackend?.trim() || settings.defaultModelBackend,
+      cliCommand: input.cliCommand?.trim() || null,
+      capabilities: input.capabilities,
+      maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
+      status: "idle",
+      currentTaskId: null,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    db.prepare(`
+      INSERT INTO agents (
+        id, name, role, persona, model_backend, cli_command, capabilities,
+        max_parallel, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      agent.id,
+      agent.name,
+      agent.role,
+      agent.persona,
+      agent.modelBackend,
+      agent.cliCommand,
+      JSON.stringify(agent.capabilities),
+      agent.maxParallel,
+      agent.status,
+      agent.currentTaskId,
+      agent.createdAt,
+      agent.updatedAt
+    );
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: agent.id,
+      type: "agent.created",
+      message: `${agent.name} was created from CLI.`,
+      metadata: { role: agent.role, modelBackend: agent.modelBackend, capabilities: agent.capabilities }
+    });
+
+    return agent;
+  } finally {
+    db.close();
+  }
+}
+
+function updateCliAgent(project: ProjectRecord, agentId: string, input: Partial<AgentRecord>) {
+  const db = openProjectDb(project.path);
+  try {
+    const existing = db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId);
+    if (!existing) {
+      throw new Error("Agent not found.");
+    }
+
+    db.prepare(`
+      UPDATE agents
+      SET name = COALESCE(?, name),
+          role = COALESCE(?, role),
+          persona = COALESCE(?, persona),
+          model_backend = ?,
+          cli_command = ?,
+          capabilities = COALESCE(?, capabilities),
+          max_parallel = COALESCE(?, max_parallel),
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      input.name?.trim() || null,
+      input.role?.trim() || null,
+      input.persona?.trim() || null,
+      input.modelBackend === undefined ? (existing as { model_backend: string }).model_backend : input.modelBackend.trim(),
+      input.cliCommand === undefined ? (existing as { cli_command: string | null }).cli_command : input.cliCommand?.trim() || null,
+      Array.isArray(input.capabilities) ? JSON.stringify(input.capabilities) : null,
+      input.maxParallel ? Math.max(1, Number(input.maxParallel)) : null,
+      now(),
+      agentId
+    );
+
+    const agent = mapAgent(db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId));
+    insertEvent(db, {
+      taskId: null,
+      agentId,
+      type: "agent.updated",
+      message: `${agent.name} was updated from CLI.`,
+      metadata: {
+        role: agent.role,
+        modelBackend: agent.modelBackend,
+        capabilities: agent.capabilities,
+        maxParallel: agent.maxParallel
+      }
+    });
+
+    return agent;
   } finally {
     db.close();
   }
@@ -736,6 +896,9 @@ Usage:
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects
   pnpm --filter @harness/server cli providers:list
+  pnpm --filter @harness/server cli agents:list --project <projectId>
+  pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--maxParallel 2]
+  pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--maxParallel 2]
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
   pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
