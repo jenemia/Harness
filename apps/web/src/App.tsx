@@ -2342,6 +2342,17 @@ function TaskRuns(props: {
         .map((event) => [event.metadata.runId as string, event])
     );
   }, [props.events]);
+  const followUpEvents = useMemo(() => {
+    return new Map(
+      props.events
+        .filter(
+          (event) =>
+            (event.type === "followups.created" || event.type === "followups.skipped") &&
+            typeof event.metadata.runId === "string"
+        )
+        .map((event) => [event.metadata.runId as string, event])
+    );
+  }, [props.events]);
 
   async function createFollowUps(run: Run) {
     await props.runAction(async () => {
@@ -2358,6 +2369,14 @@ function TaskRuns(props: {
         {props.runs.map((run) => {
           const startMetadata = asRecord(runStartEvents.get(run.id)?.metadata);
           const providerResolution = formatProviderCommandResolution(startMetadata);
+          const followUpEvent = followUpEvents.get(run.id) || null;
+          const followUpMetadata = asRecord(followUpEvent?.metadata);
+          const followUpTaskIds = Array.isArray(followUpMetadata.followUpTaskIds)
+            ? followUpMetadata.followUpTaskIds.filter((item): item is string => typeof item === "string")
+            : [];
+          const skippedTitles = Array.isArray(followUpMetadata.skippedTitles)
+            ? followUpMetadata.skippedTitles.filter((item): item is string => typeof item === "string")
+            : [];
           return (
             <div className="run-detail" key={run.id}>
               <div className="run-detail-top">
@@ -2383,6 +2402,17 @@ function TaskRuns(props: {
                 <div className="snapshot-line">
                   <Settings size={14} />
                   <span>{providerResolution}</span>
+                </div>
+              )}
+              {followUpEvent && (
+                <div className="snapshot-line">
+                  <GitFork size={14} />
+                  <span>
+                    {followUpEvent.type === "followups.created"
+                      ? `${followUpTaskIds.length} automatic follow-up${followUpTaskIds.length === 1 ? "" : "s"}`
+                      : "Automatic follow-up skipped"}
+                    {skippedTitles.length ? ` · ${skippedTitles.length} duplicate${skippedTitles.length === 1 ? "" : "s"}` : ""}
+                  </span>
                 </div>
               )}
               {run.commandPreview && (

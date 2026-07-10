@@ -130,7 +130,7 @@ Initial implementation: the local policy provider detects risky shell commands a
 
 Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list, API, or `runs:followups`. Follow-ups are created as child tasks with a dependency on the source task and inherit linked files, workspace mode, and model override context so PM output can become tracked work.
 
-Initial implementation: PM completion review also creates follow-up backlog tasks automatically when the latest agent output contains next-step, TODO, follow-up, or action-item signals. Automatic follow-ups are recorded in the task timeline and remain linked to the source task as children.
+Initial implementation: PM completion review also creates follow-up backlog tasks automatically when the latest agent output contains next-step, TODO, follow-up, or action-item signals. Automatic follow-ups are recorded in the task timeline, remain linked to the source task as children, and skip duplicate child follow-ups with the same normalized title.
 
 Risk boundaries can include:
 

@@ -1128,7 +1128,33 @@ function createAutomaticFollowUps(
     return [];
   }
 
-  const tasks = candidates.map((candidate) => insertFollowUpTask(db, sourceTask, candidate));
+  const existingTitles = getExistingFollowUpTitles(db, sourceTask.id);
+  const skippedTitles: string[] = [];
+  const newCandidates = candidates.filter((candidate) => {
+    const key = normalizeFollowUpTitle(candidate.title);
+    if (existingTitles.has(key)) {
+      skippedTitles.push(candidate.title);
+      return false;
+    }
+    existingTitles.add(key);
+    return true;
+  });
+  if (!newCandidates.length) {
+    insertEvent(db, {
+      taskId: sourceTask.id,
+      agentId: completedBy.id,
+      type: "followups.skipped",
+      message: "PM skipped automatic follow-up creation because matching child tasks already exist.",
+      metadata: {
+        runId: evaluation.runId,
+        automatic: true,
+        skippedTitles
+      }
+    });
+    return [];
+  }
+
+  const tasks = newCandidates.map((candidate) => insertFollowUpTask(db, sourceTask, candidate));
   insertEvent(db, {
     taskId: sourceTask.id,
     agentId: completedBy.id,
@@ -1137,10 +1163,22 @@ function createAutomaticFollowUps(
     metadata: {
       runId: evaluation.runId,
       automatic: true,
-      followUpTaskIds: tasks.map((task) => task.id)
+      followUpTaskIds: tasks.map((task) => task.id),
+      skippedTitles
     }
   });
   return tasks;
+}
+
+function getExistingFollowUpTitles(db: DatabaseSync, parentTaskId: string) {
+  return new Set(
+    db
+      .prepare("SELECT * FROM tasks WHERE parent_task_id = ?")
+      .all(parentTaskId)
+      .map(mapTask)
+      .filter((task) => task.labels.includes("follow-up"))
+      .map((task) => normalizeFollowUpTitle(task.title))
+  );
 }
 
 function insertFollowUpTask(
@@ -1231,10 +1269,24 @@ function parseAutomaticFollowUpCandidates(output: string, sourceTitle: string) {
     candidates.push(`Review follow-up from ${sourceTitle}`);
   }
 
-  return candidates.map((candidate) => ({
-    title: candidate.length > 90 ? `${candidate.slice(0, 87)}...` : candidate,
-    description: `Automatically created from PM completion review for "${sourceTitle}".\n\n${candidate}`
-  }));
+  const seen = new Set<string>();
+  return candidates
+    .map((candidate) => ({
+      title: candidate.length > 90 ? `${candidate.slice(0, 87)}...` : candidate,
+      description: `Automatically created from PM completion review for "${sourceTitle}".\n\n${candidate}`
+    }))
+    .filter((candidate) => {
+      const key = normalizeFollowUpTitle(candidate.title);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeFollowUpTitle(title: string) {
+  return title.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function inferDynamicHandoffRole(
