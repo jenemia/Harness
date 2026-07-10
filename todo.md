@@ -458,20 +458,20 @@ instructionFiles:
 
 이 기능은 local desktop shell과 구조화된 provider event가 안정화된 뒤 진행한다. 실제 구현 전 위 계획 문서를 읽고 activity state, privacy, asset license, macOS window와 Windows platform 경계를 따른다.
 
-- [ ] 독자적으로 제작·라이선스가 확인된 5종 강아지 sprite asset을 준비한다.
-- [ ] agent별 run과 provider event를 `sleeping`, `walking`, `running`, `sprinting`, `waiting`, `celebrating`, `error` 상태로 변환한다.
-- [ ] 작업 활동량에 따라 sprite fps와 제한된 overlay lane 이동 속도를 조정한다.
-- [ ] 실제 total work를 알 수 없는 task에는 임의 progress percentage를 표시하지 않는다.
-- [ ] tooltip에 agent, task, phase, 경과 시간, 변경 파일 수와 pending interaction을 안전하게 표시한다.
-- [ ] 중요 phase, 질문·승인·권한 요청, 완료와 실패만 toast로 표시하고 개별 tool event toast는 만들지 않는다.
-- [ ] 캐릭터와 toast는 업무·카드 상태만 읽기 전용으로 표시하고 click, drag, button, retry와 card open action을 제공하지 않는다.
-- [ ] macOS에서 transparent, always-on-top, 항상 click-through인 overlay window를 구현한다.
-- [ ] overlay는 별도 HTTP server, Accessibility와 Screen Recording 권한 없이 동작하게 한다.
-- [ ] reduced motion, privacy mode, 빠른 숨김, display와 위치 설정을 제공한다.
-- [ ] 공통 renderer와 activity engine에서 platform 조건을 제거하고 `MacOverlayPlatformAdapter` 뒤로 window 동작을 격리한다.
-- [ ] macOS MVP에서 `WindowsOverlayPlatformAdapter` interface, contract test와 compile-time stub을 함께 만든다.
-- [ ] prompt, transcript, source code, absolute path, credential과 raw tool result가 overlay IPC에 포함되지 않게 한다.
-- [ ] Agent Cat Connectors와 첨부 이미지의 코드·asset을 복사하지 않고 동작 아이디어만 참고한다.
+- [x] 독자적으로 제작·라이선스가 확인된 5종 강아지 sprite asset을 준비한다.
+- [x] agent별 run과 provider event를 `sleeping`, `walking`, `running`, `sprinting`, `waiting`, `celebrating`, `error` 상태로 변환한다.
+- [x] 작업 활동량에 따라 sprite fps와 제한된 overlay lane 이동 속도를 조정한다.
+- [x] 실제 total work를 알 수 없는 task에는 임의 progress percentage를 표시하지 않는다.
+- [x] tooltip에 agent, task, phase, 경과 시간, 변경 파일 수와 pending interaction을 안전하게 표시한다.
+- [x] 중요 phase, 질문·승인·권한 요청, 완료와 실패만 toast로 표시하고 개별 tool event toast는 만들지 않는다.
+- [x] 캐릭터와 toast는 업무·카드 상태만 읽기 전용으로 표시하고 click, drag, button, retry와 card open action을 제공하지 않는다.
+- [x] macOS에서 transparent, always-on-top, 항상 click-through인 overlay window를 구현한다.
+- [x] overlay는 별도 HTTP server, Accessibility와 Screen Recording 권한 없이 동작하게 한다.
+- [x] reduced motion, privacy mode, 빠른 숨김, display와 위치 설정을 제공한다.
+- [x] 공통 renderer와 activity engine에서 platform 조건을 제거하고 `MacOverlayPlatformAdapter` 뒤로 window 동작을 격리한다.
+- [x] macOS MVP에서 `WindowsOverlayPlatformAdapter` interface, contract test와 compile-time stub을 함께 만든다.
+- [x] prompt, transcript, source code, absolute path, credential과 raw tool result가 overlay IPC에 포함되지 않게 한다.
+- [x] Agent Cat Connectors와 첨부 이미지의 코드·asset을 복사하지 않고 동작 아이디어만 참고한다.
 
 ### 완료 조건
 

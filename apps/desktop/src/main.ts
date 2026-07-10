@@ -6,6 +6,7 @@ import { invokeApplicationCommand, recoverApplicationState, subscribeApplication
 import { startApplicationBridge, type ApplicationBridgeHandle } from "@harness/server/bridge";
 import { initializeTelemetry, shutdownTelemetry } from "@harness/server/telemetry";
 import { secureWindowOptions } from "./security.js";
+import { AgentDogOverlayController } from "./overlay/overlay-controller.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const preloadPath = path.join(currentDir, "preload.js");
@@ -14,6 +15,7 @@ const rendererPath = process.env.HARNESS_RENDERER_PATH
   : path.resolve(currentDir, "../../web/dist/index.html");
 let applicationBridge: ApplicationBridgeHandle | null = null;
 let bridgeShutdownStarted = false;
+const dogOverlay = new AgentDogOverlayController();
 
 initializeTelemetry();
 
@@ -102,6 +104,7 @@ async function createWindow() {
 app.whenReady().then(async () => {
   recoverApplicationState();
   applicationBridge = await startApplicationBridge();
+  await dogOverlay.start().catch(() => false);
   await createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();
@@ -116,7 +119,7 @@ app.on("before-quit", (event) => {
   if (!applicationBridge || bridgeShutdownStarted) return;
   event.preventDefault();
   bridgeShutdownStarted = true;
-  void applicationBridge.stop().catch(() => undefined).then(() => shutdownTelemetry()).finally(() => {
+  void Promise.all([applicationBridge.stop().catch(() => undefined), dogOverlay.stop().catch(() => undefined)]).then(() => shutdownTelemetry()).finally(() => {
     applicationBridge = null;
     app.quit();
   });

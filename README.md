@@ -163,6 +163,7 @@ Cursor, Claude Desktop, Codex, permission scopes, installed/source JSON, and dia
 - [Local desktop architecture](Document/local-desktop-architecture.md)
 - [MCP setup](Document/mcp-setup.md)
 - [OpenTelemetry/OTLP](Document/observability.md)
+- [Optional macOS Agent Dog Overlay](Document/agent-dog-overlay.md)
 - [CLI reference](Document/cli-reference.md) and `pnpm cli --help` for the complete JSON command list
 
 ## Verify changes

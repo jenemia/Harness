@@ -268,11 +268,15 @@ Status: 완료
 
 Depends on: A04, A07, A12
 
+Status: 완료
+
 - 독자적 sprite, activity engine, privacy filter와 read-only tooltip/toast를 구현한다.
 - macOS click-through adapter와 Windows compile-time stub/contract test를 제공한다.
 - reduced motion, privacy mode, disable 설정과 overlay failure isolation을 지원한다.
 
 완료 조건: macOS에서 최대 5개 agent 상태를 안전하게 표시하고 공통 code 재작성 없이 Windows adapter를 추가할 수 있다.
+
+검증: activity EMA/stage·waiting/completed override, stable 5종 dog assignment, reduced motion, toast dedupe, privacy allowlist와 asset manifest/provenance를 단위 테스트했다. macOS transparent/focusless/always-on-top/click-through window와 display/Spaces/full-screen 설정을 compile·Electron smoke로 확인하고, 동일 interface의 Windows stub contract 및 overlay 실패 비전파를 검증했다.
 
 ## 실행 순서
 
