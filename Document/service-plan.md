@@ -495,7 +495,7 @@ The agent directory should include:
 - Recent activity
 - Performance metrics
 
-Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, templates, and per-agent parallelism.
+Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, templates, and per-agent parallelism. The agent directory also shows current work, recent activity, and completed/failed/running run counts per agent.
 
 ## 9. MVP Scope Proposal
 

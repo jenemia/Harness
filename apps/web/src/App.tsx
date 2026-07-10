@@ -1413,6 +1413,27 @@ function AgentPanel(props: {
   const [capabilitiesText, setCapabilitiesText] = useState("");
   const [maxParallel, setMaxParallel] = useState(1);
   const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
+  const agentStats = useMemo(() => {
+    return new Map(
+      props.overview.agents.map((agent) => {
+        const currentTask = agent.currentTaskId
+          ? props.overview.tasks.find((task) => task.id === agent.currentTaskId) || null
+          : props.overview.tasks.find((task) => task.assigneeAgentId === agent.id && task.status === "In Progress") || null;
+        const runs = props.overview.runs.filter((run) => run.agentId === agent.id);
+        const latestActivity = props.overview.events.find((event) => event.agentId === agent.id) || null;
+        return [
+          agent.id,
+          {
+            currentTask,
+            latestActivity,
+            completedRuns: runs.filter((run) => run.status === "completed").length,
+            failedRuns: runs.filter((run) => run.status === "failed").length,
+            runningRuns: runs.filter((run) => run.status === "running").length
+          }
+        ];
+      })
+    );
+  }, [props.overview.agents, props.overview.events, props.overview.runs, props.overview.tasks]);
 
   const formPayload = {
     name,
@@ -1503,19 +1524,35 @@ function AgentPanel(props: {
         <h2>Agents</h2>
       </div>
       <div className="agent-list">
-        {props.overview.agents.map((agent) => (
-          <div className="agent-row" key={agent.id}>
-            <span className={`status-dot ${agent.status}`} />
-            <div>
-              <strong>{agent.name}</strong>
-              <span>{agent.role} · {agent.modelBackend} · max {agent.maxParallel}</span>
-              {agent.capabilities.length > 0 && <span>{agent.capabilities.join(", ")}</span>}
+        {props.overview.agents.map((agent) => {
+          const stats = agentStats.get(agent.id);
+          return (
+            <div className="agent-row" key={agent.id}>
+              <span className={`status-dot ${agent.status}`} />
+              <div className="agent-row-body">
+                <div className="agent-row-title">
+                  <strong>{agent.name}</strong>
+                  <button className="mini-button" type="button" onClick={() => editAgent(agent)}>
+                    Edit
+                  </button>
+                </div>
+                <span>{agent.role} · {agent.modelBackend} · max {agent.maxParallel}</span>
+                {agent.capabilities.length > 0 && <span>{agent.capabilities.join(", ")}</span>}
+                <div className="agent-stat-grid">
+                  <b>{stats?.completedRuns || 0} done</b>
+                  <b>{stats?.failedRuns || 0} failed</b>
+                  <b>{stats?.runningRuns || 0} running</b>
+                </div>
+                <span className="agent-context-line">
+                  Current: {stats?.currentTask?.title || "None"}
+                </span>
+                <span className="agent-context-line">
+                  Recent: {stats?.latestActivity ? `${stats.latestActivity.type} · ${formatDate(stats.latestActivity.createdAt)}` : "None"}
+                </span>
+              </div>
             </div>
-            <button className="mini-button" type="button" onClick={() => editAgent(agent)}>
-              Edit
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <form className="stack-form" onSubmit={submit}>
         {editingAgentId && <div className="form-group-title">Editing agent</div>}

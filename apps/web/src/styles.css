@@ -464,13 +464,67 @@ h3 {
 
 .agent-row {
   display: grid;
-  grid-template-columns: 12px 1fr auto;
+  grid-template-columns: 12px minmax(0, 1fr);
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
+  border-top: 1px solid #f1f2f4;
   min-height: 38px;
+  padding: 9px 0;
+}
+
+.agent-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.agent-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.agent-row-title {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.agent-row-title strong,
+.agent-row-body span {
+  overflow-wrap: anywhere;
+}
+
+.agent-row-body span {
+  color: #626f86;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.agent-stat-grid {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.agent-stat-grid b {
+  background: #f7f8f9;
+  border-radius: 4px;
+  color: #44546f;
+  font-size: 11px;
+  font-weight: 700;
+  min-height: 24px;
+  padding: 5px 6px;
+  text-align: center;
+}
+
+.agent-context-line {
+  background: #ffffff;
 }
 
 .status-dot {
+  margin-top: 7px;
   width: 9px;
   height: 9px;
   border-radius: 999px;
