@@ -16,6 +16,7 @@ import {
   mapComment,
   mapDocument,
   mapMemory,
+  mapRun,
   mapTask,
   now,
   openProjectDb,
@@ -164,6 +165,13 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && childPath === "memories") {
         const memory = createMemory(project, await readBody(req));
         sendJson(res, { memory, overview: getProjectOverview(project) }, 201);
+        return;
+      }
+
+      const runActionMatch = childPath.match(/^runs\/([^/]+)\/followups$/);
+      if (runActionMatch && req.method === "POST") {
+        const tasks = createFollowUpTasks(project, runActionMatch[1]);
+        sendJson(res, { tasks, overview: getProjectOverview(project) }, 201);
         return;
       }
 
@@ -489,6 +497,88 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
   } finally {
     db.close();
   }
+}
+
+function createFollowUpTasks(project: ProjectRecord, runId: string) {
+  const db = openProjectDb(project.path);
+  let runAgentId = "";
+  let sourceTaskId = "";
+  let sourceTitle = "";
+  let candidates: Array<{ title: string; description: string }> = [];
+  try {
+    const runRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(runId);
+    if (!runRow) {
+      throw new Error("Run not found.");
+    }
+
+    const run = mapRun(runRow);
+    const sourceTaskRow = db.prepare("SELECT * FROM tasks WHERE id = ?").get(run.taskId);
+    if (!sourceTaskRow) {
+      throw new Error("Source task not found.");
+    }
+    const sourceTask = mapTask(sourceTaskRow);
+    runAgentId = run.agentId;
+    sourceTaskId = sourceTask.id;
+    sourceTitle = sourceTask.title;
+    candidates = parseFollowUpCandidates(run.output || run.error || "", sourceTitle);
+  } finally {
+    db.close();
+  }
+
+  const tasks = candidates.map((candidate) =>
+    createTask(project, {
+      title: candidate.title,
+      description: candidate.description,
+      status: "Backlog",
+      priority: "Medium",
+      reporter: "pm-agent",
+      parentTaskId: sourceTaskId,
+      dependencyTaskIds: [sourceTaskId],
+      labels: ["follow-up"],
+      acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale."
+    })
+  );
+
+  const eventDb = openProjectDb(project.path);
+  try {
+    insertEvent(eventDb, {
+      taskId: sourceTaskId,
+      agentId: runAgentId,
+      type: "followups.created",
+      message: `${tasks.length} follow-up task(s) were created from run output.`,
+      metadata: { runId, followUpTaskIds: tasks.map((task) => task.id) }
+    });
+  } finally {
+    eventDb.close();
+  }
+
+  return tasks;
+}
+
+function parseFollowUpCandidates(output: string, sourceTitle: string) {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const candidates = lines
+    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^(todo|follow[- ]?up|next)\s*:\s*/i, "").trim())
+    .filter((line) => line.length >= 8 && /todo|follow|next|fix|add|implement|review|test|update|create|document/i.test(line))
+    .slice(0, 5);
+
+  if (candidates.length === 0) {
+    const excerpt = output.trim().slice(0, 500);
+    return [
+      {
+        title: `Follow up: ${sourceTitle}`,
+        description: excerpt || "Review the completed run and decide the next action."
+      }
+    ];
+  }
+
+  return candidates.map((candidate) => ({
+    title: candidate.length > 90 ? `${candidate.slice(0, 87)}...` : candidate,
+    description: `Created from agent run output for "${sourceTitle}".\n\n${candidate}`
+  }));
 }
 
 function createTaskComment(project: ProjectRecord, taskId: string, input: { author?: string; body?: string }) {

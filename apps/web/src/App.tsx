@@ -1155,7 +1155,12 @@ function TaskDetailDrawer(props: {
         )}
 
         <TaskComments comments={comments} body={commentBody} onBodyChange={setCommentBody} onSubmit={addComment} />
-        <TaskRuns runs={runs} />
+        <TaskRuns
+          projectId={props.overview.project.id}
+          runs={runs}
+          runAction={props.runAction}
+          onChanged={props.onChanged}
+        />
         <TaskHandoffs handoffs={handoffs} agents={props.overview.agents} />
         <TaskTimeline events={events} runs={runs} />
       </aside>
@@ -1228,13 +1233,25 @@ function TaskComments(props: {
   );
 }
 
-function TaskRuns({ runs }: { runs: Run[] }) {
+function TaskRuns(props: {
+  projectId: string;
+  runs: Run[];
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  async function createFollowUps(run: Run) {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.projectId}/runs/${run.id}/followups`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
   return (
     <section className="drawer-section">
       <h3>Runs</h3>
       <div className="run-list">
-        {runs.length === 0 && <p className="drawer-copy">No runs yet.</p>}
-        {runs.map((run) => (
+        {props.runs.length === 0 && <p className="drawer-copy">No runs yet.</p>}
+        {props.runs.map((run) => (
           <div className="run-detail" key={run.id}>
             <div className="run-detail-top">
               <span className={`run-state ${run.status}`}>
@@ -1260,6 +1277,12 @@ function TaskRuns({ runs }: { runs: Run[] }) {
             )}
             {run.output && <pre>{run.output}</pre>}
             {run.error && <pre className="error-pre">{run.error}</pre>}
+            <div className="run-actions">
+              <button className="secondary-button" type="button" onClick={() => void createFollowUps(run)}>
+                <Plus size={16} />
+                <span>Follow-ups</span>
+              </button>
+            </div>
           </div>
         ))}
       </div>

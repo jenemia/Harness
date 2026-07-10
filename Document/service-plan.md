@@ -110,6 +110,8 @@ Initial implementation: project settings include role-to-role handoff rules. By 
 
 Initial implementation: shell-backed LLM providers create a command execution approval request before any configured CLI command runs. The task is blocked until the user approves or rejects the request from the Approvals panel. Approved tasks resume automatically; rejected tasks remain blocked and the decision is recorded in the timeline.
 
+Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list. Follow-ups are created as child tasks with a dependency on the source task so PM output can become tracked work.
+
 Risk boundaries can include:
 
 - Merging code back to the main project branch.
@@ -475,7 +477,7 @@ The task detail view should include:
 - Comments
 - Human approval prompts
 
-Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, parent/subtask links, dependencies, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, handoff history, and an activity timeline.
+Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, parent/subtask links, dependencies, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, follow-up task creation, handoff history, and an activity timeline.
 
 ### Agent Directory
 
