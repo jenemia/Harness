@@ -5,6 +5,7 @@ import {
   getProjectSettingsFromDb,
   mapAgent,
   mapApproval,
+  mapMemory,
   mapTask,
   now,
   openProjectDb,
@@ -370,7 +371,10 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
 
     const freshTask = getTask(db, task.id) ?? task;
     const executionAgent = withProviderCommand(agent, settings);
-    const result = await providers.llm(executionAgent.modelBackend).run(executionAgent, freshTask, workspace);
+    const projectMemory = db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory);
+    const result = await providers.llm(executionAgent.modelBackend).run(executionAgent, freshTask, workspace, {
+      projectMemory
+    });
     const completedAt = now();
     const changedFiles = await collectChangedFiles(workspace.worktreePath);
     const commitResult = result.ok

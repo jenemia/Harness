@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Activity,
   Bot,
+  Brain,
   CheckCircle2,
   Clock3,
   Columns3,
@@ -21,7 +22,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Approval, CommentRecord, DocumentRecord, Event, Handoff, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -216,6 +217,7 @@ export function App() {
               />
               <ApprovalsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <DocumentsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
+              <MemoryPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <AgentPanel
                 overview={overview}
                 providerCatalog={providerCatalog}
@@ -479,6 +481,93 @@ function DocumentsPanel(props: {
         onChanged={props.onChanged}
       />
     </section>
+  );
+}
+
+function MemoryPanel(props: {
+  overview: Overview;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [selectedMemoryId, setSelectedMemoryId] = useState("");
+  const selected = props.overview.memories.find((memory) => memory.id === selectedMemoryId) || null;
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <Brain size={17} />
+        <h2>Memory</h2>
+      </div>
+      <MemoryEditor
+        projectId={props.overview.project.id}
+        memory={selected}
+        memories={props.overview.memories}
+        onSelect={setSelectedMemoryId}
+        runAction={props.runAction}
+        onChanged={props.onChanged}
+      />
+    </section>
+  );
+}
+
+function MemoryEditor(props: {
+  projectId: string;
+  memory: MemoryRecord | null;
+  memories: MemoryRecord[];
+  onSelect: (id: string) => void;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+
+  useEffect(() => {
+    setTitle(props.memory?.title || "");
+    setContent(props.memory?.content || "");
+  }, [props.memory?.id]);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      if (props.memory) {
+        await api(`/api/projects/${props.projectId}/memories/${props.memory.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title, content })
+        });
+      } else {
+        const response = await api<{ memory: MemoryRecord }>(`/api/projects/${props.projectId}/memories`, {
+          method: "POST",
+          body: JSON.stringify({ title, content })
+        });
+        props.onSelect(response.memory.id);
+      }
+      await props.onChanged();
+    });
+  }
+
+  return (
+    <form className="stack-form" onSubmit={save}>
+      <select value={props.memory?.id || ""} onChange={(event) => props.onSelect(event.target.value)}>
+        <option value="">New memory</option>
+        {props.memories.map((memory) => (
+          <option key={memory.id} value={memory.id}>
+            {memory.title}
+          </option>
+        ))}
+      </select>
+      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Memory title" />
+      <textarea
+        className="document-textarea memory-textarea"
+        value={content}
+        onChange={(event) => setContent(event.target.value)}
+        placeholder="Project conventions, user preferences, recurring decisions..."
+      />
+      <button className="secondary-button" type="submit">
+        <Brain size={16} />
+        <span>Save memory</span>
+      </button>
+      <p className="provider-help">Saved memory is injected into every agent prompt and CLI environment.</p>
+    </form>
   );
 }
 

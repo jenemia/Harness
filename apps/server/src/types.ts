@@ -91,6 +91,14 @@ export type DocumentRecord = {
   updatedAt: string;
 };
 
+export type MemoryRecord = {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ApprovalRecord = {
   id: string;
   taskId: string;
@@ -150,6 +158,7 @@ export type ProjectOverview = {
   agents: AgentRecord[];
   tasks: TaskRecord[];
   documents: DocumentRecord[];
+  memories: MemoryRecord[];
   approvals: ApprovalRecord[];
   handoffs: HandoffRecord[];
   comments: CommentRecord[];

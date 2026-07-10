@@ -11,6 +11,7 @@ import type {
   EventRecord,
   GlobalSettings,
   HandoffRecord,
+  MemoryRecord,
   ProjectListItem,
   ProjectOverview,
   ProjectRecord,
@@ -214,6 +215,14 @@ export function openProjectDb(projectPath: string) {
     );
 
     CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS memories (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       content TEXT NOT NULL,
@@ -473,6 +482,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       agents: db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent),
       tasks: db.prepare("SELECT * FROM tasks ORDER BY created_at ASC").all().map(mapTask),
       documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
+      memories: db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
       handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
       comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
@@ -637,6 +647,17 @@ export function mapTask(row: unknown): TaskRecord {
 }
 
 export function mapDocument(row: unknown): DocumentRecord {
+  const r = row as Record<string, string>;
+  return {
+    id: r.id,
+    title: r.title,
+    content: r.content,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  };
+}
+
+export function mapMemory(row: unknown): MemoryRecord {
   const r = row as Record<string, string>;
   return {
     id: r.id,

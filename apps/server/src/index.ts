@@ -13,6 +13,7 @@ import {
   mapAgent,
   mapComment,
   mapDocument,
+  mapMemory,
   mapTask,
   now,
   openProjectDb,
@@ -147,6 +148,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "POST" && childPath === "memories") {
+        const memory = createMemory(project, await readBody(req));
+        sendJson(res, { memory, overview: getProjectOverview(project) }, 201);
+        return;
+      }
+
       const taskActionMatch = childPath.match(/^tasks\/([^/]+)(?:\/([^/]+))?$/);
       if (taskActionMatch) {
         const taskId = taskActionMatch[1];
@@ -213,6 +220,13 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, { document, plan, schedule, overview: getProjectOverview(project) }, 201);
           return;
         }
+      }
+
+      const memoryActionMatch = childPath.match(/^memories\/([^/]+)$/);
+      if (memoryActionMatch && req.method === "PATCH") {
+        const memory = updateMemory(project, memoryActionMatch[1], await readBody(req));
+        sendJson(res, { memory, overview: getProjectOverview(project) });
+        return;
       }
     }
 
@@ -565,6 +579,67 @@ function getDocument(project: ProjectRecord, documentId: string) {
       throw new Error("Document not found.");
     }
     return mapDocument(row);
+  } finally {
+    db.close();
+  }
+}
+
+function createMemory(project: ProjectRecord, input: { title?: string; content?: string }) {
+  if (!input.title?.trim()) {
+    throw new Error("Memory title is required.");
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    const timestamp = now();
+    const id = randomUUID();
+    db.prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)").run(
+      id,
+      input.title.trim(),
+      input.content || "",
+      timestamp,
+      timestamp
+    );
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "memory.created",
+      message: `${input.title.trim()} was added to project memory.`,
+      metadata: { memoryId: id }
+    });
+
+    return mapMemory(db.prepare("SELECT * FROM memories WHERE id = ?").get(id));
+  } finally {
+    db.close();
+  }
+}
+
+function updateMemory(project: ProjectRecord, memoryId: string, input: { title?: string; content?: string }) {
+  const db = openProjectDb(project.path);
+  try {
+    const existing = db.prepare("SELECT * FROM memories WHERE id = ?").get(memoryId);
+    if (!existing) {
+      throw new Error("Memory not found.");
+    }
+
+    db.prepare(`
+      UPDATE memories
+      SET title = COALESCE(?, title),
+          content = COALESCE(?, content),
+          updated_at = ?
+      WHERE id = ?
+    `).run(input.title?.trim() || null, input.content ?? null, now(), memoryId);
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "memory.updated",
+      message: "Project memory was updated.",
+      metadata: { memoryId }
+    });
+
+    return mapMemory(db.prepare("SELECT * FROM memories WHERE id = ?").get(memoryId));
   } finally {
     db.close();
   }

@@ -9,6 +9,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Jira-like Kanban board.
 - Jira-like task detail drawer with editable metadata, labels, parent/subtask links, dependencies, runs, changed files, timeline, worktree, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.
+- Project-local Memory panel for conventions and preferences injected into agent prompts.
 - Agent persona, backend, capability, and concurrency management.
 - Task assignment and execution.
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
@@ -20,6 +21,8 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
 
 LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
+
+Project memory is written to `.harness/project-memory.md` inside each task worktree and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 
 Shell-backed providers require human approval before their configured command runs when the current project has command approvals enabled. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
 
@@ -62,3 +65,7 @@ Harness blocks task execution before running shell-backed LLM providers until th
 Use the Documents panel to create and edit project-local notes, service plans, specs, and acceptance criteria. Documents are stored in the project-local Harness database and included in project overview state.
 
 Selected documents can be sent to PM planning to create detailed Kanban tickets from a spec or bullet list.
+
+## Memory
+
+Use the Memory panel to store project conventions, user preferences, recurring decisions, and other durable context. Saved memory is project-local and included in every agent prompt.

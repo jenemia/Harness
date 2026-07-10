@@ -195,6 +195,8 @@ A dedicated review agent can inspect completed work before the task moves to Don
 
 Agents should remember project-specific conventions, decisions, recurring mistakes, and user preferences. Memory should be scoped by project unless explicitly promoted globally.
 
+Initial implementation: project-local memory entries can be created and edited from the UI, stored in the project `.harness` database, and injected into every agent run through the generated prompt file plus `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
+
 ### Model Router
 
 Harness should route tasks to different models or CLI tools based on cost, quality, speed, and task type.
@@ -395,7 +397,7 @@ Global storage:
 - Global model/router settings
 - App update and telemetry preferences, if any
 
-Initial implementation: Harness stores global settings for app-wide defaults and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy.
+Initial implementation: Harness stores global settings for app-wide defaults and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy. Harness also stores project-local memory entries for conventions and preferences that should travel with agent execution.
 
 Candidate paths:
 

@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { AgentRecord, TaskRecord } from "./types.js";
+import type { AgentRecord, MemoryRecord, TaskRecord } from "./types.js";
 
 export type CommandResult = {
   ok: boolean;
@@ -13,6 +13,10 @@ export type CommandResult = {
 export type TaskWorkspace = {
   branchName: string;
   worktreePath: string;
+};
+
+export type LlmRunContext = {
+  projectMemory: MemoryRecord[];
 };
 
 export type PlatformProvider = {
@@ -31,7 +35,12 @@ export type PlatformProvider = {
 export type LlmProvider = {
   id: string;
   definition: LlmProviderDefinition;
-  run(agent: AgentRecord, task: TaskRecord, workspace: TaskWorkspace): Promise<{ ok: boolean; output: string; error: string | null }>;
+  run(
+    agent: AgentRecord,
+    task: TaskRecord,
+    workspace: TaskWorkspace,
+    context?: LlmRunContext
+  ): Promise<{ ok: boolean; output: string; error: string | null }>;
 };
 
 export type LlmProviderDefinition = {
@@ -231,17 +240,19 @@ function createMockLlmProvider(): LlmProvider {
       requiresCommand: false,
       commandExample: null
     },
-    async run(agent, task, workspace) {
+    async run(agent, task, workspace, context) {
       const output = [
         `Agent: ${agent.name}`,
         `Role: ${agent.role}`,
         `Task: ${task.title}`,
+        `Project memory entries: ${context?.projectMemory.length || 0}`,
         "",
         "Mock adapter completed this task. Configure a shell CLI command on the agent to execute a real LLM CLI."
       ].join("\n");
+      const files = writePromptFiles("mock", agent, task, workspace, context);
       writeFileSync(
         path.join(workspace.worktreePath, "HARNESS_AGENT_RESULT.md"),
-        `# Harness Agent Result\n\n${output}\n`,
+        `# Harness Agent Result\n\n${output}\n\nPrompt: ${files.promptFile}\n`,
         "utf8"
       );
       return { ok: true, output, error: null };
@@ -260,12 +271,12 @@ function createShellLlmProvider(platformProvider: PlatformProvider): LlmProvider
       requiresCommand: true,
       commandExample: "node ./scripts/agent-runner.js"
     },
-    async run(agent, task, workspace) {
+    async run(agent, task, workspace, context) {
       if (!agent.cliCommand) {
         return { ok: false, output: "", error: "Shell provider requires an agent CLI command." };
       }
 
-      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment("shell", agent, task, workspace));
+      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment("shell", agent, task, workspace, context));
     }
   };
 }
@@ -281,7 +292,7 @@ function createCliLlmProvider(
       kind: "llm-cli",
       requiresCommand: true
     },
-    async run(agent, task, workspace) {
+    async run(agent, task, workspace, context) {
       if (!agent.cliCommand) {
         return {
           ok: false,
@@ -290,16 +301,24 @@ function createCliLlmProvider(
         };
       }
 
-      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment(input.id, agent, task, workspace));
+      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment(input.id, agent, task, workspace, context));
     }
   };
 }
 
-function buildLlmEnvironment(providerId: string, agent: AgentRecord, task: TaskRecord, workspace: TaskWorkspace) {
-  const promptFile = writePromptFile(providerId, agent, task, workspace);
+function buildLlmEnvironment(
+  providerId: string,
+  agent: AgentRecord,
+  task: TaskRecord,
+  workspace: TaskWorkspace,
+  context?: LlmRunContext
+) {
+  const files = writePromptFiles(providerId, agent, task, workspace, context);
   return {
     HARNESS_LLM_PROVIDER: providerId,
-    HARNESS_PROMPT_FILE: promptFile,
+    HARNESS_PROMPT_FILE: files.promptFile,
+    HARNESS_PROJECT_MEMORY: files.memoryText,
+    HARNESS_PROJECT_MEMORY_FILE: files.memoryFile,
     HARNESS_AGENT_NAME: agent.name,
     HARNESS_AGENT_ROLE: agent.role,
     HARNESS_AGENT_PERSONA: agent.persona,
@@ -312,10 +331,19 @@ function buildLlmEnvironment(providerId: string, agent: AgentRecord, task: TaskR
   };
 }
 
-function writePromptFile(providerId: string, agent: AgentRecord, task: TaskRecord, workspace: TaskWorkspace) {
+function writePromptFiles(
+  providerId: string,
+  agent: AgentRecord,
+  task: TaskRecord,
+  workspace: TaskWorkspace,
+  context?: LlmRunContext
+) {
   const promptDir = path.join(workspace.worktreePath, ".harness");
   mkdirSync(promptDir, { recursive: true });
   const promptFile = path.join(promptDir, "agent-prompt.md");
+  const memoryFile = path.join(promptDir, "project-memory.md");
+  const memoryText = formatProjectMemory(context?.projectMemory || []);
+  writeFileSync(memoryFile, memoryText, "utf8");
   const prompt = [
     `# Harness Agent Task`,
     ``,
@@ -335,6 +363,9 @@ function writePromptFile(providerId: string, agent: AgentRecord, task: TaskRecor
     `## Acceptance Criteria`,
     task.acceptanceCriteria || "(none)",
     ``,
+    `## Project Memory`,
+    memoryText,
+    ``,
     `## Workspace`,
     `Branch: ${workspace.branchName}`,
     `Path: ${workspace.worktreePath}`,
@@ -342,7 +373,17 @@ function writePromptFile(providerId: string, agent: AgentRecord, task: TaskRecor
     `Work only inside this task worktree. Report changed files, verification performed, and any blockers.`
   ].join("\n");
   writeFileSync(promptFile, prompt, "utf8");
-  return promptFile;
+  return { promptFile, memoryFile, memoryText };
+}
+
+function formatProjectMemory(memories: MemoryRecord[]) {
+  if (memories.length === 0) {
+    return "(none)";
+  }
+
+  return memories
+    .map((memory) => [`### ${memory.title}`, memory.content || "(empty)"].join("\n"))
+    .join("\n\n");
 }
 
 async function ensureHarnessGitExclude(projectPath: string) {
