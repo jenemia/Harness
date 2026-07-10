@@ -352,7 +352,107 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 - 필수 설치와 첫 카드 실행 절차를 짧은 흐름으로 재현할 수 있다.
 - 각 provider와 MCP 연결 안내가 실제 smoke test command로 검증된다.
 
-## 9. 추가 기능: Agent Dog Overlay
+## 9. `.harness/agent` 기반 에이전트 페르소나 관리
+
+### 파일 구조와 원본 소유권
+
+- [ ] project별 agent 정의를 `.harness/agent/<agent-slug>--<short-id>/` 아래에 생성한다.
+- [ ] 각 agent folder에 필수 `agent.md`와 선택적 `instructions/*.md`를 지원한다.
+- [ ] `agent.md`를 역할, persona, instruction, boundary와 실행 설정의 기준 원본으로 사용한다.
+- [ ] DB에는 agent id, 파일 경로, content hash, parse 상태, runtime 상태, current task와 실행 통계만 파생 index로 저장한다.
+- [ ] role, persona와 instruction 본문을 DB와 Markdown 양쪽에서 각각 수정 가능한 원본으로 중복 저장하지 않는다.
+- [ ] agent folder 이름은 표시 이름이 바뀌어도 유지되는 stable path로 사용한다.
+- [ ] agent definition과 instruction file에는 provider credential, OAuth token, API key와 secret을 저장하지 않는다.
+
+```text
+.harness/agent/
+└── reviewer--a1b2c3d4/
+    ├── agent.md
+    └── instructions/
+        ├── security-review.md
+        └── output-format.md
+```
+
+### Markdown 형식
+
+- [ ] `agent.md`는 versioned YAML frontmatter와 Markdown body를 사용한다.
+- [ ] frontmatter에 schema version, id, name, role, model backend, capabilities, allowed tools, max parallel, enabled와 instruction file 목록을 정의한다.
+- [ ] body에 `Persona`, `Instructions`, `Boundaries`와 선택적 `Review Policy`, `Output Format` section을 지원한다.
+- [ ] 알 수 없는 frontmatter field와 custom Markdown section은 손실 없이 보존해 향후 schema 확장을 막지 않는다.
+- [ ] instruction file 적용 순서는 `agent.md`의 `instructionFiles` 목록으로 명시하고 암묵적인 전체 folder scan 순서에 의존하지 않는다.
+- [ ] instruction file은 agent folder 내부 상대 경로만 허용하고 absolute path, `..`와 symlink escape를 차단한다.
+
+```md
+---
+schemaVersion: 1
+id: a1b2c3d4-0000-0000-0000-000000000000
+name: Review Agent
+role: reviewer
+modelBackend: codex
+capabilities: [review, testing]
+allowedTools: [worktree, diff, tests]
+maxParallel: 1
+enabled: true
+instructionFiles:
+  - instructions/security-review.md
+---
+
+# Persona
+
+변경 사항을 위험도와 검증 근거를 중심으로 검토한다.
+
+# Instructions
+
+- 변경된 코드와 테스트 결과를 함께 확인한다.
+
+# Boundaries
+
+- review task에서는 source code를 직접 수정하지 않는다.
+```
+
+### App 및 Web 관리 UI
+
+- [ ] 앱과 웹의 `에이전트 관리` 메뉴에서 project agent 목록과 파일 parse 상태를 보여준다.
+- [ ] agent 생성 시 folder와 기본 `agent.md`를 함께 만들고 template 선택 또는 빈 정의로 시작할 수 있게 한다.
+- [ ] agent별 편집 화면에 구조화 form과 raw Markdown editor를 제공한다.
+- [ ] form과 Markdown editor는 같은 in-memory document를 편집하고 저장 전 diff와 validation 결과를 보여준다.
+- [ ] persona와 instruction을 Markdown preview로 확인할 수 있게 한다.
+- [ ] instruction file을 생성, 이름 변경, 순서 변경, 편집과 제거할 수 있게 한다.
+- [ ] agent 복제, 비활성화, archive와 folder 열기 동작을 제공한다.
+- [ ] archive는 기본 삭제 방식으로 `.harness/agent/.archive/<agent-folder>/`에 원본 Markdown을 보존한다.
+- [ ] active run 또는 assigned task가 있는 agent의 archive·삭제는 차단하고 안전한 reassignment 흐름을 안내한다.
+- [ ] desktop 앱은 typed IPC, 선택적 web transport는 동일 agent application service를 사용하게 한다.
+
+### 저장, 외부 편집과 충돌 처리
+
+- [ ] Markdown 저장은 temporary file과 atomic rename을 사용해 부분 저장을 방지한다.
+- [ ] file watcher가 외부 editor의 `agent.md`와 instruction 변경을 debounce해 감지한다.
+- [ ] 유효한 외부 변경은 agent index와 UI에 반영하고 다음 run부터 사용한다.
+- [ ] parsing 또는 validation 실패 시 실행 중 run은 시작 당시 snapshot으로 유지하고 해당 agent의 새 run은 차단하며 `invalid` 상태를 표시한다.
+- [ ] UI에서 편집 중 외부 파일이 바뀌면 content hash로 충돌을 감지하고 overwrite, reload 또는 수동 merge를 선택하게 한다.
+- [ ] app, web, CLI와 MCP에서 저장할 때 같은 validation과 atomic writer를 사용한다.
+- [ ] 여러 process가 동시에 agent를 수정할 때 project writer lock과 expected content hash를 확인한다.
+
+### 실행 snapshot과 migration
+
+- [ ] task 실행 시작 시 사용한 agent definition hash와 schema version을 run에 기록한다.
+- [ ] run prompt에 합성된 `agent.md`와 instruction 내용을 snapshot으로 보존하되 secret 검사를 통과하게 한다.
+- [ ] agent 파일이 변경돼도 이미 실행 중인 run의 persona와 instruction은 바뀌지 않게 한다.
+- [ ] 기존 DB agent를 `.harness/agent` folder와 Markdown으로 내보내는 idempotent migration을 구현한다.
+- [ ] migration은 agent id, assignment, run history와 template 관계를 보존한다.
+- [ ] migration 성공 전 기존 DB 원본을 제거하지 않고 rollback과 재실행 경로를 제공한다.
+- [ ] project template 적용 시 template agent를 project-local Markdown folder로 materialize한다.
+
+### 완료 조건
+
+- project의 모든 agent 역할, persona와 instruction을 `.harness/agent` 아래 Markdown으로 확인하고 편집할 수 있다.
+- 앱과 웹에서 동일한 agent Markdown을 생성·편집하고 외부 editor 변경도 안전하게 반영된다.
+- 잘못된 Markdown이 실행 중 agent를 중단시키거나 마지막 정상 정의를 덮어쓰지 않는다.
+- 모든 run에서 실제 사용한 agent definition revision을 확인할 수 있다.
+- project folder를 이동해도 agent definition과 instruction이 함께 이동한다.
+- credential과 secret이 agent Markdown과 run snapshot에 저장되지 않는다.
+
+## 10. 추가 기능: Agent Dog Overlay
 
 > 구현 계획 문서: [Agent Dog Overlay Feature Plan](Document/agent-dog-overlay-plan.md)
 
@@ -401,22 +501,23 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 1. [Local Desktop Architecture](Document/local-desktop-architecture.md)에 따른 application service, store와 runtime 경계 분리
 2. project `.harness/` layout, lock, migration과 recovery 확정
-3. Electron main, preload, typed IPC와 packaged React renderer
-4. persistent HTTP server 기본 비활성화와 선택적 HTTP transport 분리
-5. CLI-owned provider 인증 재사용과 OAuth 예외 경로 정리
-6. 공통 provider capability와 versioned 실시간 event 계약
-7. Cursor CLI provider와 provider event adapter
-8. draft 세션, revision, 코멘트 데이터 모델
-9. 기획 리뷰어·예외 상황 감지 에이전트와 실시간 코멘트 UI
-10. 기획 에이전트의 `내용 반영` 및 diff·승인·되돌리기
-11. 범용 interaction 모델과 `suspended` run 상태
-12. 질문·승인·권한 요청 후 실행 재개
-13. 구현 완료 HTML 보고서, 변경량 지표와 완료 후 side diff 리뷰
-14. worktree 경계 감지, pre-push hook과 다층 보호
-15. Harness MCP server, local socket bridge와 Cursor 연결
-16. 주요 실행 구간 OpenTelemetry 계측
-17. 완성된 실제 흐름과 검증된 설치 방법을 기준으로 README 개편
-18. [Agent Dog Overlay Feature Plan](Document/agent-dog-overlay-plan.md)에 따른 macOS overlay와 Windows-ready platform 경계
+3. `.harness/agent` Markdown schema, 기존 DB agent migration과 agent application service
+4. Electron main, preload, typed IPC와 packaged React renderer
+5. persistent HTTP server 기본 비활성화와 선택적 HTTP transport 분리
+6. CLI-owned provider 인증 재사용과 OAuth 예외 경로 정리
+7. 공통 provider capability와 versioned 실시간 event 계약
+8. Cursor CLI provider와 provider event adapter
+9. draft 세션, revision, 코멘트 데이터 모델
+10. 기획 리뷰어·예외 상황 감지 에이전트와 실시간 코멘트 UI
+11. 기획 에이전트의 `내용 반영` 및 diff·승인·되돌리기
+12. 범용 interaction 모델과 `suspended` run 상태
+13. 질문·승인·권한 요청 후 실행 재개
+14. 구현 완료 HTML 보고서, 변경량 지표와 완료 후 side diff 리뷰
+15. worktree 경계 감지, pre-push hook과 다층 보호
+16. Harness MCP server, local socket bridge와 Cursor 연결
+17. 주요 실행 구간 OpenTelemetry 계측
+18. 완성된 실제 흐름과 검증된 설치 방법을 기준으로 README 개편
+19. [Agent Dog Overlay Feature Plan](Document/agent-dog-overlay-plan.md)에 따른 macOS overlay와 Windows-ready platform 경계
 
 `진행하면 좋은 것들`의 Worktree 개발 서버 Preview는 위 순서에 포함하지 않는다.
 
@@ -425,6 +526,7 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 - 카드 작성 단계와 실행 단계 모두에서 인간과 에이전트의 대화가 task 맥락에 영속화된다.
 - desktop 기본 경로가 별도 persistent HTTP server 없이 project `.harness/`를 직접 사용한다.
 - CLI provider는 별도 Harness API token 없이 각 CLI의 기존 login session을 재사용한다.
+- agent 역할, persona와 instruction은 `.harness/agent` Markdown을 기준 원본으로 사용하고 앱·웹·외부 editor에서 안전하게 관리된다.
 - 사용자의 명시적 결정 없이 에이전트가 초안 변경이나 위험 작업을 수행하지 않는다.
 - 서버 재시작 후에도 draft, interaction, suspended run을 복구할 수 있다.
 - Cursor CLI와 기존 provider가 공통 event 계약 또는 안전한 fallback으로 실행된다.

@@ -75,6 +75,11 @@ project-root/
     ├── harness.db
     ├── harness.db-wal
     ├── harness.db-shm
+    ├── agent/
+    │   └── <agent-slug>--<short-id>/
+    │       ├── agent.md
+    │       └── instructions/
+    │           └── <instruction-name>.md
     ├── artifacts/
     ├── attachments/
     ├── reports/
@@ -100,7 +105,8 @@ Windows에서는 `harness.sock` 대신 project와 instance id를 포함하는 na
 | --- | --- | --- |
 | `manifest.json` | project id, format version, DB schema compatibility | 영구 |
 | `config.json` | 사람이 편집할 수 있는 project 설정 | 영구 |
-| `harness.db` | task, agent, run, interaction, approval, event index의 source of truth | 영구 |
+| `harness.db` | task, run, interaction, approval, event index와 agent runtime/index 상태의 source of truth | 영구 |
+| `agent/` | project agent의 역할, persona, 지침과 boundary Markdown 원본 | 영구 |
 | `artifacts/` | agent가 만든 재사용 가능 산출물 | 영구 또는 사용자 삭제 |
 | `attachments/` | 카드와 comment 첨부 파일 | 영구 또는 사용자 삭제 |
 | `reports/` | 완료 보고서 HTML과 report asset | run 정책에 따라 보존 |
@@ -112,6 +118,56 @@ Windows에서는 `harness.sock` 대신 project와 instance id를 포함하는 na
 | `runtime/` | lock, socket, 현재 instance 정보 | application 종료 후 정리 |
 
 `harness.db`와 별도 파일에 같은 structured record를 이중으로 저장하지 않는다. 큰 provider payload, attachment와 HTML report만 파일로 두고 DB에는 경로, hash, MIME type과 ownership을 저장한다.
+
+agent 정의는 명시적인 예외로 `.harness/agent/<agent>/agent.md`를 기준 원본으로 삼는다. DB에는 agent id, 파일 경로, content hash, parse 상태, runtime status, current task와 실행 통계만 파생 index로 저장한다. role, persona와 instruction 본문을 DB와 Markdown 양쪽에서 각각 수정 가능한 원본으로 유지하지 않는다.
+
+### Agent 정의 파일
+
+각 agent는 생성 시 사람이 읽을 수 있고 id 충돌에 안전한 고정 folder를 갖는다.
+
+```text
+.harness/agent/reviewer--a1b2c3d4/
+├── agent.md
+└── instructions/
+    ├── security-review.md
+    └── output-format.md
+```
+
+`agent.md`는 versioned YAML frontmatter와 Markdown section을 사용한다.
+
+```md
+---
+schemaVersion: 1
+id: a1b2c3d4-0000-0000-0000-000000000000
+name: Review Agent
+role: reviewer
+modelBackend: codex
+capabilities: [review, testing]
+allowedTools: [worktree, diff, tests]
+maxParallel: 1
+enabled: true
+instructionFiles:
+  - instructions/security-review.md
+  - instructions/output-format.md
+---
+
+# Persona
+
+변경 사항을 위험도와 검증 근거를 중심으로 검토한다.
+
+# Instructions
+
+- 변경된 코드와 테스트 결과를 함께 확인한다.
+- 확인하지 않은 사실을 통과로 판단하지 않는다.
+
+# Boundaries
+
+- review task에서는 source code를 직접 수정하지 않는다.
+```
+
+folder name은 표시 이름 변경과 분리된 stable path로 취급한다. app과 web은 agent 생성 시 folder와 `agent.md`를 만들고, 변경 시 temporary file 작성 후 atomic rename으로 저장한다. 외부 editor 변경은 file watcher가 감지한다. parsing에 실패하면 실행 중 run은 시작 당시 snapshot으로 계속하고 해당 agent의 새 run은 차단하며 UI에 오류를 표시한다. archive는 `.harness/agent/.archive/` 아래로 folder를 이동해 Markdown 원본을 보존한다.
+
+instruction file은 agent folder 밖을 참조할 수 없고 symlink, `..`와 absolute path를 허용하지 않는다. provider credential과 secret은 agent Markdown에 기록하지 않는다. 각 run은 실행 당시 agent definition hash와 사용한 Markdown snapshot을 기록해 이후 파일이 바뀌어도 실행 맥락을 재현할 수 있게 한다.
 
 ## 사용자 전역 데이터
 
@@ -304,6 +360,8 @@ provider process, PID, session id, last sequence와 workspace는 DB에 기록한
 ### 2단계: store와 runtime 경계 분리
 
 - SQLite open, migration과 project path 처리를 store module로 이동한다.
+- 기존 DB agent 정의를 `.harness/agent` Markdown으로 materialize하고 DB에는 derived index와 runtime 상태만 남긴다.
+- app, web, CLI와 MCP가 공유하는 agent parser, validator, atomic writer와 file watcher를 service 경계에 둔다.
 - scheduler, provider execution, recovery와 merge lifecycle을 runtime module로 이동한다.
 - transport가 raw DB statement를 직접 실행하지 못하게 한다.
 
