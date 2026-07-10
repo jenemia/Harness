@@ -423,6 +423,8 @@ Candidate paths:
 - Documents
 - Settings
 
+Initial implementation: project-local documents can be created and edited from the UI, stored in the project `.harness` database, and returned as part of the project overview.
+
 ### Board Columns
 
 Initial Jira-like columns:

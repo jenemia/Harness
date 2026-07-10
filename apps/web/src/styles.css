@@ -450,6 +450,10 @@ textarea {
   resize: vertical;
 }
 
+.document-textarea {
+  min-height: 180px;
+}
+
 .sidebar input {
   border-color: rgb(255 255 255 / 18%);
   background: rgb(255 255 255 / 8%);

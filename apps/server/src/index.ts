@@ -9,6 +9,7 @@ import {
   globalHarnessDir,
   insertEvent,
   listProjects,
+  mapDocument,
   now,
   openProjectDb,
   registerProject,
@@ -121,6 +122,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "POST" && childPath === "documents") {
+        const document = createDocument(project, await readBody(req));
+        sendJson(res, { document, overview: getProjectOverview(project) }, 201);
+        return;
+      }
+
       const taskActionMatch = childPath.match(/^tasks\/([^/]+)(?:\/([^/]+))?$/);
       if (taskActionMatch) {
         const taskId = taskActionMatch[1];
@@ -143,6 +150,13 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
           return;
         }
+      }
+
+      const documentMatch = childPath.match(/^documents\/([^/]+)$/);
+      if (documentMatch && req.method === "PATCH") {
+        const document = updateDocument(project, documentMatch[1], await readBody(req));
+        sendJson(res, { document, overview: getProjectOverview(project) });
+        return;
       }
     }
 
@@ -327,6 +341,67 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
     });
 
     return db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+  } finally {
+    db.close();
+  }
+}
+
+function createDocument(project: ProjectRecord, input: { title?: string; content?: string }) {
+  if (!input.title?.trim()) {
+    throw new Error("Document title is required.");
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    const timestamp = now();
+    const id = randomUUID();
+    db.prepare("INSERT INTO documents VALUES (?, ?, ?, ?, ?)").run(
+      id,
+      input.title.trim(),
+      input.content || "",
+      timestamp,
+      timestamp
+    );
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "document.created",
+      message: `${input.title.trim()} was created.`,
+      metadata: { documentId: id }
+    });
+
+    return mapDocument(db.prepare("SELECT * FROM documents WHERE id = ?").get(id));
+  } finally {
+    db.close();
+  }
+}
+
+function updateDocument(project: ProjectRecord, documentId: string, input: { title?: string; content?: string }) {
+  const db = openProjectDb(project.path);
+  try {
+    const existing = db.prepare("SELECT * FROM documents WHERE id = ?").get(documentId);
+    if (!existing) {
+      throw new Error("Document not found.");
+    }
+
+    db.prepare(`
+      UPDATE documents
+      SET title = COALESCE(?, title),
+          content = COALESCE(?, content),
+          updated_at = ?
+      WHERE id = ?
+    `).run(input.title?.trim() || null, input.content ?? null, now(), documentId);
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "document.updated",
+      message: "Document was updated.",
+      metadata: { documentId }
+    });
+
+    return mapDocument(db.prepare("SELECT * FROM documents WHERE id = ?").get(documentId));
   } finally {
     db.close();
   }

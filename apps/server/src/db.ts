@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   AgentRecord,
+  DocumentRecord,
   EventRecord,
   GlobalSettings,
   ProjectOverview,
@@ -199,6 +200,14 @@ export function openProjectDb(projectPath: string) {
       reason TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS documents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
@@ -280,6 +289,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       project,
       agents: db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent),
       tasks: db.prepare("SELECT * FROM tasks ORDER BY created_at ASC").all().map(mapTask),
+      documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
       runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
     };
@@ -437,6 +447,17 @@ export function mapTask(row: unknown): TaskRecord {
     mergeError: r.merge_error ? String(r.merge_error) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapDocument(row: unknown): DocumentRecord {
+  const r = row as Record<string, string>;
+  return {
+    id: r.id,
+    title: r.title,
+    content: r.content,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
   };
 }
 

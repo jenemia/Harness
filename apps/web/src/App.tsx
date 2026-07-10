@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock3,
   Columns3,
+  FileText,
   FolderOpen,
   GitBranch,
   GitMerge,
@@ -18,7 +19,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Event, Overview, PlanResult, Project, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, DocumentRecord, Event, Overview, PlanResult, Project, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -212,6 +213,7 @@ export function App() {
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
+              <DocumentsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <AgentPanel
                 overview={overview}
                 providerCatalog={providerCatalog}
@@ -375,6 +377,92 @@ function ProjectPanel(props: {
         </button>
       </form>
     </section>
+  );
+}
+
+function DocumentsPanel(props: {
+  overview: Overview;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [selectedDocumentId, setSelectedDocumentId] = useState("");
+  const selected = props.overview.documents.find((document) => document.id === selectedDocumentId) || null;
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <FileText size={17} />
+        <h2>Documents</h2>
+      </div>
+      <DocumentEditor
+        projectId={props.overview.project.id}
+        document={selected}
+        onSelect={setSelectedDocumentId}
+        documents={props.overview.documents}
+        runAction={props.runAction}
+        onChanged={props.onChanged}
+      />
+    </section>
+  );
+}
+
+function DocumentEditor(props: {
+  projectId: string;
+  document: DocumentRecord | null;
+  documents: DocumentRecord[];
+  onSelect: (id: string) => void;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+
+  useEffect(() => {
+    setTitle(props.document?.title || "");
+    setContent(props.document?.content || "");
+  }, [props.document?.id]);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      if (props.document) {
+        await api(`/api/projects/${props.projectId}/documents/${props.document.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title, content })
+        });
+      } else {
+        const response = await api<{ document: DocumentRecord }>(`/api/projects/${props.projectId}/documents`, {
+          method: "POST",
+          body: JSON.stringify({ title, content })
+        });
+        props.onSelect(response.document.id);
+      }
+      await props.onChanged();
+    });
+  }
+
+  return (
+    <form className="stack-form" onSubmit={save}>
+      <select value={props.document?.id || ""} onChange={(event) => props.onSelect(event.target.value)}>
+        <option value="">New document</option>
+        {props.documents.map((document) => (
+          <option key={document.id} value={document.id}>
+            {document.title}
+          </option>
+        ))}
+      </select>
+      <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Document title" />
+      <textarea
+        className="document-textarea"
+        value={content}
+        onChange={(event) => setContent(event.target.value)}
+        placeholder="Project notes, service plan, acceptance criteria, research..."
+      />
+      <button className="secondary-button" type="submit">
+        <FileText size={16} />
+        <span>Save</span>
+      </button>
+    </form>
   );
 }
 

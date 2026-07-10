@@ -56,6 +56,14 @@ export type Task = {
   updatedAt: string;
 };
 
+export type DocumentRecord = {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Event = {
   id: string;
   taskId: string | null;
@@ -83,6 +91,7 @@ export type Overview = {
   project: Project;
   agents: Agent[];
   tasks: Task[];
+  documents: DocumentRecord[];
   events: Event[];
   runs: Run[];
 };
