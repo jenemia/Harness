@@ -1043,6 +1043,21 @@ textarea {
   line-height: 1.35;
 }
 
+.provider-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.provider-command-actions .secondary-button {
+  max-width: 100%;
+}
+
+.provider-command-actions .secondary-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .approval-row {
   border-top: 1px solid #f1f2f4;
   display: flex;

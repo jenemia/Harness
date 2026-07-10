@@ -2650,8 +2650,7 @@ function formatProviderCommandResolution(metadata: Record<string, unknown>) {
 }
 
 function formatProviderCommandPlaceholder(providerCatalog: ProviderCatalog | null, modelBackend: string) {
-  const examples = providerCatalog?.providerCommandKeys.examples || [];
-  const example = examples.find((item) => item.modelBackend === modelBackend) || examples[0];
+  const example = getProviderCommandExample(providerCatalog, modelBackend) || providerCatalog?.providerCommandKeys.examples[0];
   if (!example) {
     return '{\n  "codex": "codex exec \\"$HARNESS_PROMPT_FILE\\""\n}';
   }
@@ -2660,6 +2659,27 @@ function formatProviderCommandPlaceholder(providerCatalog: ProviderCatalog | nul
     {
       [example.keys[0]]: command,
       [example.keys[example.keys.length - 1]]: command
+    },
+    null,
+    2
+  );
+}
+
+function getProviderCommandExample(providerCatalog: ProviderCatalog | null, modelBackend: string) {
+  return providerCatalog?.providerCommandKeys.examples.find((item) => item.modelBackend === modelBackend) || null;
+}
+
+function mergeProviderCommandText(value: string, providerCatalog: ProviderCatalog | null, modelBackend: string, keyIndex: number) {
+  const example = getProviderCommandExample(providerCatalog, modelBackend);
+  if (!example) {
+    return value;
+  }
+  const parsed = parseStringMapText(value, "Provider commands");
+  const key = example.keys[Math.min(keyIndex, example.keys.length - 1)];
+  return JSON.stringify(
+    {
+      ...parsed,
+      [key]: parsed[key] || example.commandExample || `run-${example.modelBackend} "$HARNESS_PROMPT_FILE"`
     },
     null,
     2
@@ -3053,8 +3073,24 @@ function SettingsPanel(props: {
   }
 
   const providerCommandKeyGuide = props.providerCatalog?.providerCommandKeys;
+  const globalProviderCommandExample = getProviderCommandExample(props.providerCatalog, defaultModelBackend);
+  const projectProviderCommandExample = getProviderCommandExample(props.providerCatalog, projectSettings.defaultModelBackend);
   const globalProviderCommandPlaceholder = formatProviderCommandPlaceholder(props.providerCatalog, defaultModelBackend);
   const projectProviderCommandPlaceholder = formatProviderCommandPlaceholder(props.providerCatalog, projectSettings.defaultModelBackend);
+
+  function insertProviderCommand(scope: "global" | "project", keyIndex: number) {
+    try {
+      if (scope === "global") {
+        setGlobalProviderCommandsText((current) => mergeProviderCommandText(current, props.providerCatalog, defaultModelBackend, keyIndex));
+      } else {
+        setProjectProviderCommandsText((current) =>
+          mergeProviderCommandText(current, props.providerCatalog, projectSettings.defaultModelBackend, keyIndex)
+        );
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Provider commands must be valid JSON.");
+    }
+  }
 
   return (
     <section className="rail-panel">
@@ -3179,6 +3215,18 @@ function SettingsPanel(props: {
           onChange={(event) => setGlobalProviderCommandsText(event.target.value)}
           placeholder={globalProviderCommandPlaceholder}
         />
+        {globalProviderCommandExample && (
+          <div className="provider-command-actions">
+            <button className="secondary-button compact" type="button" onClick={() => insertProviderCommand("global", 0)}>
+              <Plus size={14} />
+              <span>{globalProviderCommandExample.keys[0]}</span>
+            </button>
+            <button className="secondary-button compact" type="button" onClick={() => insertProviderCommand("global", 2)}>
+              <Plus size={14} />
+              <span>{globalProviderCommandExample.keys[globalProviderCommandExample.keys.length - 1]}</span>
+            </button>
+          </div>
+        )}
         <button className="secondary-button" type="submit">
           <Settings size={16} />
           <span>Save global</span>
@@ -3254,6 +3302,18 @@ function SettingsPanel(props: {
           onChange={(event) => setProjectProviderCommandsText(event.target.value)}
           placeholder={projectProviderCommandPlaceholder}
         />
+        {projectProviderCommandExample && (
+          <div className="provider-command-actions">
+            <button className="secondary-button compact" type="button" onClick={() => insertProviderCommand("project", 0)}>
+              <Plus size={14} />
+              <span>{projectProviderCommandExample.keys[0]}</span>
+            </button>
+            <button className="secondary-button compact" type="button" onClick={() => insertProviderCommand("project", 2)}>
+              <Plus size={14} />
+              <span>{projectProviderCommandExample.keys[projectProviderCommandExample.keys.length - 1]}</span>
+            </button>
+          </div>
+        )}
         <button className="secondary-button" type="submit">
           <Settings size={16} />
           <span>Save project</span>
