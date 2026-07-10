@@ -10,7 +10,10 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Task assignment and execution.
 - Git worktree per executable task.
 - Automatic PM-driven handoff with risk gates reserved for merge/destructive actions.
-- Mock and shell-command agent adapters.
+- Provider-based platform and LLM adapters.
+- Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
+
+LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
 
 ## Development
 
@@ -21,4 +24,3 @@ pnpm dev
 
 The server runs on `http://localhost:4000`.
 The web app runs on `http://localhost:5173`.
-

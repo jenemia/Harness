@@ -79,6 +79,21 @@ export type Overview = {
   runs: Run[];
 };
 
+export type ProviderCatalog = {
+  platform: {
+    id: string;
+    platform: string;
+  };
+  llmProviders: Array<{
+    id: string;
+    label: string;
+    kind: "mock" | "generic-shell" | "llm-cli";
+    description: string;
+    requiresCommand: boolean;
+    commandExample: string | null;
+  }>;
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,

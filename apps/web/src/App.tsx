@@ -14,7 +14,7 @@ import {
   Settings,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Overview, Project, Task, TaskStatus } from "./api";
+import type { Agent, Overview, Project, ProviderCatalog, Task, TaskStatus } from "./api";
 import { api } from "./api";
 
 const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
@@ -23,12 +23,17 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
 
   async function loadProjects() {
-    const data = await api<{ projects: Project[] }>("/api/projects");
+    const [data, providers] = await Promise.all([
+      api<{ projects: Project[] }>("/api/projects"),
+      api<ProviderCatalog>("/api/providers")
+    ]);
     setProjects(data.projects);
+    setProviderCatalog(providers);
     if (!selectedProjectId && data.projects[0]) {
       setSelectedProjectId(data.projects[0].id);
     }
@@ -166,7 +171,12 @@ export function App() {
             </section>
 
             <aside className="right-rail">
-              <AgentPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
+              <AgentPanel
+                overview={overview}
+                providerCatalog={providerCatalog}
+                runAction={runAction}
+                onChanged={() => loadOverview()}
+              />
               <RunPanel overview={overview} />
               <EventPanel overview={overview} />
             </aside>
@@ -388,13 +398,16 @@ function TaskCard(props: {
 
 function AgentPanel(props: {
   overview: Overview;
+  providerCatalog: ProviderCatalog | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [role, setRole] = useState("worker");
+  const [modelBackend, setModelBackend] = useState("mock");
   const [persona, setPersona] = useState("");
   const [cliCommand, setCliCommand] = useState("");
+  const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -406,12 +419,13 @@ function AgentPanel(props: {
           role,
           persona,
           cliCommand: cliCommand || null,
-          modelBackend: cliCommand ? "shell" : "mock"
+          modelBackend
         })
       });
       setName("");
       setPersona("");
       setCliCommand("");
+      setModelBackend("mock");
       await props.onChanged();
     });
   }
@@ -428,7 +442,7 @@ function AgentPanel(props: {
             <span className={`status-dot ${agent.status}`} />
             <div>
               <strong>{agent.name}</strong>
-              <span>{agent.role}</span>
+              <span>{agent.role} · {agent.modelBackend}</span>
             </div>
           </div>
         ))}
@@ -441,12 +455,24 @@ function AgentPanel(props: {
           <option value="reviewer">reviewer</option>
           <option value="project-manager">project-manager</option>
         </select>
+        <select value={modelBackend} onChange={(event) => setModelBackend(event.target.value)}>
+          {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => (
+            <option key={provider.id} value={provider.id}>
+              {provider.label}
+            </option>
+          ))}
+        </select>
         <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder="Persona" />
         <input
           value={cliCommand}
           onChange={(event) => setCliCommand(event.target.value)}
-          placeholder="CLI command"
+          placeholder={selectedProvider?.commandExample || "CLI command"}
         />
+        {selectedProvider && (
+          <p className="provider-help">
+            {selectedProvider.description}
+          </p>
+        )}
         <button className="secondary-button" type="submit">
           <Plus size={16} />
           <span>Agent</span>

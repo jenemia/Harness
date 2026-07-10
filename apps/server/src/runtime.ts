@@ -14,6 +14,16 @@ import type { AgentRecord, ProjectRecord, TaskRecord } from "./types.js";
 const runningTasks = new Set<string>();
 const providers = createDefaultProviders(projectHarnessDir);
 
+export function listRuntimeProviders() {
+  return {
+    platform: {
+      id: providers.platform().id,
+      platform: providers.platform().platform
+    },
+    llmProviders: providers.llmDefinitions()
+  };
+}
+
 export async function startTask(project: ProjectRecord, taskId: string) {
   if (runningTasks.has(taskId)) {
     return { accepted: false, reason: "Task is already running." };

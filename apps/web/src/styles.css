@@ -501,6 +501,12 @@ textarea {
   margin-bottom: 2px;
 }
 
+.provider-help {
+  color: #626f86;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .error-line,
 .busy-line {
   border-radius: 6px;

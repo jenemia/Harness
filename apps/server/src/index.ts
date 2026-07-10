@@ -13,7 +13,7 @@ import {
   registerProject,
   seedDefaultAgents
 } from "./db.js";
-import { approveMerge, startTask } from "./runtime.js";
+import { approveMerge, listRuntimeProviders, startTask } from "./runtime.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -41,6 +41,11 @@ const server = http.createServer(async (req, res) => {
 
     if (route === "GET /api/projects") {
       sendJson(res, { projects: listProjects() });
+      return;
+    }
+
+    if (route === "GET /api/providers") {
+      sendJson(res, listRuntimeProviders());
       return;
     }
 

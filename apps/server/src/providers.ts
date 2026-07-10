@@ -29,7 +29,17 @@ export type PlatformProvider = {
 
 export type LlmProvider = {
   id: string;
+  definition: LlmProviderDefinition;
   run(agent: AgentRecord, task: TaskRecord, workspace: TaskWorkspace): Promise<{ ok: boolean; output: string; error: string | null }>;
+};
+
+export type LlmProviderDefinition = {
+  id: string;
+  label: string;
+  kind: "mock" | "generic-shell" | "llm-cli";
+  description: string;
+  requiresCommand: boolean;
+  commandExample: string | null;
 };
 
 export class ProviderRegistry {
@@ -45,13 +55,47 @@ export class ProviderRegistry {
   llm(modelBackend: string) {
     return this.llmProviders.find((provider) => provider.id === modelBackend) ?? this.llmProviders[0];
   }
+
+  llmDefinitions() {
+    return this.llmProviders.map((provider) => provider.definition);
+  }
 }
 
 export function createDefaultProviders(projectHarnessDir: (projectPath: string) => string) {
   const platformProvider = createNodePlatformProvider(projectHarnessDir);
   return new ProviderRegistry(platformProvider, [
     createMockLlmProvider(),
-    createShellLlmProvider(platformProvider)
+    createShellLlmProvider(platformProvider),
+    createCliLlmProvider(platformProvider, {
+      id: "codex",
+      label: "Codex CLI",
+      description: "Runs a user-configured Codex CLI command inside the task worktree.",
+      commandExample: "codex exec \"$HARNESS_PROMPT_FILE\""
+    }),
+    createCliLlmProvider(platformProvider, {
+      id: "claude",
+      label: "Claude Code CLI",
+      description: "Runs a user-configured Claude Code CLI command inside the task worktree.",
+      commandExample: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\""
+    }),
+    createCliLlmProvider(platformProvider, {
+      id: "gemini",
+      label: "Gemini CLI",
+      description: "Runs a user-configured Gemini CLI command inside the task worktree.",
+      commandExample: "gemini -p \"$(cat $HARNESS_PROMPT_FILE)\""
+    }),
+    createCliLlmProvider(platformProvider, {
+      id: "ollama",
+      label: "Ollama",
+      description: "Runs a user-configured Ollama command inside the task worktree.",
+      commandExample: "ollama run llama3.1 \"$(cat $HARNESS_PROMPT_FILE)\""
+    }),
+    createCliLlmProvider(platformProvider, {
+      id: "openrouter",
+      label: "OpenRouter Wrapper",
+      description: "Runs any user-provided OpenRouter-compatible local CLI wrapper.",
+      commandExample: "openrouter-cli run --prompt-file \"$HARNESS_PROMPT_FILE\""
+    })
   ]);
 }
 
@@ -166,6 +210,14 @@ function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => 
 function createMockLlmProvider(): LlmProvider {
   return {
     id: "mock",
+    definition: {
+      id: "mock",
+      label: "Mock",
+      kind: "mock",
+      description: "Deterministic local provider for testing Harness without calling an LLM.",
+      requiresCommand: false,
+      commandExample: null
+    },
     async run(agent, task, workspace) {
       const output = [
         `Agent: ${agent.name}`,
@@ -187,21 +239,97 @@ function createMockLlmProvider(): LlmProvider {
 function createShellLlmProvider(platformProvider: PlatformProvider): LlmProvider {
   return {
     id: "shell",
+    definition: {
+      id: "shell",
+      label: "Generic Shell",
+      kind: "generic-shell",
+      description: "Runs a custom shell command with Harness task context in environment variables.",
+      requiresCommand: true,
+      commandExample: "node ./scripts/agent-runner.js"
+    },
     async run(agent, task, workspace) {
       if (!agent.cliCommand) {
         return { ok: false, output: "", error: "Shell provider requires an agent CLI command." };
       }
 
-      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, {
-        HARNESS_AGENT_NAME: agent.name,
-        HARNESS_AGENT_ROLE: agent.role,
-        HARNESS_AGENT_PERSONA: agent.persona,
-        HARNESS_TASK_TITLE: task.title,
-        HARNESS_TASK_DESCRIPTION: task.description,
-        HARNESS_ACCEPTANCE_CRITERIA: task.acceptanceCriteria
-      });
+      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment("shell", agent, task, workspace));
     }
   };
+}
+
+function createCliLlmProvider(
+  platformProvider: PlatformProvider,
+  input: Omit<LlmProviderDefinition, "kind" | "requiresCommand">
+): LlmProvider {
+  return {
+    id: input.id,
+    definition: {
+      ...input,
+      kind: "llm-cli",
+      requiresCommand: true
+    },
+    async run(agent, task, workspace) {
+      if (!agent.cliCommand) {
+        return {
+          ok: false,
+          output: "",
+          error: `${input.label} provider requires a CLI command. Example: ${input.commandExample}`
+        };
+      }
+
+      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment(input.id, agent, task, workspace));
+    }
+  };
+}
+
+function buildLlmEnvironment(providerId: string, agent: AgentRecord, task: TaskRecord, workspace: TaskWorkspace) {
+  const promptFile = writePromptFile(providerId, agent, task, workspace);
+  return {
+    HARNESS_LLM_PROVIDER: providerId,
+    HARNESS_PROMPT_FILE: promptFile,
+    HARNESS_AGENT_NAME: agent.name,
+    HARNESS_AGENT_ROLE: agent.role,
+    HARNESS_AGENT_PERSONA: agent.persona,
+    HARNESS_TASK_ID: task.id,
+    HARNESS_TASK_TITLE: task.title,
+    HARNESS_TASK_DESCRIPTION: task.description,
+    HARNESS_ACCEPTANCE_CRITERIA: task.acceptanceCriteria,
+    HARNESS_BRANCH_NAME: workspace.branchName,
+    HARNESS_WORKTREE_PATH: workspace.worktreePath
+  };
+}
+
+function writePromptFile(providerId: string, agent: AgentRecord, task: TaskRecord, workspace: TaskWorkspace) {
+  const promptDir = path.join(workspace.worktreePath, ".harness");
+  mkdirSync(promptDir, { recursive: true });
+  const promptFile = path.join(promptDir, "agent-prompt.md");
+  const prompt = [
+    `# Harness Agent Task`,
+    ``,
+    `Provider: ${providerId}`,
+    `Agent: ${agent.name}`,
+    `Role: ${agent.role}`,
+    ``,
+    `## Persona`,
+    agent.persona,
+    ``,
+    `## Task`,
+    task.title,
+    ``,
+    `## Description`,
+    task.description || "(none)",
+    ``,
+    `## Acceptance Criteria`,
+    task.acceptanceCriteria || "(none)",
+    ``,
+    `## Workspace`,
+    `Branch: ${workspace.branchName}`,
+    `Path: ${workspace.worktreePath}`,
+    ``,
+    `Work only inside this task worktree. Report changed files, verification performed, and any blockers.`
+  ].join("\n");
+  writeFileSync(promptFile, prompt, "utf8");
+  return promptFile;
 }
 
 async function ensureHarnessGitExclude(projectPath: string) {
@@ -237,4 +365,3 @@ async function run(command: string, args: string[], cwd: string, allowFailure = 
 
   return { ...result, ok };
 }
-

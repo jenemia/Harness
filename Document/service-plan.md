@@ -341,8 +341,15 @@ Initial providers:
 - Future `node-win32` platform provider for Windows.
 - `mock` LLM provider for deterministic local testing.
 - `shell` LLM provider for user-configured CLI commands.
+- `codex` LLM CLI provider slot.
+- `claude` LLM CLI provider slot.
+- `gemini` LLM CLI provider slot.
+- `ollama` LLM CLI provider slot.
+- `openrouter` LLM CLI wrapper provider slot.
 
 Implementation rule: runtime orchestration should call provider interfaces instead of embedding OS-specific or model-specific behavior directly.
+
+LLM providers should receive a generated prompt file and normalized environment variables so each CLI can be adapted without changing the scheduler or Kanban runtime.
 
 ### Database
 
