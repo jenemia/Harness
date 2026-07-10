@@ -50,6 +50,7 @@ The server package also exposes a local JSON CLI for headless automation:
 ```bash
 pnpm cli projects:list
 pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
+pnpm cli projects:unregister --project <projectId>
 pnpm cli projects:report --project <projectId>
 pnpm cli settings:update --defaultModelBackend codex --providerCommands '{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
 pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --requireCommandApproval true
@@ -99,6 +100,8 @@ The provider catalog exposes the active OS platform provider, its shell/process/
 Use the project create form, `/api/project-templates`, or `templates:project-create` to start a folder with a reusable team shape. Harness seeds software engineering, research, and content production project templates; each one creates the starter agents for that workflow.
 
 Agent and workflow templates can also be managed headlessly with `templates:agent-create` and `templates:workflow-create`.
+
+Projects can be removed from the Harness registry with the sidebar remove button, `DELETE /api/projects/:projectId`, or `projects:unregister`. This only removes the app registry entry; the project folder and `.harness/` data stay on disk.
 
 ## Agents
 

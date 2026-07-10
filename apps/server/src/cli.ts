@@ -25,6 +25,7 @@ import {
   registerProject,
   seedDefaultAgents,
   seedProjectFromTemplate,
+  unregisterProject,
   updateGlobalSettings,
   updateProjectSettings
 } from "./db.js";
@@ -48,6 +49,7 @@ const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Re
 const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
   "projects:register": registerProjectCommand,
+  "projects:unregister": unregisterProjectCommand,
   "projects:overview": overviewCommand,
   "projects:report": reportCommand,
   "settings:get": getSettingsCommand,
@@ -123,6 +125,13 @@ function registerProjectCommand(args: string[]) {
     seedDefaultAgents(project.path);
   }
   return { project, overview: getProjectOverview(project) };
+}
+
+function unregisterProjectCommand(args: string[]) {
+  const options = parseOptions(args);
+  const projectId = getRequiredOption(options, "project");
+  const project = unregisterProject(projectId);
+  return { project, projects: listProjectsWithSummaries() };
 }
 
 function overviewCommand(args: string[]) {
@@ -1141,6 +1150,7 @@ function printHelp() {
 Usage:
   pnpm --filter @harness/server cli projects:list
   pnpm --filter @harness/server cli projects:register --path <folder> [--name <name>] [--seedDefaults false] [--projectTemplate <id>]
+  pnpm --filter @harness/server cli projects:unregister --project <projectId>
   pnpm --filter @harness/server cli projects:overview --project <projectId>
   pnpm --filter @harness/server cli projects:report --project <projectId>
   pnpm --filter @harness/server cli settings:get

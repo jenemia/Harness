@@ -28,6 +28,7 @@ import {
   registerProject,
   seedDefaultAgents,
   seedProjectFromTemplate,
+  unregisterProject,
   updateGlobalSettings,
   updateProjectSettings
 } from "./db.js";
@@ -163,6 +164,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       const childPath = projectMatch[2] || "";
+
+      if (req.method === "DELETE" && childPath === "") {
+        const removed = unregisterProject(project.id);
+        sendJson(res, { project: removed, projects: listProjectsWithSummaries() });
+        return;
+      }
 
       if (req.method === "GET" && childPath === "overview") {
         sendJson(res, getProjectOverview(project));

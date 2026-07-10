@@ -157,6 +157,15 @@ export function App() {
             await loadProjects();
             setSelectedProjectId(project.id);
           }}
+          onRemoved={async (projectId) => {
+            const response = await api<{ projects: ProjectListItem[] }>(`/api/projects/${projectId}`, { method: "DELETE" });
+            setProjects(response.projects);
+            if (selectedProjectId === projectId) {
+              const nextProject = response.projects[0] || null;
+              setSelectedProjectId(nextProject?.id || "");
+              setOverview(null);
+            }
+          }}
           runAction={runAction}
         />
       </aside>
@@ -482,6 +491,7 @@ function ProjectPanel(props: {
   projectTemplates: ProjectTemplate[];
   onSelect: (id: string) => void;
   onCreated: (project: Project) => Promise<void>;
+  onRemoved: (id: string) => Promise<void>;
   runAction: (action: () => Promise<void>) => Promise<void>;
 }) {
   const [projectPath, setProjectPath] = useState("");
@@ -512,16 +522,22 @@ function ProjectPanel(props: {
       </div>
       <div className="project-list">
         {props.projects.map((project) => (
-          <button
-            className={project.id === props.selectedProjectId ? "project-item active" : "project-item"}
-            key={project.id}
-            type="button"
-            onClick={() => props.onSelect(project.id)}
-          >
-            <strong>{project.name}</strong>
-            <span>{project.path}</span>
-            <ProjectSummaryRow project={project} />
-          </button>
+          <div className={project.id === props.selectedProjectId ? "project-item active" : "project-item"} key={project.id}>
+            <button className="project-select" type="button" onClick={() => props.onSelect(project.id)}>
+              <strong>{project.name}</strong>
+              <span>{project.path}</span>
+              <ProjectSummaryRow project={project} />
+            </button>
+            <button
+              aria-label={`Unregister ${project.name}`}
+              className="project-remove"
+              title="Remove from Harness list. The folder stays on disk."
+              type="button"
+              onClick={() => void props.runAction(() => props.onRemoved(project.id))}
+            >
+              <X size={14} />
+            </button>
+          </div>
         ))}
       </div>
       <form className="stack-form" onSubmit={submit}>

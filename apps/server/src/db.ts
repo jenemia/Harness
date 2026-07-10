@@ -1075,6 +1075,24 @@ export function registerProject(projectPath: string, name: string): ProjectRecor
   return project;
 }
 
+export function unregisterProject(projectId: string): ProjectRecord {
+  const db = openGlobalDb();
+  try {
+    const row = db
+      .prepare("SELECT id, name, path, created_at, updated_at FROM projects WHERE id = ?")
+      .get(projectId);
+    if (!row) {
+      throw new Error("Project not found.");
+    }
+
+    const project = mapProject(row);
+    db.prepare("DELETE FROM projects WHERE id = ?").run(projectId);
+    return project;
+  } finally {
+    db.close();
+  }
+}
+
 export function getProjectOverview(project: ProjectRecord): ProjectOverview {
   const db = openProjectDb(project.path);
   try {
