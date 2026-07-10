@@ -66,6 +66,17 @@ import type {
 } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
+type DecompositionMode = "parallel" | "sequential";
+type DecompositionItemInput =
+  | string
+  | {
+      title?: string;
+      description?: string;
+      acceptanceCriteria?: string;
+      assigneeAgentId?: string | null;
+      modelBackend?: string | null;
+      labels?: string[];
+    };
 
 const server = http.createServer(async (req, res) => {
   setCors(res);
@@ -349,6 +360,12 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        if (req.method === "POST" && action === "decompose") {
+          const tasks = decomposeTask(project, taskId, await readBody(req));
+          sendJson(res, { tasks, overview: getProjectOverview(project) }, 201);
+          return;
+        }
+
         if (req.method === "POST" && action === "merge") {
           const result = await approveMerge(project, taskId);
           sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
@@ -584,24 +601,26 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
   const db = openProjectDb(project.path);
   try {
     const timestamp = now();
+    const status = input.status || "Backlog";
+    const dependencyTaskIds = Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [];
     const task: TaskRecord = {
       id: randomUUID(),
       title: input.title.trim(),
       description: input.description?.trim() || "",
-      status: input.status || "Backlog",
+      status,
       priority: input.priority || "Medium",
       modelBackend: input.modelBackend?.trim() || null,
       assigneeAgentId: input.assigneeAgentId || null,
       reporter: input.reporter || "human",
       parentTaskId: input.parentTaskId || null,
-      dependencyTaskIds: Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [],
+      dependencyTaskIds,
       waivedDependencyTaskIds: Array.isArray(input.waivedDependencyTaskIds) ? input.waivedDependencyTaskIds : [],
       labels: Array.isArray(input.labels) ? input.labels : [],
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
       taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,
-      blockedReason: null,
+      blockedReason: input.blockedReason?.trim() || defaultDependencyBlocker(dependencyTaskIds, status),
       mergeStatus: "none",
       mergeError: null,
       createdAt: timestamp,
@@ -650,6 +669,124 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
   } finally {
     db.close();
   }
+}
+
+function decomposeTask(
+  project: ProjectRecord,
+  taskId: string,
+  input: {
+    text?: string;
+    items?: DecompositionItemInput[];
+    mode?: DecompositionMode;
+    assigneeAgentId?: string | null;
+    modelBackend?: string | null;
+    labels?: string[];
+  }
+) {
+  const sourceDb = openProjectDb(project.path);
+  let sourceTask: TaskRecord;
+  try {
+    const sourceRow = sourceDb.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    if (!sourceRow) {
+      throw new Error("Source task not found.");
+    }
+    sourceTask = mapTask(sourceRow);
+  } finally {
+    sourceDb.close();
+  }
+
+  const mode = input.mode === "sequential" ? "sequential" : "parallel";
+  const labels = mergeLabels(["decomposed"], sourceTask.labels.filter((label) => label.startsWith("role:")), input.labels || []);
+  const items = parseDecompositionItems(input.items, input.text);
+  if (items.length === 0) {
+    throw new Error("At least one decomposition item is required.");
+  }
+
+  const tasks: TaskRecord[] = [];
+  for (const item of items) {
+    const previousTask = tasks[tasks.length - 1] || null;
+    const dependencyTaskIds = mode === "sequential" && previousTask ? [previousTask.id] : [];
+    tasks.push(
+      createTask(project, {
+        title: item.title,
+        description: item.description || `Subtask decomposed from ${sourceTask.title}.`,
+        status: dependencyTaskIds.length > 0 ? "Blocked" : "Selected",
+        priority: sourceTask.priority,
+        modelBackend: item.modelBackend ?? input.modelBackend ?? sourceTask.modelBackend,
+        assigneeAgentId: item.assigneeAgentId ?? input.assigneeAgentId ?? sourceTask.assigneeAgentId,
+        reporter: "pm-agent",
+        parentTaskId: sourceTask.id,
+        dependencyTaskIds,
+        waivedDependencyTaskIds: [],
+        labels: mergeLabels(labels, item.labels || []),
+        acceptanceCriteria: item.acceptanceCriteria || sourceTask.acceptanceCriteria
+      })
+    );
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    insertEvent(db, {
+      taskId: sourceTask.id,
+      agentId: sourceTask.assigneeAgentId,
+      type: "task.decomposed",
+      message: `${tasks.length} subtask(s) were created from ${sourceTask.title}.`,
+      metadata: { mode, subtaskIds: tasks.map((task) => task.id) }
+    });
+  } finally {
+    db.close();
+  }
+
+  return tasks;
+}
+
+function parseDecompositionItems(items: DecompositionItemInput[] | undefined, text = "") {
+  if (Array.isArray(items) && items.length > 0) {
+    return items
+      .map((item) => {
+        if (typeof item === "string") {
+          return normalizeDecompositionLine(item);
+        }
+        return {
+          title: item.title?.trim() || "",
+          description: item.description?.trim() || "",
+          acceptanceCriteria: item.acceptanceCriteria?.trim() || "",
+          assigneeAgentId: item.assigneeAgentId || null,
+          modelBackend: item.modelBackend || null,
+          labels: Array.isArray(item.labels) ? item.labels.map((label) => label.trim()).filter(Boolean) : []
+        };
+      })
+      .filter((item) => item.title);
+  }
+
+  return text
+    .split("\n")
+    .map(normalizeDecompositionLine)
+    .filter((item) => item.title);
+}
+
+function normalizeDecompositionLine(line: string) {
+  const normalized = line.replace(/^\s*(?:[-*]|\d+[.)])\s+/, "").trim();
+  const [title, ...descriptionParts] = normalized.split(/\s+-\s+/);
+  return {
+    title: title?.trim() || "",
+    description: descriptionParts.join(" - ").trim(),
+    acceptanceCriteria: "",
+    assigneeAgentId: null,
+    modelBackend: null,
+    labels: []
+  };
+}
+
+function mergeLabels(...groups: string[][]) {
+  return Array.from(new Set(groups.flat().map((label) => label.trim()).filter(Boolean)));
+}
+
+function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatus) {
+  if (status !== "Blocked" || dependencyTaskIds.length === 0) {
+    return null;
+  }
+  return `Waiting on dependencies: ${dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`;
 }
 
 function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskRecord>) {

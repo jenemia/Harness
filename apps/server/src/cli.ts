@@ -101,6 +101,7 @@ const commands: Record<string, CommandHandler> = {
   "tasks:show": showTaskCommand,
   "tasks:create": createTaskCommand,
   "tasks:update": updateTaskCommand,
+  "tasks:decompose": decomposeTaskCommand,
   "tasks:comment": commentTaskCommand,
   "tasks:merge": mergeTaskCommand,
   "tasks:resolve-merge": resolveTaskMergeCommand,
@@ -610,7 +611,8 @@ function createTaskCommand(args: string[]) {
     dependencyTaskIds: parseCsv(options.dependencies),
     waivedDependencyTaskIds: parseCsv(options.waivedDependencies),
     labels: parseCsv(options.labels),
-    acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile") || ""
+    acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile") || "",
+    blockedReason: null
   });
   return { task, overview: getProjectOverview(project) };
 }
@@ -635,6 +637,53 @@ function updateTaskCommand(args: string[]) {
   });
   const unblocked = task.status === "Done" ? unblockReadyDependents(project, task.id) : [];
   return { task, unblocked, overview: getProjectOverview(project) };
+}
+
+function decomposeTaskCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const mode = options.mode === "sequential" ? "sequential" : "parallel";
+  const items = parseDecompositionItems(readRequiredText(options, "items", "itemsFile"));
+  const source = getTaskForDecomposition(project, taskId);
+  const labels = mergeLabels(["decomposed"], source.labels.filter((label) => label.startsWith("role:")), parseCsv(options.labels));
+  const tasks: TaskRecord[] = [];
+  for (const item of items) {
+    const previousTask = tasks[tasks.length - 1] || null;
+    const dependencyTaskIds = mode === "sequential" && previousTask ? [previousTask.id] : [];
+    tasks.push(
+      createCliTask(project, {
+        title: item.title,
+        description: item.description || `Subtask decomposed from ${source.title}.`,
+        status: dependencyTaskIds.length > 0 ? "Blocked" : "Selected",
+        priority: source.priority,
+        modelBackend: options.modelBackend || source.modelBackend,
+        assigneeAgentId: options.assignee || source.assigneeAgentId,
+        reporter: "cli",
+        parentTaskId: source.id,
+        dependencyTaskIds,
+        waivedDependencyTaskIds: [],
+        labels,
+        acceptanceCriteria: item.acceptanceCriteria || source.acceptanceCriteria,
+        blockedReason: defaultDependencyBlocker(dependencyTaskIds, dependencyTaskIds.length > 0 ? "Blocked" : "Selected")
+      })
+    );
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    insertEvent(db, {
+      taskId: source.id,
+      agentId: source.assigneeAgentId,
+      type: "task.decomposed",
+      message: `${tasks.length} subtask(s) were created from ${source.title}.`,
+      metadata: { mode, subtaskIds: tasks.map((task) => task.id) }
+    });
+  } finally {
+    db.close();
+  }
+
+  return { tasks, overview: getProjectOverview(project) };
 }
 
 function commentTaskCommand(args: string[]) {
@@ -695,6 +744,63 @@ function getRequiredProject(args: string[]) {
   return project;
 }
 
+function getTaskForDecomposition(project: ProjectRecord, taskId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    if (!row) {
+      throw new Error("Source task not found.");
+    }
+    return mapTask(row);
+  } finally {
+    db.close();
+  }
+}
+
+function parseDecompositionItems(value: string) {
+  const trimmed = value.trim();
+  const rawItems = trimmed.startsWith("[")
+    ? (JSON.parse(trimmed) as Array<string | { title?: string; description?: string; acceptanceCriteria?: string }>)
+    : trimmed.split("\n");
+  const items = rawItems
+    .map((item) => {
+      if (typeof item === "string") {
+        return normalizeDecompositionLine(item);
+      }
+      return {
+        title: item.title?.trim() || "",
+        description: item.description?.trim() || "",
+        acceptanceCriteria: item.acceptanceCriteria?.trim() || ""
+      };
+    })
+    .filter((item) => item.title);
+  if (items.length === 0) {
+    throw new Error("At least one decomposition item is required.");
+  }
+  return items;
+}
+
+function normalizeDecompositionLine(line: string) {
+  const normalized = line.replace(/^\s*(?:[-*]|\d+[.)])\s+/, "").trim();
+  const [title, ...descriptionParts] = normalized.split(/\s+-\s+/);
+  return {
+    title: title?.trim() || "",
+    description: descriptionParts.join(" - ").trim(),
+    acceptanceCriteria: ""
+  };
+}
+
+function mergeLabels(...groups: string[][]) {
+  return Array.from(new Set(groups.flat().map((label) => label.trim()).filter(Boolean)));
+}
+
+function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatus) {
+  if (status !== "Blocked" || dependencyTaskIds.length === 0) {
+    return null;
+  }
+  return `Waiting on dependencies: ${dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`;
+}
+
 function createCliTask(
   project: ProjectRecord,
   input: Pick<
@@ -711,6 +817,7 @@ function createCliTask(
     | "waivedDependencyTaskIds"
     | "labels"
     | "acceptanceCriteria"
+    | "blockedReason"
   >
 ) {
   const db = openProjectDb(project.path);
@@ -721,7 +828,7 @@ function createCliTask(
       ...input,
       branchName: null,
       worktreePath: null,
-      blockedReason: null,
+      blockedReason: input.blockedReason || defaultDependencyBlocker(input.dependencyTaskIds, input.status),
       mergeStatus: "none",
       mergeError: null,
       taskOrder: nextTaskOrder(db),
@@ -1328,6 +1435,7 @@ Usage:
   pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--dependencies task1,task2] [--waivedDependencies task1]
   pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee] [--dependencies task1,task2] [--waivedDependencies task1]
+  pnpm --filter @harness/server cli tasks:decompose --project <projectId> --task <taskId> (--items <text|json> | --itemsFile <file>) [--mode parallel|sequential]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
   pnpm --filter @harness/server cli tasks:move --project <projectId> --task <taskId> --direction up|down
   pnpm --filter @harness/server cli tasks:merge --project <projectId> --task <taskId>

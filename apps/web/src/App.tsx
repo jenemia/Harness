@@ -1248,6 +1248,8 @@ function TaskDetailDrawer(props: {
   const [editParentTaskId, setEditParentTaskId] = useState(props.task.parentTaskId || "");
   const [editLabelsText, setEditLabelsText] = useState(props.task.labels.join(", "));
   const [commentBody, setCommentBody] = useState("");
+  const [decomposeText, setDecomposeText] = useState("");
+  const [decomposeMode, setDecomposeMode] = useState<"parallel" | "sequential">("parallel");
   const runs = props.overview.runs.filter((run) => run.taskId === props.task.id);
   const events = props.overview.events.filter((event) => event.taskId === props.task.id);
   const handoffs = props.overview.handoffs.filter((handoff) => handoff.taskId === props.task.id);
@@ -1374,6 +1376,21 @@ function TaskDetailDrawer(props: {
         body: JSON.stringify({ body: commentBody, author: "human" })
       });
       setCommentBody("");
+      await props.onChanged();
+    });
+  }
+
+  async function decomposeTask(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/decompose`, {
+        method: "POST",
+        body: JSON.stringify({
+          text: decomposeText,
+          mode: decomposeMode
+        })
+      });
+      setDecomposeText("");
       await props.onChanged();
     });
   }
@@ -1545,6 +1562,25 @@ function TaskDetailDrawer(props: {
         <section className="drawer-section">
           <h3>Acceptance Criteria</h3>
           <p className="drawer-copy">{props.task.acceptanceCriteria || "No acceptance criteria."}</p>
+        </section>
+
+        <section className="drawer-section">
+          <h3>Decompose</h3>
+          <form className="stack-form" onSubmit={decomposeTask}>
+            <textarea
+              value={decomposeText}
+              onChange={(event) => setDecomposeText(event.target.value)}
+              placeholder="One subtask per line"
+            />
+            <select value={decomposeMode} onChange={(event) => setDecomposeMode(event.target.value as "parallel" | "sequential")}>
+              <option value="parallel">Parallel subtasks</option>
+              <option value="sequential">Sequential chain</option>
+            </select>
+            <button className="secondary-button" type="submit">
+              <GitFork size={16} />
+              <span>Create subtasks</span>
+            </button>
+          </form>
         </section>
 
         <section className="drawer-section">

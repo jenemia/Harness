@@ -17,6 +17,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Agent persona, backend, capability, allowed tool, boundary, template, current work, run metrics, and concurrency management.
 - Task assignment and execution.
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
+- Task-level decomposition for turning a parent task into parallel or sequential subtasks.
 - Workflow templates for reusable PM planning role chains.
 - Ready-task scheduler with agent `maxParallel` capacity checks.
 - Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
@@ -90,6 +91,7 @@ pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
 pnpm cli tasks:update --project <projectId> --task <taskId> --waivedDependencies <dependencyTaskId>
+pnpm cli tasks:decompose --project <projectId> --task <taskId> --mode sequential --itemsFile ./subtasks.txt
 pnpm cli tasks:move --project <projectId> --task <taskId> --direction up
 pnpm cli tasks:pause --project <projectId> --task <taskId> --reason "Waiting on product decision"
 pnpm cli tasks:resume --project <projectId> --task <taskId>
@@ -153,6 +155,8 @@ Tasks can be paused from the board, task detail drawer, API, or CLI. Paused task
 Tasks can be moved up or down within their current board column from the board, task detail drawer, API, or `tasks:move`. The scheduler reads the same board order when choosing ready tasks.
 
 Task dependencies can be explicitly waived from the task detail drawer, API, or `tasks:update --waivedDependencies`. Waived dependencies stay visible on the task, but the scheduler no longer blocks on them.
+
+Large tasks can be decomposed from the task detail drawer, `POST /api/projects/:projectId/tasks/:taskId/decompose`, or `tasks:decompose`. Parallel decomposition creates ready child tasks, while sequential decomposition links each child to the previous child and marks downstream work blocked until dependencies complete.
 
 When the server starts, Harness scans registered projects for runs that were left `running` by a previous process. Those runs are closed as failed with an interruption event, affected tasks return to `Selected`, and busy agents are reset to idle.
 
