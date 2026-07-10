@@ -10,6 +10,7 @@ import type {
   EventRecord,
   GlobalSettings,
   HandoffRecord,
+  ProjectListItem,
   ProjectOverview,
   ProjectRecord,
   ProjectSettings,
@@ -372,6 +373,34 @@ export function listProjects(): ProjectRecord[] {
       .prepare("SELECT id, name, path, created_at, updated_at FROM projects ORDER BY updated_at DESC")
       .all()
       .map(mapProject);
+  } finally {
+    db.close();
+  }
+}
+
+export function listProjectsWithSummaries(): ProjectListItem[] {
+  return listProjects().map((project) => ({
+    ...project,
+    summary: getProjectSummary(project.path)
+  }));
+}
+
+function getProjectSummary(projectPath: string) {
+  const db = openProjectDb(projectPath);
+  try {
+    const count = (sql: string, ...params: string[]) => {
+      const row = db.prepare(sql).get(...params) as { count: number };
+      return Number(row.count || 0);
+    };
+
+    return {
+      totalTasks: count("SELECT COUNT(*) AS count FROM tasks"),
+      blockedTasks: count("SELECT COUNT(*) AS count FROM tasks WHERE status = ?", "Blocked"),
+      runningTasks: count("SELECT COUNT(*) AS count FROM runs WHERE status = ?", "running"),
+      pendingApprovals: count("SELECT COUNT(*) AS count FROM approvals WHERE status = ?", "pending"),
+      pendingMerges: count("SELECT COUNT(*) AS count FROM tasks WHERE merge_status IN (?, ?)", "pending", "conflict"),
+      busyAgents: count("SELECT COUNT(*) AS count FROM agents WHERE status = ?", "busy")
+    };
   } finally {
     db.close();
   }

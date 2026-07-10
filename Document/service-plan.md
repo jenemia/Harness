@@ -42,6 +42,8 @@ Expected examples:
 
 Project-local data should live inside the project folder so the project can be moved, backed up, inspected, or versioned as a self-contained workspace.
 
+Initial implementation: the project sidebar shows per-project summary counts for total tasks, blocked tasks, running tasks, pending approvals, pending merges, and busy agents so users can scan multiple local projects quickly.
+
 ### Agent
 
 An agent is a named worker profile with a persona, role, model configuration, tool permissions, and execution policy.
@@ -485,6 +487,7 @@ The first build should prove the local project, Kanban model, and real agent exe
 MVP features:
 
 - Create/open local project folders.
+- Show project-level task, blocker, approval, run, and merge summaries in the project list.
 - Create agents with personas.
 - Create/edit Kanban tasks.
 - Create a PM plan from a user goal and turn it into assigned Kanban tasks.

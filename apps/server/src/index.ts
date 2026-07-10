@@ -9,7 +9,7 @@ import {
   getProjectSettings,
   globalHarnessDir,
   insertEvent,
-  listProjects,
+  listProjectsWithSummaries,
   mapDocument,
   now,
   openProjectDb,
@@ -46,7 +46,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === "GET /api/projects") {
-      sendJson(res, { projects: listProjects() });
+      sendJson(res, { projects: listProjectsWithSummaries() });
       return;
     }
 

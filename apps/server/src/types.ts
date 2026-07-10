@@ -14,6 +14,19 @@ export type ProjectRecord = {
   updatedAt: string;
 };
 
+export type ProjectSummary = {
+  totalTasks: number;
+  blockedTasks: number;
+  runningTasks: number;
+  pendingApprovals: number;
+  pendingMerges: number;
+  busyAgents: number;
+};
+
+export type ProjectListItem = ProjectRecord & {
+  summary: ProjectSummary;
+};
+
 export type GlobalSettings = {
   defaultProjectRoot: string;
   defaultModelBackend: string;

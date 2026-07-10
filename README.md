@@ -5,6 +5,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 ## MVP
 
 - Local project registry with project-local `.harness/` storage.
+- Project sidebar summaries for task, blocker, approval, running, and merge counts across local folders.
 - Jira-like Kanban board.
 - Jira-like task detail drawer with task metadata, dependencies, runs, timeline, worktree, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.

@@ -19,14 +19,14 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Approval, DocumentRecord, Event, Handoff, Overview, PlanResult, Project, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, Approval, DocumentRecord, Event, Handoff, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
 const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
 
 export function App() {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
@@ -37,7 +37,7 @@ export function App() {
 
   async function loadProjects() {
     const [data, providers, settingsResponse] = await Promise.all([
-      api<{ projects: Project[] }>("/api/projects"),
+      api<{ projects: ProjectListItem[] }>("/api/projects"),
       api<ProviderCatalog>("/api/providers"),
       api<{ settings: GlobalSettings }>("/api/settings")
     ]);
@@ -384,7 +384,7 @@ function PlanningPanel(props: {
 }
 
 function ProjectPanel(props: {
-  projects: Project[];
+  projects: ProjectListItem[];
   selectedProjectId: string;
   settings: GlobalSettings | null;
   onSelect: (id: string) => void;
@@ -421,6 +421,7 @@ function ProjectPanel(props: {
           >
             <strong>{project.name}</strong>
             <span>{project.path}</span>
+            <ProjectSummaryRow project={project} />
           </button>
         ))}
       </div>
@@ -436,6 +437,19 @@ function ProjectPanel(props: {
         </button>
       </form>
     </section>
+  );
+}
+
+function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
+  const summary = project.summary;
+  return (
+    <div className="project-summary-row">
+      <b>{summary.totalTasks} tasks</b>
+      {summary.runningTasks > 0 && <b className="running">{summary.runningTasks} running</b>}
+      {summary.blockedTasks > 0 && <b className="blocked">{summary.blockedTasks} blocked</b>}
+      {summary.pendingApprovals > 0 && <b className="approval">{summary.pendingApprovals} approvals</b>}
+      {summary.pendingMerges > 0 && <b className="merge">{summary.pendingMerges} merges</b>}
+    </div>
   );
 }
 
