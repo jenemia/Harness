@@ -256,6 +256,7 @@ export type Overview = {
   tasks: Task[];
   documents: DocumentRecord[];
   memories: MemoryRecord[];
+  globalMemories: MemoryRecord[];
   approvals: Approval[];
   handoffs: Handoff[];
   comments: CommentRecord[];

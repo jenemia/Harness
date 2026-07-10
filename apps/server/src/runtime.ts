@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   insertEvent,
   getProjectSettingsFromDb,
+  listGlobalMemories,
   mapAgent,
   mapApproval,
   mapMemory,
@@ -650,7 +651,9 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     });
 
     const projectMemory = db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory);
+    const globalMemory = listGlobalMemories();
     const result = await selectedProvider.run(executionAgent, freshTask, workspace, {
+      globalMemory,
       projectMemory,
       timeoutMs: settings.maxRunSeconds * 1000
     });

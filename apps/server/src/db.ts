@@ -99,6 +99,14 @@ export function openGlobalDb() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   ensureColumn(db, "agent_templates", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "agent_templates", "boundaries", "TEXT NOT NULL DEFAULT ''");
@@ -1347,12 +1355,65 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       tasks: db.prepare("SELECT * FROM tasks ORDER BY task_order ASC, created_at ASC").all().map(mapTask),
       documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
       memories: db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory),
+      globalMemories: listGlobalMemories(),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
       handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
       comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
       runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
     };
+  } finally {
+    db.close();
+  }
+}
+
+export function listGlobalMemories() {
+  const db = openGlobalDb();
+  try {
+    return db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory);
+  } finally {
+    db.close();
+  }
+}
+
+export function createGlobalMemory(input: Pick<MemoryRecord, "title" | "content">) {
+  if (!input.title.trim()) {
+    throw new Error("Memory title is required.");
+  }
+
+  const db = openGlobalDb();
+  try {
+    const timestamp = now();
+    const id = randomUUID();
+    db.prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)").run(
+      id,
+      input.title.trim(),
+      input.content,
+      timestamp,
+      timestamp
+    );
+    return mapMemory(db.prepare("SELECT * FROM memories WHERE id = ?").get(id));
+  } finally {
+    db.close();
+  }
+}
+
+export function updateGlobalMemory(memoryId: string, input: Partial<Pick<MemoryRecord, "title" | "content">>) {
+  const db = openGlobalDb();
+  try {
+    const existing = db.prepare("SELECT * FROM memories WHERE id = ?").get(memoryId);
+    if (!existing) {
+      throw new Error("Memory not found.");
+    }
+
+    db.prepare(`
+      UPDATE memories
+      SET title = COALESCE(?, title),
+          content = COALESCE(?, content),
+          updated_at = ?
+      WHERE id = ?
+    `).run(input.title?.trim() || null, input.content ?? null, now(), memoryId);
+    return mapMemory(db.prepare("SELECT * FROM memories WHERE id = ?").get(memoryId));
   } finally {
     db.close();
   }

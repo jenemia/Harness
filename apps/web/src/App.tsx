@@ -714,8 +714,10 @@ function MemoryPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const [scope, setScope] = useState<"project" | "global">("project");
   const [selectedMemoryId, setSelectedMemoryId] = useState("");
-  const selected = props.overview.memories.find((memory) => memory.id === selectedMemoryId) || null;
+  const memories = scope === "project" ? props.overview.memories : props.overview.globalMemories;
+  const selected = memories.find((memory) => memory.id === selectedMemoryId) || null;
 
   return (
     <section className="rail-panel">
@@ -725,8 +727,13 @@ function MemoryPanel(props: {
       </div>
       <MemoryEditor
         projectId={props.overview.project.id}
+        scope={scope}
+        onScopeChange={(nextScope) => {
+          setScope(nextScope);
+          setSelectedMemoryId("");
+        }}
         memory={selected}
-        memories={props.overview.memories}
+        memories={memories}
         onSelect={setSelectedMemoryId}
         runAction={props.runAction}
         onChanged={props.onChanged}
@@ -737,6 +744,8 @@ function MemoryPanel(props: {
 
 function MemoryEditor(props: {
   projectId: string;
+  scope: "project" | "global";
+  onScopeChange: (scope: "project" | "global") => void;
   memory: MemoryRecord | null;
   memories: MemoryRecord[];
   onSelect: (id: string) => void;
@@ -754,7 +763,18 @@ function MemoryEditor(props: {
   async function save(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
-      if (props.memory) {
+      if (props.scope === "global" && props.memory) {
+        await api(`/api/global-memories/${props.memory.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title, content })
+        });
+      } else if (props.scope === "global") {
+        const response = await api<{ memory: MemoryRecord }>("/api/global-memories", {
+          method: "POST",
+          body: JSON.stringify({ title, content })
+        });
+        props.onSelect(response.memory.id);
+      } else if (props.memory) {
         await api(`/api/projects/${props.projectId}/memories/${props.memory.id}`, {
           method: "PATCH",
           body: JSON.stringify({ title, content })
@@ -772,6 +792,10 @@ function MemoryEditor(props: {
 
   return (
     <form className="stack-form" onSubmit={save}>
+      <select value={props.scope} onChange={(event) => props.onScopeChange(event.target.value as "project" | "global")}>
+        <option value="project">Project memory</option>
+        <option value="global">Global memory</option>
+      </select>
       <select value={props.memory?.id || ""} onChange={(event) => props.onSelect(event.target.value)}>
         <option value="">New memory</option>
         {props.memories.map((memory) => (
@@ -785,13 +809,13 @@ function MemoryEditor(props: {
         className="document-textarea memory-textarea"
         value={content}
         onChange={(event) => setContent(event.target.value)}
-        placeholder="Project conventions, user preferences, recurring decisions..."
+        placeholder={props.scope === "global" ? "Global user preferences and reusable conventions..." : "Project conventions, recurring decisions..."}
       />
       <button className="secondary-button" type="submit">
         <Brain size={16} />
         <span>Save memory</span>
       </button>
-      <p className="provider-help">Saved memory is injected into every agent prompt and CLI environment.</p>
+      <p className="provider-help">Global and project memory are injected into every agent prompt and CLI environment.</p>
     </form>
   );
 }

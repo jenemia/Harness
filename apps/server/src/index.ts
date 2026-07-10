@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import {
   createAgentTemplate,
+  createGlobalMemory,
   createProjectTemplate,
   createWorkflowTemplate,
   getProject,
@@ -14,6 +15,7 @@ import {
   importProjectsFromRoot,
   insertEvent,
   listAgentTemplates,
+  listGlobalMemories,
   listProjectTemplates,
   listProjects,
   listProjectsWithSummaries,
@@ -32,6 +34,7 @@ import {
   seedDefaultAgents,
   seedProjectFromTemplate,
   unregisterProject,
+  updateGlobalMemory,
   updateGlobalSettings,
   updateProjectRecord,
   updateProjectSettings
@@ -90,6 +93,24 @@ const server = http.createServer(async (req, res) => {
 
     if (route === "GET /api/providers") {
       sendJson(res, listRuntimeProviders());
+      return;
+    }
+
+    if (route === "GET /api/global-memories") {
+      sendJson(res, { memories: listGlobalMemories() });
+      return;
+    }
+
+    if (route === "POST /api/global-memories") {
+      const memory = createGlobalMemory(await readBody(req));
+      sendJson(res, { memory, memories: listGlobalMemories() }, 201);
+      return;
+    }
+
+    const globalMemoryMatch = requestUrl.pathname.match(/^\/api\/global-memories\/([^/]+)$/);
+    if (globalMemoryMatch && req.method === "PATCH") {
+      const memory = updateGlobalMemory(globalMemoryMatch[1], await readBody(req));
+      sendJson(res, { memory, memories: listGlobalMemories() });
       return;
     }
 

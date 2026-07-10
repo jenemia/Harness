@@ -12,7 +12,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Jira-like Kanban board.
 - Jira-like task detail drawer with editable metadata, labels, parent/subtask links, dependencies, runs, changed files, timeline, worktree, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.
-- Project-local Memory panel for conventions and preferences injected into agent prompts.
+- Project-local and global Memory panel for conventions and preferences injected into agent prompts.
 - Agent persona, backend, capability, allowed tool, boundary, template, current work, run metrics, and concurrency management.
 - Task assignment and execution.
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
@@ -31,7 +31,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 
 LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
 
-Project memory is written to `.harness/project-memory.md` inside each task worktree and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
+Global memory is written to `.harness/global-memory.md` and exposed as `HARNESS_GLOBAL_MEMORY` and `HARNESS_GLOBAL_MEMORY_FILE`. Project memory is written to `.harness/project-memory.md` and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 
 Shell-backed providers require matching agent tool permission before execution. Agents need `shell`, `llm-cli`, the provider kind, or the provider id in `allowedTools` before a command-backed LLM provider can run.
 
@@ -74,6 +74,7 @@ pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.m
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
 pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId>
 pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
+pnpm cli global-memories:create --title "User preferences" --content "Prefer small focused commits"
 pnpm cli board:show --project <projectId>
 pnpm cli runs:list --project <projectId> --status completed,failed
 pnpm cli runs:show --project <projectId> --run <runId>
@@ -167,6 +168,6 @@ The same document flow is available headlessly through `documents:list`, `docume
 
 ## Memory
 
-Use the Memory panel to store project conventions, user preferences, recurring decisions, and other durable context. Saved memory is project-local and included in every agent prompt.
+Use the Memory panel to store project conventions, user preferences, recurring decisions, and other durable context. Memory can be project-local or global. Both scopes are included in every agent prompt, with separate files and environment variables so agents can distinguish reusable preferences from project-specific context.
 
-The same project memory can be managed headlessly through `memories:list`, `memories:create`, and `memories:update`.
+The same memory can be managed headlessly through `memories:list`, `memories:create`, `memories:update`, `global-memories:list`, `global-memories:create`, and `global-memories:update`.

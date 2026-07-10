@@ -217,6 +217,8 @@ Initial implementation: project-local memory entries can be created and edited f
 
 Initial implementation: project memory can also be listed, created, and updated through the headless CLI so automation scripts can maintain conventions and preferences before scheduling agent work.
 
+Initial implementation: global memory entries can be created and edited from the Memory panel, API, or headless CLI. Global memory is stored in the app-wide Harness database and injected into every agent run through `.harness/global-memory.md`, `HARNESS_GLOBAL_MEMORY`, and `HARNESS_GLOBAL_MEMORY_FILE`, while project memory remains in the project-local database.
+
 ### Model Router
 
 Harness should route tasks to different models or CLI tools based on cost, quality, speed, and task type.
@@ -441,7 +443,7 @@ Global storage:
 - Global model/router settings
 - App update and telemetry preferences, if any
 
-Initial implementation: Harness stores global settings for app-wide defaults and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy. Harness also stores project-local memory entries for conventions and preferences that should travel with agent execution.
+Initial implementation: Harness stores global settings for app-wide defaults, global memory for cross-project user preferences, and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy. Harness also stores project-local memory entries for conventions and preferences that should travel with agent execution.
 
 Initial implementation: command-backed LLM providers respect a project-configurable run timeout inherited from global defaults. Timed-out commands fail the run, unblock the runner, and leave an audit error on the task.
 

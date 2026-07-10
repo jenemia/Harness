@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   createAgentTemplate,
+  createGlobalMemory,
   createProjectTemplate,
   createWorkflowTemplate,
   getGlobalSettings,
@@ -13,6 +14,7 @@ import {
   importProjectsFromRoot,
   insertEvent,
   listAgentTemplates,
+  listGlobalMemories,
   listProjectTemplates,
   listProjectsWithSummaries,
   listWorkflowTemplates,
@@ -29,6 +31,7 @@ import {
   seedDefaultAgents,
   seedProjectFromTemplate,
   unregisterProject,
+  updateGlobalMemory,
   updateGlobalSettings,
   updateProjectRecord,
   updateProjectSettings
@@ -82,6 +85,9 @@ const commands: Record<string, CommandHandler> = {
   "memories:list": listMemoriesCommand,
   "memories:create": createMemoryCommand,
   "memories:update": updateMemoryCommand,
+  "global-memories:list": listGlobalMemoriesCommand,
+  "global-memories:create": createGlobalMemoryCommand,
+  "global-memories:update": updateGlobalMemoryCommand,
   "approvals:list": listApprovalsCommand,
   "approvals:approve": approveApprovalCommand,
   "approvals:reject": rejectApprovalCommand,
@@ -398,6 +404,29 @@ function updateMemoryCommand(args: string[]) {
     content: readOptionalText(options, "content", "contentFile")
   });
   return { memory, overview: getProjectOverview(project) };
+}
+
+function listGlobalMemoriesCommand() {
+  return { memories: listGlobalMemories() };
+}
+
+function createGlobalMemoryCommand(args: string[]) {
+  const options = parseOptions(args);
+  const memory = createGlobalMemory({
+    title: getRequiredOption(options, "title"),
+    content: readOptionalText(options, "content", "contentFile") || ""
+  });
+  return { memory, memories: listGlobalMemories() };
+}
+
+function updateGlobalMemoryCommand(args: string[]) {
+  const options = parseOptions(args);
+  const memoryId = getRequiredOption(options, "memory");
+  const memory = updateGlobalMemory(memoryId, {
+    title: options.title,
+    content: readOptionalText(options, "content", "contentFile")
+  });
+  return { memory, memories: listGlobalMemories() };
 }
 
 async function startTaskCommand(args: string[]) {
@@ -1267,6 +1296,9 @@ Usage:
   pnpm --filter @harness/server cli memories:list --project <projectId>
   pnpm --filter @harness/server cli memories:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli memories:update --project <projectId> --memory <memoryId> [--title <text>] [--content <text>|--contentFile <file>]
+  pnpm --filter @harness/server cli global-memories:list
+  pnpm --filter @harness/server cli global-memories:create --title <text> [--content <text>|--contentFile <file>]
+  pnpm --filter @harness/server cli global-memories:update --memory <memoryId> [--title <text>] [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli approvals:list --project <projectId>
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>

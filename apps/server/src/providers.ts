@@ -16,6 +16,7 @@ export type TaskWorkspace = {
 };
 
 export type LlmRunContext = {
+  globalMemory: MemoryRecord[];
   projectMemory: MemoryRecord[];
   timeoutMs?: number;
 };
@@ -616,6 +617,7 @@ function createMockLlmProvider(): LlmProvider {
         `Agent: ${agent.name}`,
         `Role: ${agent.role}`,
         `Task: ${task.title}`,
+        `Global memory entries: ${context?.globalMemory.length || 0}`,
         `Project memory entries: ${context?.projectMemory.length || 0}`,
         "",
         "Mock adapter completed this task. Configure a shell CLI command on the agent to execute a real LLM CLI."
@@ -698,8 +700,10 @@ function buildLlmEnvironment(
   return {
     HARNESS_LLM_PROVIDER: providerId,
     HARNESS_PROMPT_FILE: files.promptFile,
-    HARNESS_PROJECT_MEMORY: files.memoryText,
-    HARNESS_PROJECT_MEMORY_FILE: files.memoryFile,
+    HARNESS_GLOBAL_MEMORY: files.globalMemoryText,
+    HARNESS_GLOBAL_MEMORY_FILE: files.globalMemoryFile,
+    HARNESS_PROJECT_MEMORY: files.projectMemoryText,
+    HARNESS_PROJECT_MEMORY_FILE: files.projectMemoryFile,
     HARNESS_AGENT_NAME: agent.name,
     HARNESS_AGENT_ROLE: agent.role,
     HARNESS_AGENT_PERSONA: agent.persona,
@@ -724,9 +728,12 @@ function writePromptFiles(
   const promptDir = path.join(workspace.worktreePath, ".harness");
   mkdirSync(promptDir, { recursive: true });
   const promptFile = path.join(promptDir, "agent-prompt.md");
-  const memoryFile = path.join(promptDir, "project-memory.md");
-  const memoryText = formatProjectMemory(context?.projectMemory || []);
-  writeFileSync(memoryFile, memoryText, "utf8");
+  const globalMemoryFile = path.join(promptDir, "global-memory.md");
+  const projectMemoryFile = path.join(promptDir, "project-memory.md");
+  const globalMemoryText = formatMemory(context?.globalMemory || []);
+  const projectMemoryText = formatMemory(context?.projectMemory || []);
+  writeFileSync(globalMemoryFile, globalMemoryText, "utf8");
+  writeFileSync(projectMemoryFile, projectMemoryText, "utf8");
   const prompt = [
     `# Harness Agent Task`,
     ``,
@@ -752,8 +759,11 @@ function writePromptFiles(
     `## Acceptance Criteria`,
     task.acceptanceCriteria || "(none)",
     ``,
+    `## Global Memory`,
+    globalMemoryText,
+    ``,
     `## Project Memory`,
-    memoryText,
+    projectMemoryText,
     ``,
     `## Workspace`,
     `Branch: ${workspace.branchName}`,
@@ -762,7 +772,7 @@ function writePromptFiles(
     `Work only inside this task worktree. Report changed files, verification performed, and any blockers.`
   ].join("\n");
   writeFileSync(promptFile, prompt, "utf8");
-  return { promptFile, memoryFile, memoryText };
+  return { promptFile, globalMemoryFile, projectMemoryFile, globalMemoryText, projectMemoryText };
 }
 
 function formatList(items: string[]) {
@@ -772,7 +782,7 @@ function formatList(items: string[]) {
   return items.map((item) => `- ${item}`).join("\n");
 }
 
-function formatProjectMemory(memories: MemoryRecord[]) {
+function formatMemory(memories: MemoryRecord[]) {
   if (memories.length === 0) {
     return "(none)";
   }

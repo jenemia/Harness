@@ -265,6 +265,7 @@ export type ProjectOverview = {
   tasks: TaskRecord[];
   documents: DocumentRecord[];
   memories: MemoryRecord[];
+  globalMemories: MemoryRecord[];
   approvals: ApprovalRecord[];
   handoffs: HandoffRecord[];
   comments: CommentRecord[];
