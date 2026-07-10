@@ -107,6 +107,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       dependencyTaskIds: inputTask.dependencyTaskIds,
       waivedDependencyTaskIds: [],
       labels: ["pm-plan", `role:${inputTask.role}`],
+      linkedFiles: [],
       acceptanceCriteria: inputTask.acceptanceCriteria,
       workspaceMode: resolveTaskWorkspaceMode({
         title: inputTask.title,
@@ -130,9 +131,9 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, workspace_mode, task_order, branch_name,
-        worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths, acceptance_criteria, workspace_mode,
+        task_order, branch_name, worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -146,6 +147,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.waivedDependencyTaskIds),
       JSON.stringify(task.labels),
+      JSON.stringify(task.linkedFiles),
       task.acceptanceCriteria,
       task.workspaceMode,
       task.taskOrder,

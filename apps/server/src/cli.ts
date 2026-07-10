@@ -612,6 +612,7 @@ function createTaskCommand(args: string[]) {
     dependencyTaskIds: parseCsv(options.dependencies),
     waivedDependencyTaskIds: parseCsv(options.waivedDependencies),
     labels: parseCsv(options.labels),
+    linkedFiles: parseCsv(options.linkedFiles),
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile") || "",
     workspaceMode: parseWorkspaceModeOption(options.workspaceMode),
     blockedReason: null
@@ -634,6 +635,7 @@ function updateTaskCommand(args: string[]) {
     dependencyTaskIds: options.dependencies !== undefined ? parseCsv(options.dependencies) : undefined,
     waivedDependencyTaskIds: options.waivedDependencies !== undefined ? parseCsv(options.waivedDependencies) : undefined,
     labels: options.labels !== undefined ? parseCsv(options.labels) : undefined,
+    linkedFiles: options.linkedFiles !== undefined ? parseCsv(options.linkedFiles) : undefined,
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile"),
     workspaceMode: options.workspaceMode === undefined ? undefined : parseWorkspaceModeOption(options.workspaceMode),
     blockedReason: optionPatchValue(options, "blockedReason", "clearBlockedReason")
@@ -667,6 +669,7 @@ function decomposeTaskCommand(args: string[]) {
         dependencyTaskIds,
         waivedDependencyTaskIds: [],
         labels,
+        linkedFiles: source.linkedFiles,
         acceptanceCriteria: item.acceptanceCriteria || source.acceptanceCriteria,
         workspaceMode: source.workspaceMode,
         blockedReason: defaultDependencyBlocker(dependencyTaskIds, dependencyTaskIds.length > 0 ? "Blocked" : "Selected")
@@ -798,6 +801,10 @@ function mergeLabels(...groups: string[][]) {
   return Array.from(new Set(groups.flat().map((label) => label.trim()).filter(Boolean)));
 }
 
+function normalizeStringList(value: unknown) {
+  return Array.from(new Set((Array.isArray(value) ? value : []).map((item) => String(item).trim()).filter(Boolean)));
+}
+
 function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatus) {
   if (status !== "Blocked" || dependencyTaskIds.length === 0) {
     return null;
@@ -821,6 +828,7 @@ function createCliTask(
     | "dependencyTaskIds"
     | "waivedDependencyTaskIds"
     | "labels"
+    | "linkedFiles"
     | "acceptanceCriteria"
     | "blockedReason"
     >,
@@ -832,6 +840,7 @@ function createCliTask(
   const db = openProjectDb(project.path);
   try {
     const timestamp = now();
+    const linkedFiles = normalizeStringList(input.linkedFiles);
     const agentRow = input.assigneeAgentId
       ? db.prepare("SELECT * FROM agents WHERE id = ?").get(input.assigneeAgentId)
       : null;
@@ -847,6 +856,7 @@ function createCliTask(
     const task: TaskRecord = {
       id: randomUUID(),
       ...input,
+      linkedFiles,
       workspaceMode,
       branchName: null,
       worktreePath: null,
@@ -861,9 +871,9 @@ function createCliTask(
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, workspace_mode, task_order, branch_name,
-        worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths, acceptance_criteria, workspace_mode,
+        task_order, branch_name, worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -877,6 +887,7 @@ function createCliTask(
       JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.waivedDependencyTaskIds),
       JSON.stringify(task.labels),
+      JSON.stringify(task.linkedFiles),
       task.acceptanceCriteria,
       task.workspaceMode,
       task.taskOrder,
@@ -894,7 +905,7 @@ function createCliTask(
       agentId: task.assigneeAgentId,
       type: "task.created",
       message: `${task.title} was created from CLI.`,
-      metadata: { status: task.status, priority: task.priority, labels: task.labels }
+      metadata: { status: task.status, priority: task.priority, labels: task.labels, linkedFiles: task.linkedFiles }
     });
 
     return task;
@@ -1060,6 +1071,7 @@ function updateCliTask(project: ProjectRecord, taskId: string, input: Partial<Ta
           dependency_task_ids = COALESCE(?, dependency_task_ids),
           waived_dependency_task_ids = COALESCE(?, waived_dependency_task_ids),
           labels = COALESCE(?, labels),
+          linked_file_paths = COALESCE(?, linked_file_paths),
           acceptance_criteria = COALESCE(?, acceptance_criteria),
           workspace_mode = COALESCE(?, workspace_mode),
           blocked_reason = ?,
@@ -1076,6 +1088,7 @@ function updateCliTask(project: ProjectRecord, taskId: string, input: Partial<Ta
       Array.isArray(input.dependencyTaskIds) ? JSON.stringify(input.dependencyTaskIds) : null,
       Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(input.waivedDependencyTaskIds) : null,
       Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
+      Array.isArray(input.linkedFiles) ? JSON.stringify(normalizeStringList(input.linkedFiles)) : null,
       input.acceptanceCriteria?.trim() || null,
       input.workspaceMode === undefined ? null : parseWorkspaceModeOption(input.workspaceMode) || null,
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
@@ -1458,8 +1471,8 @@ Usage:
   pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>
   pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]
   pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
-  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--workspaceMode auto|worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
-  pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee] [--workspaceMode auto|worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
+  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--workspaceMode auto|worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1] [--linkedFiles path1,path2]
+  pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee] [--workspaceMode auto|worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1] [--linkedFiles path1,path2]
   pnpm --filter @harness/server cli tasks:decompose --project <projectId> --task <taskId> (--items <text|json> | --itemsFile <file>) [--mode parallel|sequential]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
   pnpm --filter @harness/server cli tasks:move --project <projectId> --task <taskId> --direction up|down

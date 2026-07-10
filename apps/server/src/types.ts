@@ -175,6 +175,7 @@ export type TaskRecord = {
   dependencyTaskIds: string[];
   waivedDependencyTaskIds: string[];
   labels: string[];
+  linkedFiles: string[];
   acceptanceCriteria: string;
   workspaceMode: TaskWorkspaceMode;
   taskOrder: number;

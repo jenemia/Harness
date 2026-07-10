@@ -166,6 +166,7 @@ export type Task = {
   dependencyTaskIds: string[];
   waivedDependencyTaskIds: string[];
   labels: string[];
+  linkedFiles: string[];
   acceptanceCriteria: string;
   workspaceMode: TaskWorkspaceMode;
   taskOrder: number;

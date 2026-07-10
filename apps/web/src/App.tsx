@@ -977,6 +977,7 @@ function TaskComposer(props: {
   const [dependencyTaskId, setDependencyTaskId] = useState("");
   const [parentTaskId, setParentTaskId] = useState("");
   const [labelsText, setLabelsText] = useState("");
+  const [linkedFilesText, setLinkedFilesText] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -991,6 +992,7 @@ function TaskComposer(props: {
           parentTaskId: parentTaskId || null,
           dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
           labels: parseLabels(labelsText),
+          linkedFiles: parseListText(linkedFilesText),
           status: "Backlog",
           priority: "Medium"
         })
@@ -1001,6 +1003,7 @@ function TaskComposer(props: {
       setDependencyTaskId("");
       setParentTaskId("");
       setLabelsText("");
+      setLinkedFilesText("");
       await props.onChanged();
     });
   }
@@ -1046,6 +1049,11 @@ function TaskComposer(props: {
         ))}
       </select>
       <input value={labelsText} onChange={(event) => setLabelsText(event.target.value)} placeholder="Labels, comma separated" />
+      <input
+        value={linkedFilesText}
+        onChange={(event) => setLinkedFilesText(event.target.value)}
+        placeholder="Linked files, comma separated"
+      />
       <button className="primary-button" type="submit">
         <Plus size={16} />
         <span>Create</span>
@@ -1263,6 +1271,7 @@ function TaskDetailDrawer(props: {
   const [editAssigneeAgentId, setEditAssigneeAgentId] = useState(props.task.assigneeAgentId || "");
   const [editParentTaskId, setEditParentTaskId] = useState(props.task.parentTaskId || "");
   const [editLabelsText, setEditLabelsText] = useState(props.task.labels.join(", "));
+  const [editLinkedFilesText, setEditLinkedFilesText] = useState(props.task.linkedFiles.join("\n"));
   const [commentBody, setCommentBody] = useState("");
   const [decomposeText, setDecomposeText] = useState("");
   const [decomposeMode, setDecomposeMode] = useState<"parallel" | "sequential">("parallel");
@@ -1287,6 +1296,7 @@ function TaskDetailDrawer(props: {
     setEditAssigneeAgentId(props.task.assigneeAgentId || "");
     setEditParentTaskId(props.task.parentTaskId || "");
     setEditLabelsText(props.task.labels.join(", "));
+    setEditLinkedFilesText(props.task.linkedFiles.join("\n"));
   }, [props.task.id, props.task.updatedAt]);
 
   async function start() {
@@ -1378,7 +1388,8 @@ function TaskDetailDrawer(props: {
           workspaceMode: editWorkspaceMode,
           assigneeAgentId: editAssigneeAgentId || null,
           parentTaskId: editParentTaskId || null,
-          labels: parseLabels(editLabelsText)
+          labels: parseLabels(editLabelsText),
+          linkedFiles: parseListText(editLinkedFilesText)
         })
       });
       setIsEditing(false);
@@ -1533,6 +1544,11 @@ function TaskDetailDrawer(props: {
               placeholder="Labels, comma separated"
             />
             <textarea
+              value={editLinkedFilesText}
+              onChange={(event) => setEditLinkedFilesText(event.target.value)}
+              placeholder="Linked files, one per line"
+            />
+            <textarea
               value={editDescription}
               onChange={(event) => setEditDescription(event.target.value)}
               placeholder="Description"
@@ -1572,6 +1588,17 @@ function TaskDetailDrawer(props: {
                   <Tag size={14} />
                   {label}
                 </span>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {props.task.linkedFiles.length > 0 && (
+          <section className="drawer-section">
+            <h3>Linked Files</h3>
+            <div className="path-list">
+              {props.task.linkedFiles.map((file) => (
+                <PathLine key={file} icon={<FileText size={14} />} value={file} />
               ))}
             </div>
           </section>
@@ -1684,6 +1711,17 @@ function parseLabels(value: string) {
       value
         .split(",")
         .map((label) => label.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function parseListText(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,]/)
+        .map((item) => item.trim())
         .filter(Boolean)
     )
   );

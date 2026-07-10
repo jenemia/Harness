@@ -816,6 +816,7 @@ export function openProjectDb(projectPath: string) {
       dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       waived_dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       labels TEXT NOT NULL,
+      linked_file_paths TEXT NOT NULL DEFAULT '[]',
       acceptance_criteria TEXT NOT NULL,
       workspace_mode TEXT NOT NULL DEFAULT 'worktree',
       task_order INTEGER NOT NULL DEFAULT 0,
@@ -911,6 +912,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "agents", "boundaries", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "waived_dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "tasks", "linked_file_paths", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "model_backend", "TEXT");
   ensureColumn(db, "tasks", "workspace_mode", "TEXT NOT NULL DEFAULT 'worktree'");
   ensureColumn(db, "tasks", "task_order", "INTEGER NOT NULL DEFAULT 0");
@@ -1629,6 +1631,7 @@ export function mapTask(row: unknown): TaskRecord {
     dependencyTaskIds: JSON.parse(String(r.dependency_task_ids || "[]")) as string[],
     waivedDependencyTaskIds: JSON.parse(String(r.waived_dependency_task_ids || "[]")) as string[],
     labels: JSON.parse(String(r.labels)) as string[],
+    linkedFiles: parseJsonStringArray(r.linked_file_paths),
     acceptanceCriteria: String(r.acceptance_criteria),
     workspaceMode: r.workspace_mode === "harness" ? "harness" : "worktree",
     taskOrder: Number(r.task_order || 0),

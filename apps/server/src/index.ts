@@ -605,6 +605,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     const status = input.status || "Backlog";
     const dependencyTaskIds = Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [];
     const labels = Array.isArray(input.labels) ? input.labels : [];
+    const linkedFiles = normalizeStringList(input.linkedFiles);
     const assigneeRow = input.assigneeAgentId
       ? db.prepare("SELECT * FROM agents WHERE id = ?").get(input.assigneeAgentId)
       : null;
@@ -630,6 +631,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       dependencyTaskIds,
       waivedDependencyTaskIds: Array.isArray(input.waivedDependencyTaskIds) ? input.waivedDependencyTaskIds : [],
       labels,
+      linkedFiles,
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
       workspaceMode,
       taskOrder: nextTaskOrder(db),
@@ -645,9 +647,9 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, workspace_mode, task_order, branch_name,
-        worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths, acceptance_criteria, workspace_mode,
+        task_order, branch_name, worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -661,6 +663,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.waivedDependencyTaskIds),
       JSON.stringify(task.labels),
+      JSON.stringify(task.linkedFiles),
       task.acceptanceCriteria,
       task.workspaceMode,
       task.taskOrder,
@@ -735,6 +738,7 @@ function decomposeTask(
         dependencyTaskIds,
         waivedDependencyTaskIds: [],
         labels: mergeLabels(labels, item.labels || []),
+        linkedFiles: sourceTask.linkedFiles,
         acceptanceCriteria: item.acceptanceCriteria || sourceTask.acceptanceCriteria,
         workspaceMode: sourceTask.workspaceMode
       })
@@ -799,6 +803,10 @@ function mergeLabels(...groups: string[][]) {
   return Array.from(new Set(groups.flat().map((label) => label.trim()).filter(Boolean)));
 }
 
+function normalizeStringList(value: unknown) {
+  return Array.from(new Set((Array.isArray(value) ? value : []).map((item) => String(item).trim()).filter(Boolean)));
+}
+
 function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatus) {
   if (status !== "Blocked" || dependencyTaskIds.length === 0) {
     return null;
@@ -830,6 +838,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
           dependency_task_ids = COALESCE(?, dependency_task_ids),
           waived_dependency_task_ids = COALESCE(?, waived_dependency_task_ids),
           labels = COALESCE(?, labels),
+          linked_file_paths = COALESCE(?, linked_file_paths),
           acceptance_criteria = COALESCE(?, acceptance_criteria),
           workspace_mode = COALESCE(?, workspace_mode),
           blocked_reason = ?,
@@ -846,6 +855,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       Array.isArray(input.dependencyTaskIds) ? JSON.stringify(input.dependencyTaskIds) : null,
       Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(input.waivedDependencyTaskIds) : null,
       Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
+      Array.isArray(input.linkedFiles) ? JSON.stringify(normalizeStringList(input.linkedFiles)) : null,
       input.acceptanceCriteria?.trim() || null,
       input.workspaceMode === undefined ? null : parseWorkspaceModeOption(input.workspaceMode) || null,
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
