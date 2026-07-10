@@ -259,6 +259,37 @@ button {
   gap: 8px;
 }
 
+.schedule-line {
+  align-items: center;
+  background: #dcfff1;
+  border: 1px solid #7ee2b8;
+  border-radius: 6px;
+  color: #216e4e;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 18px minmax(0, 1fr) 28px;
+  margin-bottom: 12px;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.schedule-line.warning {
+  background: #fff7d6;
+  border-color: #f5cd47;
+  color: #7f5f01;
+}
+
+.schedule-line span {
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.icon-button.small {
+  height: 28px;
+  width: 28px;
+}
+
 .eyebrow {
   margin: 0 0 4px;
   color: #626f86;

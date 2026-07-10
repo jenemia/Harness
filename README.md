@@ -20,6 +20,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Task-level decomposition for turning a parent task into parallel or sequential subtasks.
 - Workflow templates for reusable PM planning role chains.
 - Selected-task scheduler with agent `maxParallel` capacity checks; Backlog stays as a planning queue until promoted.
+- Scheduler result feedback showing started and skipped task counts after manual or PM-triggered scheduling.
 - Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
 - Git worktree per executable task.
 - Harness workspace mode for non-code tasks that do not need Git worktrees.

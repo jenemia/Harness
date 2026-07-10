@@ -42,6 +42,7 @@ export function App() {
   const [projectTemplates, setProjectTemplates] = useState<ProjectTemplate[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
+  const [lastScheduleResult, setLastScheduleResult] = useState<ScheduleResult | null>(null);
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
   const [boardQuery, setBoardQuery] = useState("");
@@ -100,9 +101,10 @@ export function App() {
     }
 
     await runAction(async () => {
-      await api<{ schedule: ScheduleResult }>(`/api/projects/${overview.project.id}/schedule`, {
+      const response = await api<{ schedule: ScheduleResult }>(`/api/projects/${overview.project.id}/schedule`, {
         method: "POST"
       });
+      setLastScheduleResult(response.schedule);
       await loadOverview(overview.project.id);
     });
   }
@@ -272,6 +274,13 @@ export function App() {
         </header>
 
         {error && <div className="error-line">{error}</div>}
+        {overview && lastScheduleResult && (
+          <ScheduleResultLine
+            result={lastScheduleResult}
+            tasks={overview.tasks}
+            onDismiss={() => setLastScheduleResult(null)}
+          />
+        )}
 
         {overview ? (
           <div className="content-grid">
@@ -929,7 +938,7 @@ function PlanningPanel(props: {
           <strong>{lastPlan.tasks.length} tasks created</strong>
           <span>
             {formatPlanningMode(lastPlan)}
-            {lastSchedule ? ` · ${lastSchedule.started.length} started` : ""}
+            {lastSchedule ? ` · ${lastSchedule.started.length} started · ${lastSchedule.skipped.length} skipped` : ""}
           </span>
           {lastPlan.warnings.map((warning) => (
             <span key={warning} className="plan-warning">
@@ -972,6 +981,26 @@ function PlanPreviewBox(props: { agents: Agent[]; preview: PlanPreviewResult }) 
 
 function formatPlanningMode(plan: { mode: PlanningMode; effectiveMode: "sequential" | "parallel" }) {
   return plan.mode === "auto" ? `auto -> ${plan.effectiveMode}` : plan.mode;
+}
+
+function ScheduleResultLine(props: { result: ScheduleResult; tasks: Task[]; onDismiss: () => void }) {
+  const tasksById = useMemo(() => new Map(props.tasks.map((task) => [task.id, task])), [props.tasks]);
+  const firstSkipped = props.result.skipped[0] || null;
+  const skippedTask = firstSkipped ? tasksById.get(firstSkipped.taskId) : null;
+  return (
+    <div className={props.result.skipped.length > 0 ? "schedule-line warning" : "schedule-line"}>
+      <Activity size={16} />
+      <span>
+        Scheduler started {props.result.started.length} task{props.result.started.length === 1 ? "" : "s"}
+        {props.result.skipped.length > 0
+          ? `, skipped ${props.result.skipped.length}: ${skippedTask?.title || firstSkipped?.taskId.slice(0, 8)} - ${firstSkipped?.reason}`
+          : "."}
+      </span>
+      <button className="icon-button small" type="button" onClick={props.onDismiss}>
+        <X size={14} />
+      </button>
+    </div>
+  );
 }
 
 function ProjectPanel(props: {
