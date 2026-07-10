@@ -94,6 +94,17 @@ export type ProviderCatalog = {
   }>;
 };
 
+export type PlanResult = {
+  goal: string;
+  mode: "sequential" | "parallel";
+  tasks: Array<{
+    id: string;
+    title: string;
+    role: string;
+    dependencyTaskIds: string[];
+  }>;
+};
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,

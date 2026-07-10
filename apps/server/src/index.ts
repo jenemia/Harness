@@ -13,6 +13,7 @@ import {
   registerProject,
   seedDefaultAgents
 } from "./db.js";
+import { createPlan } from "./planner.js";
 import { approveMerge, listRuntimeProviders, startTask } from "./runtime.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
@@ -78,6 +79,12 @@ const server = http.createServer(async (req, res) => {
 
       if (req.method === "GET" && childPath === "overview") {
         sendJson(res, getProjectOverview(project));
+        return;
+      }
+
+      if (req.method === "POST" && childPath === "plan") {
+        const plan = createPlan(project, await readBody(req));
+        sendJson(res, { plan, overview: getProjectOverview(project) }, 201);
         return;
       }
 

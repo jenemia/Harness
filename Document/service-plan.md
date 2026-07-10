@@ -65,6 +65,8 @@ The PM agent does not need to perform all work directly. Its primary job is orch
 
 The PM agent decides whether work can run in parallel or must proceed sequentially. When a task completes, the PM agent evaluates the result and chooses the next best agent or human handoff.
 
+Initial implementation: the PM planning endpoint can decompose a user goal into scoped Kanban tasks, assign them by agent role, and create sequential dependencies for planned handoff chains.
+
 ### Task
 
 A task is the durable unit of work shown on the Kanban board.
@@ -464,6 +466,7 @@ MVP features:
 - Create/open local project folders.
 - Create agents with personas.
 - Create/edit Kanban tasks.
+- Create a PM plan from a user goal and turn it into assigned Kanban tasks.
 - Assign a task to an agent.
 - Show agent status on board cards.
 - Store project data in project-local SQLite and global app settings in a global database/config area.

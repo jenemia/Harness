@@ -507,6 +507,21 @@ textarea {
   line-height: 1.35;
 }
 
+.plan-result {
+  border-top: 1px solid #f1f2f4;
+  color: #626f86;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  font-size: 12px;
+}
+
+.plan-result strong {
+  color: #172b4d;
+}
+
 .error-line,
 .busy-line {
   border-radius: 6px;
@@ -550,6 +565,6 @@ textarea {
 
   .right-rail {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 }

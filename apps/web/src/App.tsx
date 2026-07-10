@@ -11,10 +11,11 @@ import {
   Play,
   Plus,
   RefreshCcw,
+  Sparkles,
   Settings,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Overview, Project, ProviderCatalog, Task, TaskStatus } from "./api";
+import type { Agent, Overview, PlanResult, Project, ProviderCatalog, Task, TaskStatus } from "./api";
 import { api } from "./api";
 
 const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
@@ -171,6 +172,7 @@ export function App() {
             </section>
 
             <aside className="right-rail">
+              <PlanningPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <AgentPanel
                 overview={overview}
                 providerCatalog={providerCatalog}
@@ -191,6 +193,59 @@ export function App() {
         {isBusy && <div className="busy-line">Working...</div>}
       </main>
     </div>
+  );
+}
+
+function PlanningPanel(props: {
+  overview: Overview;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [goal, setGoal] = useState("");
+  const [mode, setMode] = useState<"sequential" | "parallel">("sequential");
+  const [lastPlan, setLastPlan] = useState<PlanResult | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      const response = await api<{ plan: PlanResult }>(`/api/projects/${props.overview.project.id}/plan`, {
+        method: "POST",
+        body: JSON.stringify({ goal, mode })
+      });
+      setLastPlan(response.plan);
+      setGoal("");
+      await props.onChanged();
+    });
+  }
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <Sparkles size={17} />
+        <h2>PM Plan</h2>
+      </div>
+      <form className="stack-form" onSubmit={submit}>
+        <textarea
+          value={goal}
+          onChange={(event) => setGoal(event.target.value)}
+          placeholder="Goal or bullet list"
+        />
+        <select value={mode} onChange={(event) => setMode(event.target.value as "sequential" | "parallel")}>
+          <option value="sequential">Sequential handoff</option>
+          <option value="parallel">Parallel where safe</option>
+        </select>
+        <button className="primary-button" type="submit">
+          <Sparkles size={16} />
+          <span>Plan</span>
+        </button>
+      </form>
+      {lastPlan && (
+        <div className="plan-result">
+          <strong>{lastPlan.tasks.length} tasks created</strong>
+          <span>{lastPlan.mode}</span>
+        </div>
+      )}
+    </section>
   );
 }
 
