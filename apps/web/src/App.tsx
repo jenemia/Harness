@@ -565,6 +565,27 @@ function ProjectPanel(props: {
 
 function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
   const summary = project.summary;
+  if (!summary.pathExists) {
+    return (
+      <div className="project-summary-row">
+        <b className="blocked">missing folder</b>
+      </div>
+    );
+  }
+  if (!summary.harnessDbExists) {
+    return (
+      <div className="project-summary-row">
+        <b className="approval">missing harness db</b>
+      </div>
+    );
+  }
+  if (summary.summaryError) {
+    return (
+      <div className="project-summary-row">
+        <b className="blocked">summary error</b>
+      </div>
+    );
+  }
   return (
     <div className="project-summary-row">
       <b>{summary.totalTasks} tasks</b>

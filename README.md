@@ -103,6 +103,8 @@ Agent and workflow templates can also be managed headlessly with `templates:agen
 
 Projects can be removed from the Harness registry with the sidebar remove button, `DELETE /api/projects/:projectId`, or `projects:unregister`. This only removes the app registry entry; the project folder and `.harness/` data stay on disk.
 
+Project lists include folder and `.harness/harness.db` availability so moved or deleted folders can be spotted without recreating missing project data.
+
 ## Agents
 
 Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` CLI commands to manage persona-driven worker profiles, model backend defaults, CLI overrides, capabilities, and per-agent concurrency.

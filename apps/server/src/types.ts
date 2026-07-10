@@ -15,6 +15,9 @@ export type ProjectRecord = {
 };
 
 export type ProjectSummary = {
+  pathExists: boolean;
+  harnessDbExists: boolean;
+  summaryError: string | null;
   totalTasks: number;
   blockedTasks: number;
   runningTasks: number;

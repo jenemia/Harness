@@ -48,6 +48,8 @@ Initial implementation: each project also exposes a health report through the UI
 
 Initial implementation: projects can be unregistered from the global Harness project list through the UI, API, or CLI without deleting the project folder or project-local `.harness` data.
 
+Initial implementation: project lists include local folder and project database availability so moved or missing folders are visible without recreating missing `.harness` data during a read-only list operation.
+
 ### Agent
 
 An agent is a named worker profile with a persona, role, model configuration, tool permissions, and execution policy.

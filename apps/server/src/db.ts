@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -1008,14 +1008,38 @@ export function listProjectsWithSummaries(): ProjectListItem[] {
 }
 
 function getProjectSummary(projectPath: string) {
-  const db = openProjectDb(projectPath);
+  const pathExists = existsSync(projectPath);
+  const harnessDbPath = path.join(projectHarnessDir(projectPath), "harness.db");
+  const harnessDbExists = existsSync(harnessDbPath);
+  const emptySummary = {
+    pathExists,
+    harnessDbExists,
+    summaryError: null,
+    totalTasks: 0,
+    blockedTasks: 0,
+    runningTasks: 0,
+    pendingApprovals: 0,
+    pendingMerges: 0,
+    busyAgents: 0
+  };
+
+  if (!pathExists || !harnessDbExists) {
+    return emptySummary;
+  }
+
+  let db: DatabaseSync | null = null;
   try {
+    db = openProjectDb(projectPath);
+    const projectDb = db;
     const count = (sql: string, ...params: string[]) => {
-      const row = db.prepare(sql).get(...params) as { count: number };
+      const row = projectDb.prepare(sql).get(...params) as { count: number };
       return Number(row.count || 0);
     };
 
     return {
+      pathExists,
+      harnessDbExists,
+      summaryError: null,
       totalTasks: count("SELECT COUNT(*) AS count FROM tasks"),
       blockedTasks: count("SELECT COUNT(*) AS count FROM tasks WHERE status = ?", "Blocked"),
       runningTasks: count("SELECT COUNT(*) AS count FROM runs WHERE status = ?", "running"),
@@ -1023,8 +1047,13 @@ function getProjectSummary(projectPath: string) {
       pendingMerges: count("SELECT COUNT(*) AS count FROM tasks WHERE merge_status IN (?, ?)", "pending", "conflict"),
       busyAgents: count("SELECT COUNT(*) AS count FROM agents WHERE status = ?", "busy")
     };
+  } catch (error) {
+    return {
+      ...emptySummary,
+      summaryError: error instanceof Error ? error.message : String(error)
+    };
   } finally {
-    db.close();
+    db?.close();
   }
 }
 
