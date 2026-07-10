@@ -37,6 +37,7 @@ export function listRuntimeProviders() {
       capabilities: providers.workspace().capabilities
     },
     approval: providers.approval().definition,
+    policy: providers.policy().definition,
     llmProviders: providers.llmDefinitions()
   };
 }
@@ -851,6 +852,25 @@ function ensureCommandApproval(
   const effectiveBackend = getEffectiveModelBackend(agent, task);
   const provider = providers.llm(effectiveBackend);
   const commandPreview = getEffectiveProviderCommand(agent, effectiveBackend, settings) || provider.definition.commandExample;
+  const policy = providers.policy().evaluateLlmExecution({
+    task,
+    agent,
+    llmProvider: provider.definition,
+    effectiveBackend,
+    commandPreview
+  });
+  if (policy.action === "block") {
+    setTaskBlocked(db, task.id, policy.reason);
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: agent.id,
+      type: "policy.blocked",
+      message: policy.reason,
+      metadata: policy.metadata
+    });
+    return policy.reason;
+  }
+
   const existingRows = db
     .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
     .all(task.id, agent.id, commandApprovalKind)

@@ -296,6 +296,17 @@ export type ProviderCatalog = {
       resumesApprovedTasks: boolean;
     };
   };
+  policy: {
+    id: string;
+    label: string;
+    kind: "local-agent-policy";
+    description: string;
+    capabilities: {
+      llmCommandPermission: boolean;
+      providerSpecificTools: boolean;
+      boundaryPromptInjection: boolean;
+    };
+  };
   llmProviders: Array<{
     id: string;
     label: string;

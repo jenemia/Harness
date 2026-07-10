@@ -2106,6 +2106,15 @@ function SettingsPanel(props: {
             approvals {props.providerCatalog.approval.capabilities.mergeApproval ? "on" : "off"} | resumes tasks{" "}
             {props.providerCatalog.approval.capabilities.resumesApprovedTasks ? "on" : "off"}
           </span>
+          <strong>{props.providerCatalog.policy.label}</strong>
+          <span>
+            {props.providerCatalog.policy.id} | {props.providerCatalog.policy.description}
+          </span>
+          <span>
+            command policy {props.providerCatalog.policy.capabilities.llmCommandPermission ? "on" : "off"} | provider
+            tools {props.providerCatalog.policy.capabilities.providerSpecificTools ? "on" : "off"} | prompt boundaries{" "}
+            {props.providerCatalog.policy.capabilities.boundaryPromptInjection ? "on" : "off"}
+          </span>
         </div>
       )}
       <form className="stack-form" onSubmit={submitGlobal}>

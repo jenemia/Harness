@@ -23,7 +23,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
 - Configurable run timeout for command-backed providers.
-- Provider-based platform, workspace, approval, and LLM adapters.
+- Provider-based platform, workspace, approval, policy, and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Task-level model backend overrides for routing specific work to a different provider.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
@@ -32,7 +32,9 @@ LLM CLI providers run inside the task worktree and receive Harness context throu
 
 Project memory is written to `.harness/project-memory.md` inside each task worktree and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 
-Shell-backed providers require human approval before their configured command runs when the current project has command approvals enabled. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
+Shell-backed providers require matching agent tool permission before execution. Agents need `shell`, `llm-cli`, the provider kind, or the provider id in `allowedTools` before a command-backed LLM provider can run.
+
+Shell-backed providers also require human approval before their configured command runs when the current project has command approvals enabled. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
 
 ## Development
 
@@ -99,7 +101,7 @@ Provider commands are a provider-to-command map. Agent-specific `cliCommand` val
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`; roles without a matching rule move to Done after successful completion.
 
-The provider catalog exposes the active OS platform provider, workspace isolation provider, local approval provider, and available LLM providers through `/api/providers` and `providers:list`.
+The provider catalog exposes the active OS platform provider, workspace isolation provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`.
 
 ## Project Templates
 

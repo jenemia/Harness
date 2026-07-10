@@ -85,6 +85,18 @@ export type ApprovalProviderDefinition = {
   };
 };
 
+export type PolicyProviderDefinition = {
+  id: string;
+  label: string;
+  kind: "local-agent-policy";
+  description: string;
+  capabilities: {
+    llmCommandPermission: boolean;
+    providerSpecificTools: boolean;
+    boundaryPromptInjection: boolean;
+  };
+};
+
 export type CommandApprovalEvaluation =
   | { action: "allow" }
   | { action: "block"; reason: string }
@@ -92,6 +104,14 @@ export type CommandApprovalEvaluation =
       action: "request";
       reason: string;
       commandPreview: string | null;
+      metadata: Record<string, string | null>;
+    };
+
+export type PolicyEvaluation =
+  | { action: "allow" }
+  | {
+      action: "block";
+      reason: string;
       metadata: Record<string, string | null>;
     };
 
@@ -111,11 +131,24 @@ export type ApprovalProvider = {
   rejectionReason(approval: ApprovalRecord): string;
 };
 
+export type PolicyProvider = {
+  id: string;
+  definition: PolicyProviderDefinition;
+  evaluateLlmExecution(input: {
+    task: TaskRecord;
+    agent: AgentRecord;
+    llmProvider: LlmProviderDefinition;
+    effectiveBackend: string;
+    commandPreview: string | null;
+  }): PolicyEvaluation;
+};
+
 export class ProviderRegistry {
   constructor(
     private readonly platformProvider: PlatformProvider,
     private readonly workspaceProvider: WorkspaceProvider,
     private readonly approvalProvider: ApprovalProvider,
+    private readonly policyProvider: PolicyProvider,
     private readonly llmProviders: LlmProvider[]
   ) {}
 
@@ -131,6 +164,10 @@ export class ProviderRegistry {
     return this.approvalProvider;
   }
 
+  policy() {
+    return this.policyProvider;
+  }
+
   llm(modelBackend: string) {
     return this.llmProviders.find((provider) => provider.id === modelBackend) ?? this.llmProviders[0];
   }
@@ -144,7 +181,8 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
   const platformProvider = createPlatformProvider();
   const workspaceProvider = createGitWorktreeWorkspaceProvider(platformProvider, projectHarnessDir);
   const approvalProvider = createLocalHumanApprovalProvider();
-  return new ProviderRegistry(platformProvider, workspaceProvider, approvalProvider, [
+  const policyProvider = createLocalAgentPolicyProvider();
+  return new ProviderRegistry(platformProvider, workspaceProvider, approvalProvider, policyProvider, [
     createMockLlmProvider(),
     createShellLlmProvider(platformProvider),
     createCliLlmProvider(platformProvider, {
@@ -178,6 +216,55 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
       commandExample: "openrouter-cli run --prompt-file \"$HARNESS_PROMPT_FILE\""
     })
   ]);
+}
+
+function createLocalAgentPolicyProvider(): PolicyProvider {
+  return {
+    id: "local-agent-policy",
+    definition: {
+      id: "local-agent-policy",
+      label: "Local Agent Policy",
+      kind: "local-agent-policy",
+      description: "Checks agent tool boundaries before a model provider can execute.",
+      capabilities: {
+        llmCommandPermission: true,
+        providerSpecificTools: true,
+        boundaryPromptInjection: true
+      }
+    },
+
+    evaluateLlmExecution(input) {
+      if (!input.llmProvider.requiresCommand) {
+        return { action: "allow" };
+      }
+
+      const allowedTools = new Set(input.agent.allowedTools.map((tool) => tool.toLowerCase()));
+      const acceptedTools = [
+        "shell",
+        "llm-cli",
+        input.llmProvider.kind,
+        input.llmProvider.id,
+        input.effectiveBackend
+      ].map((tool) => tool.toLowerCase());
+      const hasCommandPermission = acceptedTools.some((tool) => allowedTools.has(tool));
+      if (hasCommandPermission) {
+        return { action: "allow" };
+      }
+
+      const reason = `${input.agent.name} is not allowed to run ${input.llmProvider.label}. Add one of these allowed tools: ${acceptedTools.join(", ")}.`;
+      return {
+        action: "block",
+        reason,
+        metadata: {
+          policyProvider: this.id,
+          provider: input.llmProvider.id,
+          effectiveBackend: input.effectiveBackend,
+          commandPreview: input.commandPreview,
+          allowedTools: input.agent.allowedTools.join(",")
+        }
+      };
+    }
+  };
 }
 
 function createPlatformProvider(): PlatformProvider {
