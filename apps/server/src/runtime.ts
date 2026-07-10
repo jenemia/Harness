@@ -742,7 +742,15 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   }
 
   const settings = getProjectSettingsFromDb(db);
+  const evaluation = evaluateCompletion(db, task, completedBy);
   const nextRole = settings.handoffRules[completedBy.role];
+  insertEvent(db, {
+    taskId: task.id,
+    agentId: completedBy.id,
+    type: "pm.evaluated",
+    message: evaluation.summary,
+    metadata: evaluation
+  });
   if (nextRole) {
     const nextAgent = findAgentForHandoff(db, nextRole, completedBy.id);
     if (!nextAgent) {
@@ -765,7 +773,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
       task.id,
       completedBy.id,
       nextAgent.id,
-      `PM auto-handoff rule: ${completedBy.role} -> ${nextRole}.`,
+      `PM auto-handoff rule: ${completedBy.role} -> ${nextRole}. ${evaluation.summary}`,
       now()
     );
     insertEvent(db, {
@@ -773,7 +781,13 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
       agentId: nextAgent.id,
       type: "handoff.automatic",
       message: `PM Agent handed the task from ${completedBy.name} to ${nextAgent.name}.`,
-      metadata: { fromAgentId: completedBy.id, toAgentId: nextAgent.id, fromRole: completedBy.role, toRole: nextRole }
+      metadata: {
+        fromAgentId: completedBy.id,
+        toAgentId: nextAgent.id,
+        fromRole: completedBy.role,
+        toRole: nextRole,
+        evaluation
+      }
     });
     deferRuntimeTask(() => startTask(project, task.id));
     return;
@@ -792,7 +806,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
     agentId: completedBy.id,
     type: "task.done",
     message: "PM Agent marked the task Done after automatic evaluation.",
-    metadata: { mergeStatus }
+    metadata: { mergeStatus, evaluation }
   });
 
   if (mergeStatus === "pending") {
@@ -807,6 +821,59 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   }
 
   scheduleReadyDependents(project, db, task.id);
+}
+
+function evaluateCompletion(db: DatabaseSync, task: TaskRecord, completedBy: AgentRecord) {
+  const row = db
+    .prepare("SELECT * FROM runs WHERE task_id = ? AND agent_id = ? AND status = ? ORDER BY completed_at DESC LIMIT 1")
+    .get(task.id, completedBy.id, "completed");
+  const run = row ? mapRun(row) : null;
+  const output = [run?.output, run?.error].filter(Boolean).join("\n");
+  const signals = detectCompletionSignals(output, run?.changedFiles || []);
+  const changedFiles = run?.changedFiles || [];
+  const summaryParts = [
+    `PM evaluated ${completedBy.name}'s completion output.`,
+    changedFiles.length ? `${changedFiles.length} changed file(s).` : "No changed files recorded.",
+    signals.length ? `Signals: ${signals.join(", ")}.` : "No follow-up signals detected."
+  ];
+
+  return {
+    runId: run?.id || null,
+    completedByAgentId: completedBy.id,
+    changedFiles,
+    signals,
+    outputExcerpt: excerpt(output),
+    summary: summaryParts.join(" ")
+  };
+}
+
+function detectCompletionSignals(output: string, changedFiles: string[]) {
+  const signals = new Set<string>();
+  const text = output.toLowerCase();
+  if (/todo|follow[- ]?up|next step|needs?/i.test(output)) {
+    signals.add("follow-up");
+  }
+  if (/risk|blocker|blocked|uncertain|assumption/i.test(output)) {
+    signals.add("risk");
+  }
+  if (/test|verify|verification|checked/i.test(output)) {
+    signals.add("verification-mentioned");
+  }
+  if (!changedFiles.length) {
+    signals.add("no-file-changes");
+  }
+  if (text.includes("failed") || text.includes("error")) {
+    signals.add("error-mentioned");
+  }
+  return Array.from(signals);
+}
+
+function excerpt(value: string, maxLength = 700) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
 function getTask(db: DatabaseSync, taskId: string): TaskRecord | null {

@@ -118,6 +118,8 @@ Default handoff policy:
 
 Initial implementation: project settings include role-to-role handoff rules. By default, programmer and worker completions route to a reviewer; roles without a matching rule move to Done after successful completion.
 
+Initial implementation: after each successful run, the PM runtime inspects the latest completion output and changed files before choosing the role-to-role handoff or Done transition. It records a `pm.evaluated` timeline event with output excerpt, changed files, detected follow-up/risk/verification signals, and includes the evaluation summary in automatic handoff metadata.
+
 Initial implementation: shell-backed LLM providers create a command execution approval request before any configured CLI command runs. The task is blocked until the user approves or rejects the request from the Approvals panel. Approved tasks resume automatically; rejected tasks remain blocked and the decision is recorded in the timeline.
 
 Initial implementation: completed task worktree changes create merge approval requests in the same approval queue. Approving a merge request merges the task branch into the main checkout; rejecting it sends the task back to Selected with requested changes recorded in the timeline.
@@ -281,7 +283,7 @@ Scheduling rules:
 - PM handoff decisions run automatically by default.
 - Users can set concurrency limits per project and per agent.
 
-Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution, when a human manually marks the prerequisite Done, or when a dependency is explicitly waived. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected. Tasks can be moved up or down within their board column, and the scheduler uses that board order when selecting ready work.
+Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution, when a human manually marks the prerequisite Done, or when a dependency is explicitly waived. The PM runtime records completion-output evaluations before handoff decisions. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected. Tasks can be moved up or down within their board column, and the scheduler uses that board order when selecting ready work.
 
 ### Sequential Workflow Chains
 

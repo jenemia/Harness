@@ -21,6 +21,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
 - Git worktree per executable task.
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
+- PM completion evaluation events before automatic handoffs or Done transitions.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
 - Configurable run timeout for command-backed providers.
@@ -135,6 +136,8 @@ Select a workflow template to make PM planning follow a reusable role chain. Har
 Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.
 
 When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
+
+After a successful run, the PM runtime inspects the latest output and changed files before deciding the configured handoff or Done transition. The resulting `pm.evaluated` event appears in the task timeline and is included in handoff metadata.
 
 Tasks can be paused from the board, task detail drawer, API, or CLI. Paused tasks stay out of scheduler runs until they are resumed back to `Selected`, and pause/resume events are recorded in the task timeline.
 
