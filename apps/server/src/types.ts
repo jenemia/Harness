@@ -19,6 +19,7 @@ export type GlobalSettings = {
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;
   autoStartPlans: boolean;
+  providerCommands: Record<string, string>;
   updatedAt: string | null;
 };
 
@@ -29,6 +30,7 @@ export type ProjectSettings = {
   requireCommandApproval: boolean;
   maxProjectParallel: number;
   handoffRules: Record<string, string>;
+  providerCommands: Record<string, string>;
   updatedAt: string | null;
 };
 

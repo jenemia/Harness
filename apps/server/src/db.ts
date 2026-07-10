@@ -63,6 +63,7 @@ export function defaultGlobalSettings(): GlobalSettings {
     defaultModelBackend: "mock",
     defaultAgentMaxParallel: 1,
     autoStartPlans: false,
+    providerCommands: {},
     updatedAt: null
   };
 }
@@ -94,6 +95,9 @@ export function getGlobalSettings(): GlobalSettings {
       if (row.key === "autoStartPlans") {
         settings.autoStartPlans = row.value === "true";
       }
+      if (row.key === "providerCommands") {
+        settings.providerCommands = parseStringMap(row.value, settings.providerCommands);
+      }
     }
 
     return { ...settings, updatedAt };
@@ -111,6 +115,7 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
       defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
       defaultAgentMaxParallel: Math.max(1, Number(input.defaultAgentMaxParallel || current.defaultAgentMaxParallel)),
       autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
+      providerCommands: normalizeStringMap(input.providerCommands || current.providerCommands),
       updatedAt: now()
     };
 
@@ -119,6 +124,7 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
     stmt.run("defaultModelBackend", next.defaultModelBackend, next.updatedAt);
     stmt.run("defaultAgentMaxParallel", String(next.defaultAgentMaxParallel), next.updatedAt);
     stmt.run("autoStartPlans", String(next.autoStartPlans), next.updatedAt);
+    stmt.run("providerCommands", JSON.stringify(next.providerCommands), next.updatedAt);
     return next;
   } finally {
     db.close();
@@ -248,6 +254,7 @@ export function defaultProjectSettings(): ProjectSettings {
       programmer: "reviewer",
       worker: "reviewer"
     },
+    providerCommands: globalSettings.providerCommands,
     updatedAt: null
   };
 }
@@ -290,7 +297,10 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
       settings.maxProjectParallel = Math.max(1, Number(row.value || 1));
     }
     if (row.key === "handoffRules") {
-      settings.handoffRules = parseHandoffRules(row.value, settings.handoffRules);
+      settings.handoffRules = parseStringMap(row.value, settings.handoffRules);
+    }
+    if (row.key === "providerCommands") {
+      settings.providerCommands = parseStringMap(row.value, settings.providerCommands);
     }
   }
 
@@ -308,7 +318,8 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
       autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
       requireCommandApproval: input.requireCommandApproval ?? current.requireCommandApproval,
       maxProjectParallel: Math.max(1, Number(input.maxProjectParallel || current.maxProjectParallel)),
-      handoffRules: normalizeHandoffRules(input.handoffRules || current.handoffRules),
+      handoffRules: normalizeStringMap(input.handoffRules || current.handoffRules),
+      providerCommands: normalizeStringMap(input.providerCommands || current.providerCommands),
       updatedAt: timestamp
     };
 
@@ -319,21 +330,22 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
     stmt.run("requireCommandApproval", String(next.requireCommandApproval), timestamp);
     stmt.run("maxProjectParallel", String(next.maxProjectParallel), timestamp);
     stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
+    stmt.run("providerCommands", JSON.stringify(next.providerCommands), timestamp);
     return next;
   } finally {
     db.close();
   }
 }
 
-function parseHandoffRules(value: string, fallback: Record<string, string>) {
+function parseStringMap(value: string, fallback: Record<string, string>) {
   try {
-    return normalizeHandoffRules(JSON.parse(value));
+    return normalizeStringMap(JSON.parse(value));
   } catch {
     return fallback;
   }
 }
 
-function normalizeHandoffRules(input: unknown) {
+function normalizeStringMap(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     return {};
   }

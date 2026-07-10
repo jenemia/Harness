@@ -1047,8 +1047,10 @@ function SettingsPanel(props: {
   const [defaultModelBackend, setDefaultModelBackend] = useState("mock");
   const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
   const [autoStartPlans, setAutoStartPlans] = useState(false);
+  const [globalProviderCommandsText, setGlobalProviderCommandsText] = useState("{}");
   const [projectSettings, setProjectSettings] = useState<ProjectSettings>(props.overview.settings);
   const [handoffRulesText, setHandoffRulesText] = useState(JSON.stringify(props.overview.settings.handoffRules, null, 2));
+  const [projectProviderCommandsText, setProjectProviderCommandsText] = useState(JSON.stringify(props.overview.settings.providerCommands, null, 2));
 
   useEffect(() => {
     if (!props.settings) {
@@ -1058,39 +1060,46 @@ function SettingsPanel(props: {
     setDefaultModelBackend(props.settings.defaultModelBackend);
     setDefaultAgentMaxParallel(props.settings.defaultAgentMaxParallel);
     setAutoStartPlans(props.settings.autoStartPlans);
+    setGlobalProviderCommandsText(JSON.stringify(props.settings.providerCommands, null, 2));
   }, [props.settings]);
 
   useEffect(() => {
     setProjectSettings(props.overview.settings);
     setHandoffRulesText(JSON.stringify(props.overview.settings.handoffRules, null, 2));
+    setProjectProviderCommandsText(JSON.stringify(props.overview.settings.providerCommands, null, 2));
   }, [props.overview.settings]);
 
   async function submitGlobal(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
+      const providerCommands = parseStringMapText(globalProviderCommandsText, "Provider commands");
       const response = await api<{ settings: GlobalSettings }>("/api/settings", {
         method: "PATCH",
         body: JSON.stringify({
           defaultProjectRoot,
           defaultModelBackend,
           defaultAgentMaxParallel,
-          autoStartPlans
+          autoStartPlans,
+          providerCommands
         })
       });
       props.onChanged(response.settings);
+      setGlobalProviderCommandsText(JSON.stringify(response.settings.providerCommands, null, 2));
     });
   }
 
   async function submitProject(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
-      const handoffRules = parseHandoffRulesText(handoffRulesText);
+      const handoffRules = parseStringMapText(handoffRulesText, "Handoff rules");
+      const providerCommands = parseStringMapText(projectProviderCommandsText, "Provider commands");
       const response = await api<{ settings: ProjectSettings }>(`/api/projects/${props.overview.project.id}/settings`, {
         method: "PATCH",
-        body: JSON.stringify({ ...projectSettings, handoffRules })
+        body: JSON.stringify({ ...projectSettings, handoffRules, providerCommands })
       });
       setProjectSettings(response.settings);
       setHandoffRulesText(JSON.stringify(response.settings.handoffRules, null, 2));
+      setProjectProviderCommandsText(JSON.stringify(response.settings.providerCommands, null, 2));
       await props.onProjectChanged();
     });
   }
@@ -1134,6 +1143,11 @@ function SettingsPanel(props: {
           />
           <span>Auto-start plans by default</span>
         </label>
+        <textarea
+          value={globalProviderCommandsText}
+          onChange={(event) => setGlobalProviderCommandsText(event.target.value)}
+          placeholder='{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
+        />
         <button className="secondary-button" type="submit">
           <Settings size={16} />
           <span>Save global</span>
@@ -1188,6 +1202,11 @@ function SettingsPanel(props: {
           onChange={(event) => setHandoffRulesText(event.target.value)}
           placeholder='{"programmer":"reviewer","worker":"reviewer"}'
         />
+        <textarea
+          value={projectProviderCommandsText}
+          onChange={(event) => setProjectProviderCommandsText(event.target.value)}
+          placeholder='{"shell":"node ./scripts/agent-runner.js"}'
+        />
         <button className="secondary-button" type="submit">
           <Settings size={16} />
           <span>Save project</span>
@@ -1197,10 +1216,10 @@ function SettingsPanel(props: {
   );
 }
 
-function parseHandoffRulesText(value: string) {
+function parseStringMapText(value: string, label: string) {
   const parsed = JSON.parse(value || "{}");
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Handoff rules must be a JSON object.");
+    throw new Error(`${label} must be a JSON object.`);
   }
   return Object.fromEntries(
     Object.entries(parsed)

@@ -361,6 +361,8 @@ Implementation rule: runtime orchestration should call provider interfaces inste
 
 LLM providers should receive a generated prompt file and normalized environment variables so each CLI can be adapted without changing the scheduler or Kanban runtime.
 
+Initial implementation: provider command defaults can be configured globally and per project. Agent-specific CLI commands override project provider commands, and project provider commands inherit from global defaults.
+
 ### Database
 
 - SQLite for local durable state
@@ -391,7 +393,7 @@ Global storage:
 - Global model/router settings
 - App update and telemetry preferences, if any
 
-Initial implementation: Harness stores global settings for app-wide defaults and project-local settings for default LLM backend, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy.
+Initial implementation: Harness stores global settings for app-wide defaults and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy.
 
 Candidate paths:
 

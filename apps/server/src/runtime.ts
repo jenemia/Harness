@@ -326,6 +326,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       return;
     }
 
+    const settings = getProjectSettingsFromDb(db);
     assignTask(db, task.id, agent.id);
     updateTaskStatus(db, task.id, agent.role === "reviewer" ? "In Review" : "In Progress");
     setAgentBusy(db, agent.id, task.id);
@@ -362,7 +363,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     });
 
     const freshTask = getTask(db, task.id) ?? task;
-    const result = await providers.llm(agent.modelBackend).run(agent, freshTask, workspace);
+    const executionAgent = withProviderCommand(agent, settings);
+    const result = await providers.llm(executionAgent.modelBackend).run(executionAgent, freshTask, workspace);
     const completedAt = now();
     const commitResult = result.ok
       ? await providers.platform().commitAll(
@@ -586,6 +588,7 @@ function ensureCommandApproval(
   if (!settings.requireCommandApproval || !provider.definition.requiresCommand) {
     return null;
   }
+  const commandPreview = getEffectiveProviderCommand(agent, settings) || provider.definition.commandExample;
 
   const existingRows = db
     .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
@@ -619,7 +622,7 @@ function ensureCommandApproval(
     commandApprovalKind,
     "pending",
     reason,
-    agent.cliCommand || provider.definition.commandExample,
+    commandPreview,
     now(),
     null
   );
@@ -631,10 +634,21 @@ function ensureCommandApproval(
     metadata: {
       approvalId,
       provider: provider.definition.id,
-      commandPreview: agent.cliCommand || provider.definition.commandExample
+      commandPreview
     }
   });
   return reason;
+}
+
+function withProviderCommand(agent: AgentRecord, settings: ProjectSettings): AgentRecord {
+  return {
+    ...agent,
+    cliCommand: getEffectiveProviderCommand(agent, settings)
+  };
+}
+
+function getEffectiveProviderCommand(agent: AgentRecord, settings: ProjectSettings) {
+  return agent.cliCommand || settings.providerCommands[agent.modelBackend] || null;
 }
 
 function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {
