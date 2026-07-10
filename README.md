@@ -37,6 +37,18 @@ pnpm dev
 The server runs on `http://localhost:4000`.
 The web app runs on `http://localhost:5173`.
 
+## CLI
+
+The server package also exposes a local JSON CLI for headless automation:
+
+```bash
+pnpm cli projects:list
+pnpm cli projects:register --path ./my-project --name "My Project"
+pnpm cli tasks:schedule --project <projectId>
+```
+
+The CLI uses the same global/project-local storage as the web app and honors `HARNESS_HOME`.
+
 ## Settings
 
 Use the Settings panel or `/api/settings` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.

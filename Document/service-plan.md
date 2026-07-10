@@ -435,6 +435,8 @@ Candidate paths:
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app.
+
 ## 8. Draft Product Structure
 
 ### Main Navigation
