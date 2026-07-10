@@ -57,6 +57,7 @@ pnpm dev
 
 The server runs on `http://localhost:4000`.
 The web app runs on `http://localhost:5173`.
+If port 4000 is already busy, start the server with another `PORT` and run the web app with `VITE_API_PROXY_TARGET=http://localhost:<port>`.
 
 ## CLI
 
