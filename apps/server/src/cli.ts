@@ -40,6 +40,8 @@ import type { AgentRecord, DocumentRecord, MemoryRecord, ProjectRecord, TaskReco
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
+const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
+
 const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
   "projects:register": registerProjectCommand,
@@ -67,6 +69,9 @@ const commands: Record<string, CommandHandler> = {
   "approvals:list": listApprovalsCommand,
   "approvals:approve": approveApprovalCommand,
   "approvals:reject": rejectApprovalCommand,
+  "board:show": showBoardCommand,
+  "tasks:list": listTasksCommand,
+  "tasks:show": showTaskCommand,
   "tasks:create": createTaskCommand,
   "tasks:update": updateTaskCommand,
   "tasks:comment": commentTaskCommand,
@@ -333,6 +338,66 @@ async function rejectApprovalCommand(args: string[]) {
   const approvalId = getRequiredOption(options, "approval");
   const result = await decideApproval(project, approvalId, "rejected");
   return { result, overview: getProjectOverview(project) };
+}
+
+function showBoardCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  const columns = taskStatuses.map((status) => ({
+    status,
+    tasks: overview.tasks.filter((task) => task.status === status)
+  }));
+  return {
+    board: {
+      project: overview.project,
+      columns,
+      counts: Object.fromEntries(columns.map((column) => [column.status, column.tasks.length]))
+    },
+    overview
+  };
+}
+
+function listTasksCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  const statuses = options.status ? new Set(parseCsv(options.status).map((status) => normalizeStatus(status))) : null;
+  const assignee = options.assignee || null;
+  const labels = parseCsv(options.labels);
+  const tasks = overview.tasks.filter((task) => {
+    if (statuses && !statuses.has(task.status)) {
+      return false;
+    }
+    if (assignee && task.assigneeAgentId !== assignee) {
+      return false;
+    }
+    if (labels.length > 0 && !labels.every((label) => task.labels.includes(label))) {
+      return false;
+    }
+    return true;
+  });
+  return { tasks, overview };
+}
+
+function showTaskCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const overview = getProjectOverview(project);
+  const task = overview.tasks.find((item) => item.id === taskId);
+  if (!task) {
+    throw new Error("Task not found.");
+  }
+
+  return {
+    task,
+    comments: overview.comments.filter((comment) => comment.taskId === task.id),
+    runs: overview.runs.filter((run) => run.taskId === task.id),
+    approvals: overview.approvals.filter((approval) => approval.taskId === task.id),
+    handoffs: overview.handoffs.filter((handoff) => handoff.taskId === task.id),
+    events: overview.events.filter((event) => event.taskId === task.id),
+    overview
+  };
 }
 
 function createTaskCommand(args: string[]) {
@@ -923,10 +988,9 @@ function normalizeMode(value: string | undefined): PlanningMode {
 }
 
 function normalizeStatus(value: string): TaskStatus {
-  const statuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
-  const status = statuses.find((item) => item.toLowerCase() === value.toLowerCase());
+  const status = taskStatuses.find((item) => item.toLowerCase() === value.toLowerCase());
   if (!status) {
-    throw new Error(`--status must be one of: ${statuses.join(", ")}`);
+    throw new Error(`--status must be one of: ${taskStatuses.join(", ")}`);
   }
   return status;
 }
@@ -990,6 +1054,9 @@ Usage:
   pnpm --filter @harness/server cli approvals:list --project <projectId>
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>
+  pnpm --filter @harness/server cli board:show --project <projectId>
+  pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]
+  pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Blocked|Done]
   pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]

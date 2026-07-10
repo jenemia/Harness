@@ -453,7 +453,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing, agent create/update/list flows, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, configure agents, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing, agent create/update/list flows, board and task inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, configure agents, inspect board state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 
@@ -500,6 +500,8 @@ The task detail view should include:
 - Human approval prompts
 
 Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, parent/subtask links, dependencies, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, follow-up task creation, handoff history, and an activity timeline.
+
+Initial implementation: the headless CLI can show the Kanban board grouped by status, list tasks with status/assignee/label filters, and show task-scoped comments, runs, approvals, handoffs, and events.
 
 ### Agent Directory
 

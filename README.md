@@ -62,6 +62,9 @@ pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.m
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
 pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId>
 pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
+pnpm cli board:show --project <projectId>
+pnpm cli tasks:list --project <projectId> --status Selected,Blocked
+pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
 pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
@@ -111,6 +114,8 @@ When the server starts, Harness scans registered projects for runs that were lef
 Open a task from the board to inspect its status, assignee, labels, parent/subtask links, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
 
 Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, worktree path, and changed files.
+
+Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, and task-scoped `tasks:show`.
 
 ## Approvals
 
