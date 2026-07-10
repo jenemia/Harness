@@ -242,17 +242,17 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ## 5. 다층 작업공간 보호
 
-- [ ] 기존 위험 명령 policy와 command approval을 첫 번째 보호층으로 유지한다.
-- [ ] 모든 코드 작업 provider의 cwd를 task worktree로 고정하고 허용된 workspace path를 명시적으로 전달한다.
-- [ ] `tool_use` event의 Edit, Write, MultiEdit, NotebookEdit와 shell command에서 worktree 밖 path 접근을 탐지한다.
-- [ ] 상대 경로, 절대 경로, `..`, symlink와 platform별 path를 canonical path 기준으로 검사한다.
-- [ ] worktree 밖 접근이 감지되면 설정에 따라 `warn`, `pause`, `block` 중 하나를 적용하고 interaction을 생성한다.
-- [ ] streaming tool event를 지원하지 않는 provider에는 실행 전 cwd 제한과 실행 후 project snapshot 비교를 적용한다.
-- [ ] 각 worktree에 agent의 직접 `git push`를 차단하는 pre-push hook을 설치한다.
-- [ ] provider 실행 전 hook 존재와 내용을 확인하고 삭제·변조가 발견되면 audit event와 승인 요청을 생성한다.
-- [ ] push, merge, package 설치, project 밖 쓰기는 항상 Harness의 명시적 사용자 동작 또는 승인 경로를 통과하게 한다.
-- [ ] 보호 정책 판정, 예외 승인과 실제 실행 결과를 task timeline과 run audit에 기록한다.
-- [ ] 오탐으로 인한 1회 허용은 해당 interaction과 run에만 적용하고 project 전역 정책을 자동 변경하지 않는다.
+- [x] 기존 위험 명령 policy와 command approval을 첫 번째 보호층으로 유지한다.
+- [x] 모든 코드 작업 provider의 cwd를 task worktree로 고정하고 허용된 workspace path를 명시적으로 전달한다.
+- [x] `tool_use` event의 Edit, Write, MultiEdit, NotebookEdit와 shell command에서 worktree 밖 path 접근을 탐지한다.
+- [x] 상대 경로, 절대 경로, `..`, symlink와 platform별 path를 canonical path 기준으로 검사한다.
+- [x] worktree 밖 접근이 감지되면 설정에 따라 `warn`, `pause`, `block` 중 하나를 적용하고 interaction을 생성한다.
+- [x] streaming tool event를 지원하지 않는 provider에는 실행 전 cwd 제한과 실행 후 project snapshot 비교를 적용한다.
+- [x] 각 worktree에 agent의 직접 `git push`를 차단하는 pre-push hook을 설치한다.
+- [x] provider 실행 전 hook 존재와 내용을 확인하고 삭제·변조가 발견되면 audit event와 승인 요청을 생성한다.
+- [x] push, merge, package 설치, project 밖 쓰기는 항상 Harness의 명시적 사용자 동작 또는 승인 경로를 통과하게 한다.
+- [x] 보호 정책 판정, 예외 승인과 실제 실행 결과를 task timeline과 run audit에 기록한다.
+- [x] 오탐으로 인한 1회 허용은 해당 interaction과 run에만 적용하고 project 전역 정책을 자동 변경하지 않는다.
 
 ### 완료 조건
 

@@ -1142,6 +1142,27 @@ export function openProjectDb(projectPath: string) {
     CREATE INDEX IF NOT EXISTS inline_review_comments_run_status
       ON inline_review_comments(run_id, status, created_at);
 
+    CREATE TABLE IF NOT EXISTS workspace_guards (
+      workspace_path TEXT PRIMARY KEY,
+      hook_path TEXT NOT NULL,
+      expected_hash TEXT NOT NULL,
+      exception_token TEXT NOT NULL,
+      installed_at TEXT NOT NULL,
+      verified_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS workspace_policy_audits (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      interaction_id TEXT,
+      action TEXT NOT NULL,
+      violation TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS workspace_policy_audits_run_created
+      ON workspace_policy_audits(run_id, created_at);
+
     CREATE TABLE IF NOT EXISTS project_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -1212,6 +1233,7 @@ export function defaultProjectSettings(): ProjectSettings {
     maxReviewDiffLines: 1000,
     maxReviewBacklog: 5,
     maxUnreviewedDiffLines: 5000,
+    workspaceProtectionMode: "pause",
     handoffRules: {
       programmer: "reviewer",
       worker: "reviewer"
@@ -1268,6 +1290,9 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "maxReviewDiffLines") settings.maxReviewDiffLines = Math.max(1, Number(row.value || settings.maxReviewDiffLines));
     if (row.key === "maxReviewBacklog") settings.maxReviewBacklog = Math.max(1, Number(row.value || settings.maxReviewBacklog));
     if (row.key === "maxUnreviewedDiffLines") settings.maxUnreviewedDiffLines = Math.max(1, Number(row.value || settings.maxUnreviewedDiffLines));
+    if (row.key === "workspaceProtectionMode" && ["warn", "pause", "block"].includes(row.value)) {
+      settings.workspaceProtectionMode = row.value as ProjectSettings["workspaceProtectionMode"];
+    }
     if (row.key === "handoffRules") {
       settings.handoffRules = parseStringMap(row.value, settings.handoffRules);
     }
@@ -1311,6 +1336,9 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
       maxReviewDiffLines: Math.max(1, Number(input.maxReviewDiffLines || current.maxReviewDiffLines)),
       maxReviewBacklog: Math.max(1, Number(input.maxReviewBacklog || current.maxReviewBacklog)),
       maxUnreviewedDiffLines: Math.max(1, Number(input.maxUnreviewedDiffLines || current.maxUnreviewedDiffLines)),
+      workspaceProtectionMode: input.workspaceProtectionMode === "warn" || input.workspaceProtectionMode === "block" || input.workspaceProtectionMode === "pause"
+        ? input.workspaceProtectionMode
+        : current.workspaceProtectionMode,
       handoffRules: normalizeStringMap(input.handoffRules || current.handoffRules),
       providerCommands: {
         ...defaultProjectSettings().providerCommands,
@@ -1331,6 +1359,7 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
     stmt.run("maxReviewDiffLines", String(next.maxReviewDiffLines), timestamp);
     stmt.run("maxReviewBacklog", String(next.maxReviewBacklog), timestamp);
     stmt.run("maxUnreviewedDiffLines", String(next.maxUnreviewedDiffLines), timestamp);
+    stmt.run("workspaceProtectionMode", next.workspaceProtectionMode, timestamp);
     stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
     stmt.run("providerCommands", JSON.stringify(providerCommandOverrides), timestamp);
     return next;

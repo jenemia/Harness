@@ -117,6 +117,7 @@ export type ProjectSettings = {
   maxReviewDiffLines: number;
   maxReviewBacklog: number;
   maxUnreviewedDiffLines: number;
+  workspaceProtectionMode: "warn" | "pause" | "block";
   handoffRules: Record<string, string>;
   providerCommands: Record<string, string>;
   updatedAt: string | null;

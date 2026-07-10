@@ -268,6 +268,14 @@ renderer의 Attention·health·task card·상세 drawer와 CLI `interactions:lis
 
 기존 `approvals`에는 `interaction_id`를 추가한다. migration은 기존 command/merge/handoff approval 각각에 대응하는 approval interaction을 backfill하고, approval 상태 trigger가 `approved → resolved`, `rejected → rejected`, 재대기 상태를 동기화한다. 기존 approval API와 record는 유지한다.
 
+## 다층 workspace 보호
+
+기존 agent allowed-tools, 위험 command 탐지와 command approval을 첫 번째 층으로 유지한다. 모든 provider process는 task workspace를 `cwd`로 사용하고 canonical path를 `HARNESS_ALLOWED_WORKSPACE_PATH`로 받는다. streaming `tool_use`의 Edit/Write/MultiEdit/NotebookEdit path와 shell command는 존재하지 않는 하위 path의 가장 가까운 실제 ancestor까지 `realpath`로 해석해 상대·절대·`..`·symlink와 Windows/Unix 형식을 같은 workspace boundary로 판정한다. configured provider interpreter/script path는 실행 entry point로 허용하되 push, merge/rebase, package install과 실제 workspace 외부 대상은 별도 위반으로 분류한다.
+
+project 설정의 기본 `pause`와 선택 가능한 `warn`/`block` 모드는 같은 violation fingerprint를 사용한다. pause는 target path, redacted command, 위험 종류와 `this resumed run only` 범위를 포함한 permission interaction을 만들고, 승인된 후속 run에서 같은 fingerprint만 허용한다. 다른 path나 command는 다시 판정하며 project 전역 정책은 바꾸지 않는다. 모든 warn/pause/block/allow-once 결과는 `workspace_policy_audits`와 task timeline에 남는다. streaming tool event가 없는 provider는 실행 전 canonical cwd를 고정하고 실행 전후 project checkout snapshot hash를 비교하되 `.git`, `.harness`, dependency directory는 제외한다.
+
+Git worktree마다 worktree-local `core.hooksPath` 아래 pre-push guard를 설치한다. provider 시작 전 hook path, content hash와 executable 상태를 검증하고 누락·변조·설정 변경은 `hook_tampered` 위반으로 처리한다. 정상 run에는 push exception 환경을 주지 않아 실제 `git push`가 실패한다. 승인된 resumed run에만 guard token을 환경으로 전달하며 예외 사용은 해당 run과 interaction에 연결해 감사한다.
+
 ## CLI와 desktop 동시 실행
 
 CLI와 desktop이 동시에 같은 project를 수정할 때 business rule이 분리되지 않도록 다음 순서를 사용한다.

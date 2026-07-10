@@ -319,7 +319,9 @@ export function SettingsPanel(props: {
             | risky commands{" "}
             {props.providerCatalog.policy.capabilities.riskyCommandApproval
               ? "approval"
-              : "off"}
+              : "off"}{" "}
+            | workspace boundary {props.providerCatalog.policy.capabilities.workspaceBoundary ? "on" : "off"}{" "}
+            | pre-push guard {props.providerCatalog.policy.capabilities.prePushGuard ? "on" : "off"}
           </span>
           {providerCommandKeyGuide && (
             <>
@@ -446,6 +448,14 @@ export function SettingsPanel(props: {
           onChange={(event) => updateProjectSetting("maxUnreviewedDiffLines", Math.max(1, Number(event.target.value || 1)))}
           placeholder="Unreviewed line scheduler limit"
         />
+        <select
+          value={projectSettings.workspaceProtectionMode}
+          onChange={(event) => updateProjectSetting("workspaceProtectionMode", event.target.value as ProjectSettings["workspaceProtectionMode"])}
+        >
+          <option value="pause">Pause on workspace violation</option>
+          <option value="block">Block on workspace violation</option>
+          <option value="warn">Warn on workspace violation</option>
+        </select>
         <textarea
           value={globalProviderCommandsText}
           onChange={(event) =>

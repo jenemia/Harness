@@ -127,6 +127,18 @@ export function TaskInteractions(props: {
             <article className={`interaction-row ${interaction.status}`} key={interaction.id}>
               <header><strong>{interaction.kind}</strong><span>{interaction.status}</span></header>
               <p>{prompt}</p>
+              {typeof interaction.requestPayload.violationKind === "string" && (
+                <small>Risk: {interaction.requestPayload.violationKind}</small>
+              )}
+              {typeof interaction.requestPayload.targetPath === "string" && interaction.requestPayload.targetPath && (
+                <code>{interaction.requestPayload.targetPath}</code>
+              )}
+              {typeof interaction.requestPayload.command === "string" && interaction.requestPayload.command && (
+                <code>{interaction.requestPayload.command}</code>
+              )}
+              {typeof interaction.requestPayload.scope === "string" && (
+                <small>Exception scope: {interaction.requestPayload.scope}</small>
+              )}
               {interaction.status === "pending" && (
                 <>
                   {(interaction.kind === "question" || interaction.kind === "review") && (

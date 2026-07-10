@@ -40,6 +40,10 @@ export type LlmRunContext = {
     responsePayload: Record<string, unknown>;
     checkpoint: Record<string, unknown> | null;
   };
+  workspaceProtection?: {
+    canonicalWorkspacePath: string;
+    pushExceptionToken?: string;
+  };
   onEvent?: (event: { type: ProviderEventType; payload: Record<string, unknown>; metadata?: { originalEventType?: string } }) => void;
 };
 
@@ -210,6 +214,8 @@ export type PolicyProviderDefinition = {
     providerSpecificTools: boolean;
     boundaryPromptInjection: boolean;
     riskyCommandApproval: boolean;
+    workspaceBoundary: boolean;
+    prePushGuard: boolean;
   };
 };
 
@@ -418,7 +424,9 @@ function createLocalAgentPolicyProvider(): PolicyProvider {
         llmCommandPermission: true,
         providerSpecificTools: true,
         boundaryPromptInjection: true,
-        riskyCommandApproval: true
+        riskyCommandApproval: true,
+        workspaceBoundary: true,
+        prePushGuard: true
       }
     },
 
@@ -494,6 +502,7 @@ function detectRiskyCommand(command: string) {
     { tag: "git-reset-hard", label: "hard Git reset", regex: /\bgit\s+reset\s+--hard\b/i },
     { tag: "git-clean", label: "Git clean", regex: /\bgit\s+clean\s+-[^\n;|&]*[fdx]/i },
     { tag: "git-push", label: "Git push", regex: /\bgit\s+push\b/i },
+    { tag: "git-merge", label: "Git merge or rebase", regex: /\bgit\s+(?:merge|rebase)\b/i },
     { tag: "elevated-permission", label: "sudo", regex: /\bsudo\b/i },
     { tag: "package-install", label: "package install or update", regex: /\b(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update|upgrade)\b|\b(?:pip|pip3|uv|cargo|go)\s+(?:install|add|get)\b/i },
     { tag: "remote-shell", label: "remote script piped to shell", regex: /\b(?:curl|wget)\b[^;&]*\|\s*(?:sh|bash|zsh)\b/i }
@@ -1235,7 +1244,9 @@ function buildLlmEnvironment(
     HARNESS_WORKSPACE_KIND: workspace.kind,
     HARNESS_WORKSPACE_MODE: task.workspaceMode,
     HARNESS_WORKSPACE_PATH: workspace.worktreePath,
-    HARNESS_WORKTREE_PATH: workspace.worktreePath
+    HARNESS_WORKTREE_PATH: workspace.worktreePath,
+    HARNESS_ALLOWED_WORKSPACE_PATH: context?.workspaceProtection?.canonicalWorkspacePath || workspace.worktreePath,
+    HARNESS_PUSH_EXCEPTION_TOKEN: context?.workspaceProtection?.pushExceptionToken || ""
   };
 }
 

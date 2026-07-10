@@ -16,7 +16,7 @@ import {
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
-import { createDefaultProviders, diagnoseCliAuthentication, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
+import { createDefaultProviders, diagnoseCliAuthentication, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand, type LlmRunResult } from "./providers.js";
 import { getPlanningProviderDefinition } from "./planner.js";
 import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriterLock } from "./project-store.js";
 import { createAgentRunSnapshot } from "./agent-store.js";
@@ -24,6 +24,17 @@ import { assertNoCredentialMaterial, redactCredentialMaterial } from "./credenti
 import { appendProviderEvent, nextProviderEventSequence } from "./provider-events.js";
 import { createApprovalRecordInDb, recoverInteractions, respondInteractionInDb, suspendRunForInteractionInDb, type RespondInteractionInput } from "./interactions.js";
 import { generateCompletionReport } from "./completion-reviews.js";
+import {
+  canonicalWorkspacePath,
+  captureProjectSnapshot,
+  compareProjectSnapshot,
+  evaluateToolEvent,
+  prepareWorkspaceGuard,
+  recordWorkspacePolicyAudit,
+  selectWorkspacePolicyOutcome,
+  workspaceResumeFingerprint,
+  type WorkspaceViolation
+} from "./workspace-protection.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -920,6 +931,45 @@ async function resumeInteractionMutation(project: ProjectRecord, interactionId: 
   }
 }
 
+function workspaceViolationRunResult(
+  mode: ProjectSettings["workspaceProtectionMode"],
+  violation: WorkspaceViolation,
+  workspace: { worktreePath: string }
+): LlmRunResult {
+  if (mode === "block") {
+    return {
+      status: "failed" as const,
+      ok: false,
+      output: "",
+      error: `Workspace policy blocked the run: ${violation.reason}`
+    };
+  }
+  return {
+    status: "suspended" as const,
+    ok: true,
+    output: `Workspace policy paused the run: ${violation.reason}`,
+    error: null,
+    interaction: {
+      kind: "permission" as const,
+      requestPayload: {
+        prompt: violation.reason,
+        violationKind: violation.kind,
+        targetPath: violation.targetPath,
+        command: violation.command,
+        scope: "this resumed run only"
+      },
+      checkpoint: {
+        workspaceProtection: true,
+        violationFingerprint: violation.fingerprint,
+        violationKind: violation.kind,
+        targetPath: violation.targetPath,
+        command: violation.command,
+        workspacePath: workspace.worktreePath
+      }
+    }
+  };
+}
+
 function runtimeMutation<TArgs extends unknown[], TResult>(
   operation: (project: ProjectRecord, ...args: TArgs) => TResult
 ) {
@@ -1057,6 +1107,63 @@ async function executeTask(
         UPDATE interactions SET resumed_run_id = ?, resume_state = 'started' WHERE id = ? AND resume_state = 'pending'
       `).run(runId, resumeContext.interactionId);
     }
+    const approvedWorkspaceFingerprint = workspaceResumeFingerprint(resumeContext?.checkpoint || null);
+    const consumedWorkspaceExceptions = new Set<string>();
+    const activeWorkspaceViolations: WorkspaceViolation[] = [];
+    const activeWorkspaceFingerprints = new Set<string>();
+    let workspaceGuardToken: string | null = null;
+    const processWorkspaceViolations = (violations: WorkspaceViolation[]) => {
+      const outcome = selectWorkspacePolicyOutcome(
+        settings.workspaceProtectionMode,
+        violations,
+        approvedWorkspaceFingerprint,
+        consumedWorkspaceExceptions
+      );
+      for (const allowed of outcome.allowed) {
+        recordWorkspacePolicyAudit(db, {
+          runId,
+          taskId: task.id,
+          interactionId: resumeContext?.interactionId || null,
+          action: "allow_once",
+          violation: allowed,
+          workspacePath: workspace.worktreePath
+        });
+      }
+      if (outcome.mode === "warn") {
+        for (const warning of outcome.active) {
+          recordWorkspacePolicyAudit(db, {
+            runId,
+            taskId: task.id,
+            interactionId: resumeContext?.interactionId || null,
+            action: "warn",
+            violation: warning,
+            workspacePath: workspace.worktreePath
+          });
+        }
+      } else {
+        for (const active of outcome.active) {
+          if (activeWorkspaceFingerprints.has(active.fingerprint)) continue;
+          activeWorkspaceFingerprints.add(active.fingerprint);
+          activeWorkspaceViolations.push(active);
+        }
+      }
+    };
+    if (workspace.kind === "git-worktree") {
+      const guard = prepareWorkspaceGuard(db, {
+        workspacePath: workspace.worktreePath,
+        runId,
+        taskId: task.id,
+        approvedFingerprint: approvedWorkspaceFingerprint
+      });
+      workspaceGuardToken = guard.token;
+      if (guard.violation) processWorkspaceViolations([guard.violation]);
+    }
+    if (executionAgent.cliCommand) {
+      processWorkspaceViolations(evaluateToolEvent(workspace.worktreePath, {
+        type: "tool_use",
+        payload: { toolName: "shell-command", args: { command: executionAgent.cliCommand } }
+      }));
+    }
 
     db.prepare("UPDATE tasks SET branch_name = ?, worktree_path = ?, updated_at = ? WHERE id = ?").run(
       workspace.branchName,
@@ -1100,41 +1207,73 @@ async function executeTask(
     const streamState: {
       terminal?: { payload: Record<string, unknown>; metadata?: { originalEventType?: string } };
     } = {};
-    const result = await selectedProvider.run(executionAgent, freshTask, workspace, {
-      globalMemory,
-      projectMemory,
-      taskComments,
-      taskRuns,
-      agentDefinitionSnapshot: agentSnapshot.content,
-      timeoutMs: settings.maxRunSeconds * 1000,
-      resume: resumeContext ? {
-        interactionId: resumeContext.interactionId,
-        parentRunId: resumeContext.parentRunId,
-        correlationId: resumeContext.correlationId,
-        responsePayload: resumeContext.responsePayload,
-        checkpoint: resumeContext.checkpoint
-      } : undefined,
-      onEvent: (event) => {
-        if (event.type === "result" || event.type === "error") {
-          streamState.terminal = { payload: event.payload, metadata: event.metadata };
-          return;
-        }
-        appendProviderEvent(project, {
-          sequence: nextProviderEventSequence(project, runId),
-          projectId: project.id,
-          taskId: task.id,
-          runId,
-          providerId: selectedProvider.definition.id,
-          correlationId: providerEventContext!.correlationId,
-          type: event.type,
-          payload: event.payload,
-          metadata: event.metadata
+    const projectSnapshot = selectedProvider.definition.capabilities.streaming
+      ? null
+      : captureProjectSnapshot(project.path);
+    let result = activeWorkspaceViolations.length > 0
+      ? workspaceViolationRunResult(settings.workspaceProtectionMode, activeWorkspaceViolations[0], workspace)
+      : await selectedProvider.run(executionAgent, freshTask, workspace, {
+          globalMemory,
+          projectMemory,
+          taskComments,
+          taskRuns,
+          agentDefinitionSnapshot: agentSnapshot.content,
+          timeoutMs: settings.maxRunSeconds * 1000,
+          resume: resumeContext ? {
+            interactionId: resumeContext.interactionId,
+            parentRunId: resumeContext.parentRunId,
+            correlationId: resumeContext.correlationId,
+            responsePayload: resumeContext.responsePayload,
+            checkpoint: resumeContext.checkpoint
+          } : undefined,
+          workspaceProtection: {
+            canonicalWorkspacePath: canonicalWorkspacePath(workspace.worktreePath),
+            pushExceptionToken: approvedWorkspaceFingerprint &&
+              resumeContext?.checkpoint?.violationKind === "direct_push" && workspaceGuardToken
+              ? workspaceGuardToken
+              : undefined
+          },
+          onEvent: (event) => {
+            const safeEvent = workspaceGuardToken
+              ? { ...event, payload: redactExactValue(event.payload, workspaceGuardToken) }
+              : event;
+            if (event.type === "result" || event.type === "error") {
+              streamState.terminal = { payload: safeEvent.payload, metadata: safeEvent.metadata };
+              return;
+            }
+            appendProviderEvent(project, {
+              sequence: nextProviderEventSequence(project, runId),
+              projectId: project.id,
+              taskId: task.id,
+              runId,
+              providerId: selectedProvider.definition.id,
+              correlationId: providerEventContext!.correlationId,
+              type: safeEvent.type,
+              payload: safeEvent.payload,
+              metadata: safeEvent.metadata
+            });
+            processWorkspaceViolations(evaluateToolEvent(workspace.worktreePath, safeEvent));
+          }
         });
-      }
-    });
+    if (projectSnapshot) {
+      processWorkspaceViolations(compareProjectSnapshot(projectSnapshot, project.path));
+    }
+    if (activeWorkspaceViolations.length > 0) {
+      result = workspaceViolationRunResult(settings.workspaceProtectionMode, activeWorkspaceViolations[0], workspace);
+    }
+    for (const violation of activeWorkspaceViolations) {
+      recordWorkspacePolicyAudit(db, {
+        runId,
+        taskId: task.id,
+        interactionId: resumeContext?.interactionId || null,
+        action: settings.workspaceProtectionMode === "block" ? "block" : "pause",
+        violation,
+        workspacePath: workspace.worktreePath
+      });
+    }
     const completedAt = now();
-    const safeOutput = redactCredentialMaterial(result.output);
-    const safeError = result.error ? redactCredentialMaterial(result.error) : null;
+    const safeOutput = redactCredentialMaterial(redactExactString(result.output, workspaceGuardToken));
+    const safeError = result.error ? redactCredentialMaterial(redactExactString(result.error, workspaceGuardToken)) : null;
     const changedFiles = workspace.kind === "git-worktree" ? await collectChangedFiles(workspace.worktreePath) : [];
 
     if (safeOutput && !selectedProvider.definition.capabilities.streaming) {
@@ -1175,7 +1314,7 @@ async function executeTask(
         db.prepare("UPDATE runs SET output = ?, error = NULL, changed_files = ? WHERE id = ?").run(
           safeOutput, JSON.stringify(changedFiles), runId
         );
-        suspendRunForInteractionInDb(db, project.id, {
+        const suspendedInteraction = suspendRunForInteractionInDb(db, project.id, {
           runId,
           taskId: task.id,
           agentId: agent.id,
@@ -1191,6 +1330,12 @@ async function executeTask(
           },
           expiresAt: result.interaction.expiresAt
         });
+        if (result.interaction.checkpoint?.workspaceProtection === true) {
+          db.prepare(`
+            UPDATE workspace_policy_audits SET interaction_id = ?
+            WHERE run_id = ? AND interaction_id IS NULL AND action = 'pause'
+          `).run(suspendedInteraction.id, runId);
+        }
         if (resumeContext) {
           db.prepare("UPDATE interactions SET resume_state = 'completed' WHERE id = ?").run(resumeContext.interactionId);
         }
@@ -1786,6 +1931,22 @@ function excerpt(value: string, maxLength = 700) {
     return "";
   }
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
+}
+
+function redactExactString(value: string, secret: string | null) {
+  return secret ? value.split(secret).join("[REDACTED]") : value;
+}
+
+function redactExactValue<T>(value: T, secret: string): T {
+  if (typeof value === "string") return redactExactString(value, secret) as T;
+  if (Array.isArray(value)) return value.map((item) => redactExactValue(item, secret)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      redactExactValue(item, secret)
+    ])) as T;
+  }
+  return value;
 }
 
 function getTask(db: DatabaseSync, taskId: string): TaskRecord | null {

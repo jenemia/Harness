@@ -212,11 +212,15 @@ Status: 완료
 
 Depends on: A07, A12
 
+Status: 완료
+
 - provider cwd를 worktree에 고정하고 canonical path 기준 workspace escape를 판정한다.
 - warn/pause/block interaction, streaming 미지원 snapshot 비교와 audit을 구현한다.
 - worktree pre-push hook 설치·변조 감지와 run 단위 일회성 예외를 제공한다.
 
 완료 조건: worktree 밖 쓰기와 직접 push가 기본 정책에서 중단되고 승인 범위가 기록된다.
+
+검증: Edit/Write/MultiEdit/NotebookEdit와 shell event의 상대·절대·`..`·symlink·Windows/Unix path 판정, credential redaction, non-streaming checkout snapshot 비교를 단위·통합 테스트로 검증했다. 실제 Git pre-push가 기본 차단되고 run token에서만 통과하는지, hook 변조가 pause interaction을 만들고 승인 후 복구되는지, Cursor violation이 pause→동일 fingerprint 1회 재개되는지, warn과 block 모드 및 audit timeline을 확인했다.
 
 ### A16: Harness MCP server와 local bridge
 
