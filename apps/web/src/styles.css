@@ -592,6 +592,26 @@ button:disabled {
   margin-bottom: 10px;
 }
 
+.approval-filters {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 8px;
+}
+
+.approval-filters select {
+  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
+.approval-filters .panel-count {
+  margin-bottom: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
 .agent-row {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);

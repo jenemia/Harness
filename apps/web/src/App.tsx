@@ -388,8 +388,15 @@ function ApprovalsPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
-  const pending = props.overview.approvals.filter((approval) => approval.status === "pending");
-  const recent = props.overview.approvals.filter((approval) => approval.status !== "pending").slice(0, 3);
+  const [kindFilter, setKindFilter] = useState("");
+  const approvalKinds = useMemo(() => {
+    return Array.from(new Set(props.overview.approvals.map((approval) => approval.kind))).sort((a, b) => a.localeCompare(b));
+  }, [props.overview.approvals]);
+  const filteredApprovals = useMemo(() => {
+    return props.overview.approvals.filter((approval) => !kindFilter || approval.kind === kindFilter);
+  }, [kindFilter, props.overview.approvals]);
+  const pending = filteredApprovals.filter((approval) => approval.status === "pending");
+  const recent = filteredApprovals.filter((approval) => approval.status !== "pending").slice(0, 5);
 
   async function decide(approval: Approval, action: "approve" | "reject") {
     await props.runAction(async () => {
@@ -406,8 +413,21 @@ function ApprovalsPanel(props: {
         <AlertTriangle size={17} />
         <h2>Approvals</h2>
       </div>
+      <div className="approval-filters">
+        <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value)}>
+          <option value="">All kinds</option>
+          {approvalKinds.map((kind) => (
+            <option key={kind} value={kind}>
+              {kind.replace("_", " ")}
+            </option>
+          ))}
+        </select>
+        <span className="panel-count">
+          {pending.length} pending / {filteredApprovals.length}
+        </span>
+      </div>
       <div className="approval-list">
-        {pending.length === 0 && <p className="provider-help">No pending approval requests.</p>}
+        {pending.length === 0 && <p className="provider-help">No matching pending approval requests.</p>}
         {pending.map((approval) => {
           const task = props.overview.tasks.find((item) => item.id === approval.taskId);
           const agent = props.overview.agents.find((item) => item.id === approval.agentId);
@@ -442,7 +462,9 @@ function ApprovalsPanel(props: {
           return (
             <div className={`approval-row ${approval.status}`} key={approval.id}>
               <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
-              <span>{approval.status} · {formatDate(approval.decidedAt || approval.createdAt)}</span>
+              <span>
+                {approval.kind.replace("_", " ")} · {approval.status} · {formatDate(approval.decidedAt || approval.createdAt)}
+              </span>
             </div>
           );
         })}
