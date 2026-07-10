@@ -999,17 +999,31 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
       settings.handoffRules = parseStringMap(row.value, settings.handoffRules);
     }
     if (row.key === "providerCommands") {
-      settings.providerCommands = parseStringMap(row.value, settings.providerCommands);
+      settings.providerCommands = {
+        ...settings.providerCommands,
+        ...parseStringMap(row.value, {})
+      };
     }
   }
 
   return { ...settings, updatedAt };
 }
 
+function getProjectProviderCommandOverridesFromDb(db: DatabaseSync) {
+  const row = db.prepare("SELECT value FROM project_settings WHERE key = ?").get("providerCommands") as
+    | { value: string }
+    | undefined;
+  return parseStringMap(row?.value || "{}", {});
+}
+
 export function updateProjectSettings(projectPath: string, input: Partial<ProjectSettings>): ProjectSettings {
   const db = openProjectDb(projectPath);
   try {
     const current = getProjectSettingsFromDb(db);
+    const providerCommandOverrides =
+      input.providerCommands !== undefined
+        ? normalizeStringMap(input.providerCommands)
+        : getProjectProviderCommandOverridesFromDb(db);
     const timestamp = now();
     const next: ProjectSettings = {
       defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
@@ -1020,7 +1034,10 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
       largePlanTaskThreshold: Math.max(1, Number(input.largePlanTaskThreshold || current.largePlanTaskThreshold)),
       maxRunSeconds: Math.max(5, Number(input.maxRunSeconds || current.maxRunSeconds)),
       handoffRules: normalizeStringMap(input.handoffRules || current.handoffRules),
-      providerCommands: normalizeStringMap(input.providerCommands || current.providerCommands),
+      providerCommands: {
+        ...defaultProjectSettings().providerCommands,
+        ...providerCommandOverrides
+      },
       updatedAt: timestamp
     };
 
@@ -1033,7 +1050,7 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
     stmt.run("largePlanTaskThreshold", String(next.largePlanTaskThreshold), timestamp);
     stmt.run("maxRunSeconds", String(next.maxRunSeconds), timestamp);
     stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
-    stmt.run("providerCommands", JSON.stringify(next.providerCommands), timestamp);
+    stmt.run("providerCommands", JSON.stringify(providerCommandOverrides), timestamp);
     return next;
   } finally {
     db.close();
