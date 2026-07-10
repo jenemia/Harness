@@ -1064,18 +1064,35 @@ function PlanPreviewBox(props: { agents: Agent[]; preview: PlanPreviewResult }) 
         </span>
       ))}
       <div className="plan-preview-list">
-        {props.preview.tasks.map((task, index) => (
-          <div className="plan-preview-item" key={`${task.title}-${index}`}>
-            <strong>{task.title}</strong>
-            <span>
-              {agentsById.get(task.assigneeAgentId || "")?.name || "Unassigned"} · {task.role} · {task.status}
-              {task.dependencyIndexes.length ? ` · after ${task.dependencyIndexes.map((item) => item + 1).join(", ")}` : ""}
-            </span>
-          </div>
-        ))}
+        {props.preview.tasks.map((task, index) => {
+          const descriptionExcerpt = summarizePreviewText(task.description);
+          const acceptanceExcerpt = summarizePreviewText(task.acceptanceCriteria);
+          return (
+            <div className="plan-preview-item" key={`${task.title}-${index}`}>
+              <strong>{task.title}</strong>
+              <span>
+                {agentsById.get(task.assigneeAgentId || "")?.name || "Unassigned"} · {task.role} · {task.status}
+                {task.dependencyIndexes.length ? ` · after ${task.dependencyIndexes.map((item) => item + 1).join(", ")}` : ""}
+              </span>
+              {descriptionExcerpt && <p>{descriptionExcerpt}</p>}
+              {acceptanceExcerpt && <span className="plan-preview-acceptance">Acceptance: {acceptanceExcerpt}</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function summarizePreviewText(value: string) {
+  const text = value
+    .replace(/^#+\s+/gm, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(" ");
+  return text.length > 180 ? `${text.slice(0, 177)}...` : text;
 }
 
 function formatPlanningMode(plan: { mode: PlanningMode; effectiveMode: "sequential" | "parallel" }) {
@@ -3125,7 +3142,8 @@ function SettingsPanel(props: {
           </span>
           <span>
             workflow templates {props.providerCatalog.planning.capabilities.workflowTemplates ? "on" : "off"} | explicit
-            lists {props.providerCatalog.planning.capabilities.explicitItems ? "on" : "off"} | load-aware assignment{" "}
+            lists {props.providerCatalog.planning.capabilities.explicitItems ? "on" : "off"} | structured tickets{" "}
+            {props.providerCatalog.planning.capabilities.structuredTicketBlocks ? "on" : "off"} | load-aware assignment{" "}
             {props.providerCatalog.planning.capabilities.loadAwareAssignment ? "on" : "off"} | large plan warnings{" "}
             {props.providerCatalog.planning.capabilities.largePlanWarnings ? "on" : "off"}
           </span>

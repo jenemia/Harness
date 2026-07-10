@@ -316,6 +316,7 @@ export type ProviderCatalog = {
     description: string;
     capabilities: {
       explicitItems: boolean;
+      structuredTicketBlocks: boolean;
       workflowTemplates: boolean;
       sequentialDependencies: boolean;
       parallelMode: boolean;

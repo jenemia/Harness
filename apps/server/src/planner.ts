@@ -50,6 +50,7 @@ export type PlanningProviderDefinition = {
   description: string;
   capabilities: {
     explicitItems: boolean;
+    structuredTicketBlocks: boolean;
     workflowTemplates: boolean;
     sequentialDependencies: boolean;
     parallelMode: boolean;
@@ -270,6 +271,7 @@ function createDeterministicPlanningProvider(): PlanningProvider {
       description: "Creates local PM task previews from workflow templates, explicit lists, or a default role sequence.",
       capabilities: {
         explicitItems: true,
+        structuredTicketBlocks: true,
         workflowTemplates: true,
         sequentialDependencies: true,
         parallelMode: true,

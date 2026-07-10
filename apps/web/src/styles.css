@@ -1174,6 +1174,17 @@ textarea {
   line-height: 1.35;
 }
 
+.plan-preview-item p {
+  color: #44546f;
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 2px 0 0;
+}
+
+.plan-preview-acceptance {
+  color: #0c66e4 !important;
+}
+
 .plan-warning {
   color: #ae2a19;
   display: block;
