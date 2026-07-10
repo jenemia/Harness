@@ -52,6 +52,9 @@ pnpm cli templates:projects
 pnpm cli templates:workflows
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
+pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
+pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
+pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
 pnpm cli tasks:schedule --project <projectId>
 ```
 
