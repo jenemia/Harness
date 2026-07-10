@@ -571,6 +571,27 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.run-filters {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 8px;
+}
+
+.run-filters select {
+  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
+.panel-count {
+  color: #626f86;
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
 .agent-row {
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);
@@ -757,6 +778,22 @@ textarea {
   min-height: 30px;
   color: #44546f;
   font-size: 12px;
+}
+
+.compact-row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-empty {
+  border: 1px dashed #d0d4dc;
+  border-radius: 6px;
+  color: #626f86;
+  font-size: 12px;
+  padding: 10px;
+  text-align: center;
 }
 
 .run-state.completed {

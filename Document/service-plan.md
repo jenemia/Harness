@@ -256,6 +256,8 @@ Initial implementation: recent completed or failed runs for the same task are in
 
 Initial implementation: run audit trails can also be inspected from the headless CLI with status/task/agent/provider/model filters and run-scoped detail output.
 
+Initial implementation: the UI Runs panel supports status, agent, provider, and model backend filters so recent execution history remains scannable as projects accumulate many agent runs.
+
 ### Workspace Snapshots
 
 Before an agent starts risky work, Harness can create a lightweight snapshot such as a Git branch, stash, patch file, or checkpoint record.

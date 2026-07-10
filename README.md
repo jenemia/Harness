@@ -177,7 +177,7 @@ Recent completed or failed runs for the same task are injected into the generate
 
 Linked files are injected into the generated agent prompt and exposed to command-backed providers as `HARNESS_LINKED_FILES`, so model-specific CLI wrappers can use the same task context.
 
-Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, and run-scoped `runs:show`.
+The Runs panel can be filtered by status, agent, provider, and model backend. Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, and run-scoped `runs:show`.
 
 ## Approvals
 
