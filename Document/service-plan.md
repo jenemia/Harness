@@ -120,6 +120,8 @@ Initial implementation: project settings include role-to-role handoff rules. By 
 
 Initial implementation: shell-backed LLM providers create a command execution approval request before any configured CLI command runs. The task is blocked until the user approves or rejects the request from the Approvals panel. Approved tasks resume automatically; rejected tasks remain blocked and the decision is recorded in the timeline.
 
+Initial implementation: completed task worktree changes create merge approval requests in the same approval queue. Approving a merge request merges the task branch into the main checkout; rejecting it sends the task back to Selected with requested changes recorded in the timeline.
+
 Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list. Follow-ups are created as child tasks with a dependency on the source task so PM output can become tracked work.
 
 Risk boundaries can include:
@@ -313,7 +315,7 @@ Default worktree policy:
 - The PM agent can recommend merge order when multiple completed tasks touch related areas.
 - The user can approve, reject, or request changes before merge.
 
-Initial implementation: pending or conflicted merges can be approved into the main checkout or sent back for changes. Requesting changes returns the task to Selected, clears the pending merge state, records the reason, and keeps the task worktree/branch available for another run.
+Initial implementation: pending or conflicted merges can be approved into the main checkout or sent back for changes from the task detail controls, CLI merge commands, or the shared Approvals queue. Requesting changes returns the task to Selected, clears the pending merge state, records the reason, and keeps the task worktree/branch available for another run.
 
 Benefits:
 

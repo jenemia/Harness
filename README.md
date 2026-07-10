@@ -36,6 +36,8 @@ Shell-backed providers require matching agent tool permission before execution. 
 
 Shell-backed providers also require human approval before their configured command runs when the current project has command approvals enabled. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
 
+Completed task worktree changes create merge approval requests. Approving the request merges the task branch into the main checkout; rejecting it sends the task back to `Selected` with changes requested.
+
 ## Development
 
 ```bash
@@ -148,6 +150,8 @@ Headless workflows can inspect the same Kanban state through `board:show`, filte
 ## Approvals
 
 Harness blocks task execution before running shell-backed LLM providers until the user approves the request. Approved tasks resume automatically. Rejected tasks remain blocked with the decision recorded in the task timeline.
+
+Harness also queues merge approvals when a completed task has worktree changes waiting to land. Merge approvals can be accepted or sent back for changes from the same Approvals panel and CLI commands.
 
 ## Documents
 

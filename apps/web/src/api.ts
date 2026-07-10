@@ -195,7 +195,7 @@ export type Approval = {
   id: string;
   taskId: string;
   agentId: string;
-  kind: "command_execution";
+  kind: "command_execution" | "merge";
   status: "pending" | "approved" | "rejected";
   reason: string;
   commandPreview: string | null;

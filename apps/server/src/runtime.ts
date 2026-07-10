@@ -20,6 +20,7 @@ const reservedAgentRuns = new Map<string, number>();
 const reservedProjectRuns = new Map<string, number>();
 const providers = createDefaultProviders(projectHarnessDir);
 const commandApprovalKind = "command_execution";
+const mergeApprovalKind = "merge";
 
 export function listRuntimeProviders() {
   return {
@@ -423,6 +424,13 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
       now(),
       task.id
     );
+    db.prepare("UPDATE approvals SET status = ?, decided_at = ? WHERE task_id = ? AND kind = ? AND status = ?").run(
+      "approved",
+      now(),
+      task.id,
+      mergeApprovalKind,
+      "pending"
+    );
     insertEvent(db, {
       taskId: task.id,
       agentId: task.assigneeAgentId,
@@ -454,6 +462,13 @@ export async function requestMergeChanges(project: ProjectRecord, taskId: string
       SET status = ?, merge_status = ?, merge_error = ?, blocked_reason = ?, updated_at = ?
       WHERE id = ?
     `).run("Selected", "none", null, reason, now(), task.id);
+    db.prepare("UPDATE approvals SET status = ?, decided_at = ? WHERE task_id = ? AND kind = ? AND status = ?").run(
+      "rejected",
+      now(),
+      task.id,
+      mergeApprovalKind,
+      "pending"
+    );
 
     insertEvent(db, {
       taskId: task.id,
@@ -485,6 +500,9 @@ export async function decideApproval(
 ) {
   const db = openProjectDb(project.path);
   let shouldStartTaskId: string | null = null;
+  let shouldApproveMergeTaskId: string | null = null;
+  let shouldRequestMergeChangesTaskId: string | null = null;
+  let mergeChangeReason = "";
 
   try {
     const approval = getApproval(db, approvalId);
@@ -508,7 +526,15 @@ export async function decideApproval(
       metadata: { approvalId: approval.id, kind: approval.kind, approvalProvider: providers.approval().id }
     });
 
-    if (task && decision === "approved") {
+    if (approval.kind === mergeApprovalKind) {
+      if (task && decision === "approved") {
+        shouldApproveMergeTaskId = task.id;
+      }
+      if (task && decision === "rejected") {
+        shouldRequestMergeChangesTaskId = task.id;
+        mergeChangeReason = providers.approval().rejectionReason(approval);
+      }
+    } else if (task && decision === "approved") {
       db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
         "Selected",
         null,
@@ -518,7 +544,7 @@ export async function decideApproval(
       shouldStartTaskId = task.id;
     }
 
-    if (task && decision === "rejected") {
+    if (approval.kind !== mergeApprovalKind && task && decision === "rejected") {
       setTaskBlocked(db, task.id, providers.approval().rejectionReason(approval));
       if (agent) {
         refreshAgentStatus(db, agent.id);
@@ -530,6 +556,12 @@ export async function decideApproval(
 
   if (shouldStartTaskId) {
     deferRuntimeTask(() => startTask(project, shouldStartTaskId));
+  }
+  if (shouldApproveMergeTaskId) {
+    return await approveMerge(project, shouldApproveMergeTaskId);
+  }
+  if (shouldRequestMergeChangesTaskId) {
+    return await requestMergeChanges(project, shouldRequestMergeChangesTaskId, mergeChangeReason);
   }
 
   return { ok: true };
@@ -768,6 +800,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
       message: "Task changes are waiting for human merge approval.",
       metadata: { branchName: task.branchName, worktreePath: task.worktreePath }
     });
+    ensureMergeApproval(db, task, completedBy);
   }
 
   scheduleReadyDependents(project, db, task.id);
@@ -914,6 +947,47 @@ function ensureCommandApproval(
     message: evaluation.reason,
     metadata: {
       approvalId,
+      ...evaluation.metadata
+    }
+  });
+  return evaluation.reason;
+}
+
+function ensureMergeApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRecord) {
+  const existingRows = db
+    .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
+    .all(task.id, agent.id, mergeApprovalKind)
+    .map(mapApproval);
+
+  const evaluation = providers.approval().evaluateMerge({
+    task,
+    agent,
+    existingApprovals: existingRows
+  });
+  if (evaluation.action !== "request") {
+    return evaluation.action === "block" ? evaluation.reason : null;
+  }
+
+  const approvalId = randomUUID();
+  db.prepare("INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+    approvalId,
+    task.id,
+    agent.id,
+    mergeApprovalKind,
+    "pending",
+    evaluation.reason,
+    null,
+    now(),
+    null
+  );
+  insertEvent(db, {
+    taskId: task.id,
+    agentId: agent.id,
+    type: "approval.requested",
+    message: evaluation.reason,
+    metadata: {
+      approvalId,
+      kind: mergeApprovalKind,
       ...evaluation.metadata
     }
   });

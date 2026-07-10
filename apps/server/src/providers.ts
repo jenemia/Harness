@@ -107,6 +107,15 @@ export type CommandApprovalEvaluation =
       metadata: Record<string, string | null>;
     };
 
+export type MergeApprovalEvaluation =
+  | { action: "allow" }
+  | { action: "block"; reason: string }
+  | {
+      action: "request";
+      reason: string;
+      metadata: Record<string, string | null>;
+    };
+
 export type PolicyEvaluation =
   | { action: "allow" }
   | {
@@ -127,6 +136,11 @@ export type ApprovalProvider = {
     commandPreview: string | null;
     existingApprovals: ApprovalRecord[];
   }): CommandApprovalEvaluation;
+  evaluateMerge(input: {
+    task: TaskRecord;
+    agent: AgentRecord;
+    existingApprovals: ApprovalRecord[];
+  }): MergeApprovalEvaluation;
   decisionMessage(decision: "approved" | "rejected", approval: ApprovalRecord): string;
   rejectionReason(approval: ApprovalRecord): string;
 };
@@ -525,13 +539,50 @@ function createLocalHumanApprovalProvider(): ApprovalProvider {
       };
     },
 
-    decisionMessage(decision) {
+    evaluateMerge(input) {
+      const approved = input.existingApprovals.find((approval) => approval.status === "approved");
+      if (approved) {
+        return { action: "allow" };
+      }
+
+      const rejected = input.existingApprovals.find((approval) => approval.status === "rejected");
+      if (rejected) {
+        return { action: "block", reason: this.rejectionReason(rejected) };
+      }
+
+      const reason = `${input.agent.name}'s task changes need approval before merging.`;
+      const pending = input.existingApprovals.find((approval) => approval.status === "pending");
+      if (pending) {
+        return { action: "block", reason };
+      }
+
+      return {
+        action: "request",
+        reason,
+        metadata: {
+          approvalProvider: this.id,
+          branchName: input.task.branchName,
+          worktreePath: input.task.worktreePath
+        }
+      };
+    },
+
+    decisionMessage(decision, approval) {
+      if (approval.kind === "merge") {
+        return decision === "approved"
+          ? "Human approved merging this task into the main checkout."
+          : "Human requested changes before merging this task.";
+      }
+
       return decision === "approved"
         ? "Human approved command execution for this task."
         : "Human rejected command execution for this task.";
     },
 
-    rejectionReason() {
+    rejectionReason(approval) {
+      if (approval.kind === "merge") {
+        return "Human requested changes before merging this task.";
+      }
       return "Command execution approval was rejected.";
     }
   };
