@@ -1,0 +1,498 @@
+# Harness Service Plan
+
+## 1. Product Vision
+
+Harness is a local-first multi-agent project management framework where users can create projects, define AI agents with distinct personas, assign work through a Jira-like Kanban board, and track what each agent is doing over time.
+
+The product should feel less like a chat app and more like an operational workspace: a project dashboard where human users, project manager agents, and worker agents share the same task board, history, and project context.
+
+## 2. Reference Direction
+
+Primary reference: NousResearch Hermes Agent.
+
+Observed reference ideas:
+
+- Durable Kanban board shared by multiple named agents.
+- Each task is persisted rather than living only inside a chat session.
+- Agents can collaborate through handoffs and shared state.
+- Workers can run with their own identity and execution context.
+- The board acts as the source of truth for planning, execution, review, and tracking.
+
+Harness should borrow the durable multi-agent Kanban concept, but focus on a local project workspace with an approachable Jira-like UI and model/CLI extensibility.
+
+## 3. Target Users
+
+- Solo developers managing multiple local projects.
+- Small teams experimenting with AI-assisted development workflows.
+- Users who want several AI agents to perform specialized roles under a project manager agent.
+- Users who prefer local execution and folder-based project organization instead of a cloud-only SaaS.
+- Users who want real task execution, not only task planning or static issue tracking.
+
+## 4. Core Concepts
+
+### Project
+
+A project maps to a local folder. Each project owns its board, agents, settings, linked repository path, documents, and execution history.
+
+Expected examples:
+
+- `/Users/sean/Documents/harness-projects/app-a`
+- `/Users/sean/Documents/harness-projects/game-b`
+- `/Users/sean/Documents/harness-projects/research-c`
+
+Project-local data should live inside the project folder so the project can be moved, backed up, inspected, or versioned as a self-contained workspace.
+
+### Agent
+
+An agent is a named worker profile with a persona, role, model configuration, tool permissions, and execution policy.
+
+Basic agent fields:
+
+- Name
+- Persona prompt
+- Role
+- Preferred model or CLI backend
+- Available tools
+- Working directory scope
+- Task limits
+- Review requirements
+
+### Project Manager Agent
+
+The project manager agent decomposes work, assigns tasks, monitors progress, detects blockers, asks the human for decisions, and can route work to specialized agents.
+
+The PM agent does not need to perform all work directly. Its primary job is orchestration.
+
+The PM agent decides whether work can run in parallel or must proceed sequentially. When a task completes, the PM agent evaluates the result and chooses the next best agent or human handoff.
+
+### Task
+
+A task is the durable unit of work shown on the Kanban board.
+
+Basic task fields:
+
+- Title
+- Description
+- Status
+- Priority
+- Assignee agent
+- Reporter
+- Parent task
+- Subtasks
+- Labels
+- Project
+- Linked files
+- Acceptance criteria
+- Execution log
+- Review state
+- Created/updated timestamps
+
+### Handoff
+
+A handoff records that one agent passed context, work, or a question to another agent. Handoffs should be first-class history, not hidden chat text.
+
+Handoffs can be automatic, PM-driven, or human-approved depending on the project policy and task risk.
+
+Decision: PM-driven handoffs should run automatically by default.
+
+Default handoff policy:
+
+- When an agent completes a task, the PM agent evaluates the output.
+- The PM agent chooses the next best agent, status, or follow-up task automatically.
+- The PM agent records the reason for each handoff.
+- Human approval is only required when a handoff crosses a configured risk boundary.
+
+Risk boundaries can include:
+
+- Merging code back to the main project branch.
+- Running destructive commands.
+- Installing or upgrading dependencies.
+- Editing files outside the task worktree.
+- Changing project-level settings.
+- Marking a milestone or release task complete.
+
+## 5. Initial Feature Requirements
+
+1. Multiple agents can be created by entering personas.
+2. A project manager agent can assign work to multiple agents.
+3. Kanban tasks show which agent is currently working on them.
+4. Initial UI should imitate Jira's information architecture and board workflow.
+5. The app must be installable and runnable locally.
+6. The app should support multiple LLM CLI backends.
+7. Users can organize projects by folder and view work per project.
+8. Agents should be able to execute assigned work, not only describe plans.
+9. Multiple agents should be able to work in parallel when dependencies allow it.
+10. Sequential workflows should be supported for cases such as planning -> implementation -> review.
+
+## 6. Suggested Additional Features
+
+### Agent Capability Profiles
+
+Each agent should have declared strengths, allowed tools, and boundaries. This lets the PM agent choose agents more intelligently than simple round-robin assignment.
+
+Examples:
+
+- Frontend Engineer
+- Backend Engineer
+- QA Reviewer
+- Product Planner
+- Documentation Writer
+- Refactor Specialist
+
+### Task Decomposition
+
+A user or PM agent can turn a large task into a tree of subtasks. Child tasks should remain blocked until dependencies are ready.
+
+The PM agent should decide which subtasks are independent enough to run in parallel and which ones must wait for prior output.
+
+### Dependency And Blocker Tracking
+
+Tasks should support dependencies, blockers, and blocked reasons. The board should make blocked work visually obvious.
+
+Dependency tracking is required for safe parallelism. A task should not become executable until its required predecessors are done or explicitly waived by the user/PM agent.
+
+### Execution Timeline
+
+Each task should keep a structured timeline:
+
+- Assignment
+- Agent start
+- Agent notes
+- Tool commands
+- Files touched
+- Review result
+- Human decision
+- Completion
+
+The timeline should show both individual agent actions and PM orchestration decisions.
+
+### Human Approval Gates
+
+Certain actions should require user approval:
+
+- Running destructive shell commands
+- Editing files outside the project folder
+- Installing packages
+- Pushing to remote repositories
+- Creating large numbers of tasks
+- Marking project milestones complete
+
+### Review Agent
+
+A dedicated review agent can inspect completed work before the task moves to Done. This keeps PM orchestration and quality control separate.
+
+### Agent Memory
+
+Agents should remember project-specific conventions, decisions, recurring mistakes, and user preferences. Memory should be scoped by project unless explicitly promoted globally.
+
+### Model Router
+
+Harness should route tasks to different models or CLI tools based on cost, quality, speed, and task type.
+
+Example backends:
+
+- OpenAI-compatible CLI
+- Claude Code CLI
+- Gemini CLI
+- Ollama
+- LM Studio
+- OpenRouter-compatible command wrapper
+
+The router should support project defaults, agent-specific defaults, and per-task overrides.
+
+### Local Audit Log
+
+Every agent action should be auditable. Users should be able to answer: who did what, when, why, and with which model.
+
+### Workspace Snapshots
+
+Before an agent starts risky work, Harness can create a lightweight snapshot such as a Git branch, stash, patch file, or checkpoint record.
+
+### Templates
+
+Project templates and agent templates reduce setup friction.
+
+Examples:
+
+- Web app team
+- Unity game team
+- Mobile app team
+- Research assistant team
+- Content production team
+
+### Parallel Agent Scheduling
+
+Harness should include a scheduler that can run multiple agent tasks at once while respecting dependencies, project limits, and human approval gates.
+
+Scheduling rules:
+
+- Independent tasks can run in parallel.
+- Dependent tasks must wait for their prerequisites.
+- The PM agent can create, pause, reorder, or reassign tasks.
+- The PM agent should inspect completion output before deciding the next handoff.
+- PM handoff decisions run automatically by default.
+- Users can set concurrency limits per project and per agent.
+
+### Sequential Workflow Chains
+
+Some work should move through a planned chain of agents.
+
+Example chains:
+
+- Product Planner -> Technical Planner -> Programmer -> Reviewer
+- PM Agent -> Frontend Agent -> QA Agent -> Documentation Agent
+- Research Agent -> Analyst Agent -> Writer Agent
+
+The system should support explicit workflow templates, but the PM agent should also be able to choose the next agent dynamically.
+
+Default behavior: sequential workflow chains advance automatically after each agent finishes unless a risk boundary requires approval.
+
+### Agent Workspaces
+
+When agents execute code work in parallel, Harness should avoid file conflicts. Candidate strategies:
+
+- Separate Git branches per task
+- Separate Git worktrees per agent or task
+- Patch-based output from each agent
+- Human/PM merge step before applying changes to the main project folder
+
+Decision: Harness should use Git worktree per task as the default execution isolation strategy.
+
+Default worktree policy:
+
+- Each executable task gets its own Git branch and worktree.
+- The agent runs inside that task-specific worktree.
+- Parallel agents must not write directly to the main project checkout.
+- Task output is reviewed before being merged back into the main project branch.
+- The PM agent can recommend merge order when multiple completed tasks touch related areas.
+- The user can approve, reject, or request changes before merge.
+
+Benefits:
+
+- Safer parallel execution.
+- Clear task-to-code ownership.
+- Easier rollback.
+- Easier review of each agent's changes.
+- Better auditability for who changed what and why.
+
+Open constraints:
+
+- Projects without Git need an initialization flow or a non-Git fallback.
+- Large repositories may make many worktrees expensive.
+- Merge conflict handling needs a clear UX.
+- Some non-code tasks may not need a worktree.
+
+## 7. Recommended Development Stack
+
+Recommended direction: local-first TypeScript application that starts as a local web app and can later be packaged as a desktop app.
+
+### Platform Strategy
+
+MVP should support a browser-based local web app because it is faster to test, debug, and iterate.
+
+Target platform path:
+
+1. Local web app for MVP development and testing.
+2. Mac desktop app once core workflows are proven.
+3. Windows desktop app after the Mac version stabilizes.
+
+The architecture should avoid painting the product into a web-only corner. Local filesystem access, process execution, and CLI integration should sit behind a backend API that can be reused by both the web app and desktop shell.
+
+### Desktop Shell
+
+Tauri is recommended over Electron for a lightweight local desktop app. It can run a web UI while still allowing controlled local filesystem and command execution through a Rust backend.
+
+Alternative: Electron if Node-native integration is more important than bundle size.
+
+For MVP, Tauri packaging can be deferred while keeping the frontend and backend boundaries compatible with a future Tauri shell.
+
+### Frontend
+
+- React
+- TypeScript
+- Vite
+- TanStack Router
+- TanStack Query
+- Zustand or Jotai for local UI state
+- Tailwind CSS or CSS modules
+- Radix UI primitives for accessible controls
+
+### Backend
+
+- Local Node/TypeScript server for MVP web execution.
+- Backend API for project management, board state, agent management, scheduling, and CLI execution.
+- Future Tauri Rust commands for desktop filesystem/process boundaries.
+- Optional worker processes for long-running agent execution.
+
+### Database
+
+- SQLite for local durable state
+- Drizzle ORM or Prisma
+
+SQLite fits the Kanban/task/event model well and keeps installation simple.
+
+### Storage Model
+
+Harness should use both project-local and global storage.
+
+Project-local storage:
+
+- Board tasks
+- Project agents
+- Project documents
+- Project-specific memory
+- Execution logs
+- Handoffs
+- Project settings
+
+Global storage:
+
+- Registered project list
+- Global user preferences
+- LLM CLI backend definitions
+- Global agent templates
+- Global model/router settings
+- App update and telemetry preferences, if any
+
+Candidate paths:
+
+- Project-local: `<project>/.harness/`
+- Global macOS: `~/Library/Application Support/Harness/`
+- Global cross-platform fallback: `~/.harness/`
+
+### Agent Runtime
+
+- Agent runner process per task or per agent session
+- Structured event stream from runner to app
+- Adapter interface for each LLM CLI backend
+- Queue-based scheduler for pending tasks
+- Parallel execution with dependency-aware scheduling
+- PM-driven handoff decisions after task completion
+- Automatic handoff by default with approval gates for risky actions
+- Configurable concurrency limits
+- Persistent run state so interrupted work can be resumed or audited
+
+### Packaging
+
+- Local web app for MVP validation
+- Local desktop app for normal users
+- Optional CLI package for automation and headless runs
+
+## 8. Draft Product Structure
+
+### Main Navigation
+
+- Projects
+- Board
+- Backlog
+- Agents
+- Runs
+- Documents
+- Settings
+
+### Board Columns
+
+Initial Jira-like columns:
+
+- Backlog
+- Selected for Development
+- In Progress
+- In Review
+- Blocked
+- Done
+
+### Task Detail Panel
+
+The task detail view should include:
+
+- Title and status
+- Assignee agent
+- Description
+- Acceptance criteria
+- Subtasks
+- Activity timeline
+- Agent execution logs
+- Linked files
+- Comments
+- Human approval prompts
+
+### Agent Directory
+
+The agent directory should include:
+
+- Agent list
+- Persona editor
+- Model backend selector
+- Tool permissions
+- Current task
+- Recent activity
+- Performance metrics
+
+## 9. MVP Scope Proposal
+
+The first build should prove the local project, Kanban model, and real agent execution loop before complex autonomy.
+
+MVP features:
+
+- Create/open local project folders.
+- Create agents with personas.
+- Create/edit Kanban tasks.
+- Assign a task to an agent.
+- Show agent status on board cards.
+- Store project data in project-local SQLite and global app settings in a global database/config area.
+- Add a PM agent profile that plans, assigns, monitors, and hands off work.
+- Add one generic CLI adapter interface with at least one real executable adapter and one mock adapter for tests.
+- Execute assigned work through the agent runtime.
+- Support basic parallel execution for independent tasks.
+- Support automatic sequential handoff for dependent tasks.
+- Create a Git worktree per executable task.
+- Show task worktree/branch information in the task detail view.
+- Build Jira-like board, backlog, agent list, and task detail drawer.
+
+Deferred from MVP:
+
+- Advanced memory.
+- Cloud sync.
+- Team accounts.
+- Marketplace/plugin system.
+- Complex dependency graph UI.
+- Advanced conflict resolution between parallel code-writing agents.
+- Windows desktop packaging.
+
+## 10. Planning Questions
+
+Open questions to resolve before implementation:
+
+1. Which LLM CLI should be integrated first?
+2. Should the PM agent be mandatory for every project, or optional?
+3. How much autonomy should agents have before asking for user approval?
+4. Should task statuses be fixed initially, or configurable per project?
+5. Should Harness support non-code projects from the beginning?
+6. What should be the first real workflow used to test the product?
+7. What is the safest default concurrency limit for MVP?
+8. Should project-local `.harness` data be committed to Git by default, ignored by default, or partially committed?
+
+## 11. Future Ticketization Plan
+
+After the service plan is approved, break the work into ticket groups:
+
+1. Product foundation
+2. Local project storage
+3. Kanban data model
+4. Jira-like UI shell
+5. Agent persona management
+6. PM agent planning workflow
+7. CLI adapter layer
+8. Agent execution tracking
+9. Review and approval gates
+10. Packaging and local setup
+
+Each ticket should include:
+
+- User story
+- Scope
+- Acceptance criteria
+- Data model impact
+- UI impact
+- Test plan
+- Dependencies

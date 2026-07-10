@@ -1,0 +1,19 @@
+{
+  "name": "harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first multi-agent Kanban execution framework.",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @harness/server --filter @harness/web dev",
+    "dev:server": "pnpm --filter @harness/server dev",
+    "dev:web": "pnpm --filter @harness/web dev",
+    "build": "pnpm --recursive build",
+    "typecheck": "pnpm --recursive typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.13",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "pnpm@11.7.0"
+}

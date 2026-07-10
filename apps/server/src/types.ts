@@ -1,0 +1,79 @@
+export type TaskStatus =
+  | "Backlog"
+  | "Selected"
+  | "In Progress"
+  | "In Review"
+  | "Blocked"
+  | "Done";
+
+export type ProjectRecord = {
+  id: string;
+  name: string;
+  path: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentRecord = {
+  id: string;
+  name: string;
+  role: string;
+  persona: string;
+  modelBackend: string;
+  cliCommand: string | null;
+  capabilities: string[];
+  maxParallel: number;
+  status: "idle" | "busy" | "offline";
+  currentTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskRecord = {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: "Low" | "Medium" | "High" | "Urgent";
+  assigneeAgentId: string | null;
+  reporter: string;
+  parentTaskId: string | null;
+  labels: string[];
+  acceptanceCriteria: string;
+  branchName: string | null;
+  worktreePath: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EventRecord = {
+  id: string;
+  taskId: string | null;
+  agentId: string | null;
+  type: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type RunRecord = {
+  id: string;
+  taskId: string;
+  agentId: string;
+  status: "running" | "completed" | "failed";
+  branchName: string | null;
+  worktreePath: string | null;
+  output: string | null;
+  error: string | null;
+  startedAt: string;
+  completedAt: string | null;
+};
+
+export type ProjectOverview = {
+  project: ProjectRecord;
+  agents: AgentRecord[];
+  tasks: TaskRecord[];
+  events: EventRecord[];
+  runs: RunRecord[];
+};
+
