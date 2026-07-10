@@ -81,10 +81,14 @@ export function openProjectDb(projectPath: string) {
       assignee_agent_id TEXT,
       reporter TEXT NOT NULL,
       parent_task_id TEXT,
+      dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       labels TEXT NOT NULL,
       acceptance_criteria TEXT NOT NULL,
       branch_name TEXT,
       worktree_path TEXT,
+      blocked_reason TEXT,
+      merge_status TEXT NOT NULL DEFAULT 'none',
+      merge_error TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -121,7 +125,18 @@ export function openProjectDb(projectPath: string) {
       created_at TEXT NOT NULL
     );
   `);
+  ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "tasks", "blocked_reason", "TEXT");
+  ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
+  ensureColumn(db, "tasks", "merge_error", "TEXT");
   return db;
+}
+
+function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
 }
 
 export function listProjects(): ProjectRecord[] {
@@ -337,10 +352,14 @@ export function mapTask(row: unknown): TaskRecord {
     assigneeAgentId: r.assignee_agent_id ? String(r.assignee_agent_id) : null,
     reporter: String(r.reporter),
     parentTaskId: r.parent_task_id ? String(r.parent_task_id) : null,
+    dependencyTaskIds: JSON.parse(String(r.dependency_task_ids || "[]")) as string[],
     labels: JSON.parse(String(r.labels)) as string[],
     acceptanceCriteria: String(r.acceptance_criteria),
     branchName: r.branch_name ? String(r.branch_name) : null,
     worktreePath: r.worktree_path ? String(r.worktree_path) : null,
+    blockedReason: r.blocked_reason ? String(r.blocked_reason) : null,
+    mergeStatus: String(r.merge_status || "none") as TaskRecord["mergeStatus"],
+    mergeError: r.merge_error ? String(r.merge_error) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };

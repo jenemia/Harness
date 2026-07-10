@@ -324,6 +324,26 @@ For MVP, Tauri packaging can be deferred while keeping the frontend and backend 
 - Future Tauri Rust commands for desktop filesystem/process boundaries.
 - Optional worker processes for long-running agent execution.
 
+### Provider Architecture
+
+Harness should use provider interfaces for functionality that varies by operating system, runtime, model provider, or execution backend.
+
+Provider categories:
+
+- Platform provider: filesystem, shell execution, process management, path handling, Git behavior, OS-specific defaults.
+- LLM provider: model-specific CLI invocation, prompt payload formatting, environment variables, output parsing.
+- Workspace provider: Git worktree strategy, patch strategy, or future containerized execution.
+- Approval provider: local human approval, future remote/team approval, or policy-based auto approval.
+
+Initial providers:
+
+- `node-darwin` platform provider for local Mac MVP.
+- Future `node-win32` platform provider for Windows.
+- `mock` LLM provider for deterministic local testing.
+- `shell` LLM provider for user-configured CLI commands.
+
+Implementation rule: runtime orchestration should call provider interfaces instead of embedding OS-specific or model-specific behavior directly.
+
 ### Database
 
 - SQLite for local durable state

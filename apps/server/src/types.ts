@@ -38,10 +38,14 @@ export type TaskRecord = {
   assigneeAgentId: string | null;
   reporter: string;
   parentTaskId: string | null;
+  dependencyTaskIds: string[];
   labels: string[];
   acceptanceCriteria: string;
   branchName: string | null;
   worktreePath: string | null;
+  blockedReason: string | null;
+  mergeStatus: "none" | "pending" | "merged" | "conflict";
+  mergeError: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -76,4 +80,3 @@ export type ProjectOverview = {
   events: EventRecord[];
   runs: RunRecord[];
 };
-

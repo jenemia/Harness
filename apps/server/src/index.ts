@@ -13,7 +13,7 @@ import {
   registerProject,
   seedDefaultAgents
 } from "./db.js";
-import { startTask } from "./runtime.js";
+import { approveMerge, startTask } from "./runtime.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -104,6 +104,12 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, { result, overview: getProjectOverview(project) }, result.accepted ? 202 : 409);
           return;
         }
+
+        if (req.method === "POST" && action === "merge") {
+          const result = await approveMerge(project, taskId);
+          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          return;
+        }
       }
     }
 
@@ -191,10 +197,14 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       assigneeAgentId: input.assigneeAgentId || null,
       reporter: input.reporter || "human",
       parentTaskId: input.parentTaskId || null,
+      dependencyTaskIds: Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [],
       labels: Array.isArray(input.labels) ? input.labels : [],
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
       branchName: null,
       worktreePath: null,
+      blockedReason: null,
+      mergeStatus: "none",
+      mergeError: null,
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -202,9 +212,9 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, assignee_agent_id, reporter,
-        parent_task_id, labels, acceptance_criteria, branch_name, worktree_path,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        parent_task_id, dependency_task_ids, labels, acceptance_criteria, branch_name,
+        worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -214,10 +224,14 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       task.assigneeAgentId,
       task.reporter,
       task.parentTaskId,
+      JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
       task.branchName,
       task.worktreePath,
+      task.blockedReason,
+      task.mergeStatus,
+      task.mergeError,
       task.createdAt,
       task.updatedAt
     );
@@ -252,7 +266,9 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
           status = COALESCE(?, status),
           priority = COALESCE(?, priority),
           assignee_agent_id = ?,
+          dependency_task_ids = COALESCE(?, dependency_task_ids),
           acceptance_criteria = COALESCE(?, acceptance_criteria),
+          blocked_reason = ?,
           updated_at = ?
       WHERE id = ?
     `).run(
@@ -261,7 +277,9 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       status || null,
       input.priority || null,
       input.assigneeAgentId === undefined ? (existing as { assignee_agent_id: string | null }).assignee_agent_id : input.assigneeAgentId,
+      Array.isArray(input.dependencyTaskIds) ? JSON.stringify(input.dependencyTaskIds) : null,
       input.acceptanceCriteria?.trim() || null,
+      input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
       now(),
       taskId
     );
@@ -307,4 +325,3 @@ function sendJson(res: http.ServerResponse, payload: unknown, status = 200) {
 function sendError(res: http.ServerResponse, status: number, message: string) {
   sendJson(res, { error: message }, status);
 }
-

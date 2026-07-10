@@ -200,7 +200,7 @@ h3 {
 
 .task-composer {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 220px 120px;
+  grid-template-columns: minmax(240px, 1fr) 190px 220px 120px;
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -263,6 +263,8 @@ h3 {
 .priority-pill,
 .agent-chip,
 .branch-chip,
+.dependency-chip,
+.merge-chip,
 .run-state {
   border-radius: 999px;
   font-size: 12px;
@@ -288,7 +290,9 @@ h3 {
 }
 
 .agent-chip,
-.branch-chip {
+.branch-chip,
+.dependency-chip,
+.merge-chip {
   max-width: 100%;
   background: #e9f2ff;
   color: #0c66e4;
@@ -307,10 +311,53 @@ h3 {
   white-space: nowrap;
 }
 
+.dependency-chip {
+  background: #f1f2f4;
+  color: #44546f;
+}
+
+.merge-chip.pending {
+  background: #fff7d6;
+  color: #7f5f01;
+}
+
+.merge-chip.merged {
+  background: #dcfff1;
+  color: #216e4e;
+}
+
+.merge-chip.conflict,
+.blocked-note {
+  background: #ffeceb;
+  color: #ae2a19;
+}
+
+.blocked-note {
+  border-radius: 6px;
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 7px 8px;
+}
+
 .card-controls {
   margin-top: auto;
   display: grid;
   grid-template-columns: 1fr 36px;
+  gap: 8px;
+}
+
+.merge-button {
+  grid-column: 1 / -1;
+  border: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  background: #216e4e;
+  color: #ffffff;
 }
 
 .right-rail {
@@ -491,9 +538,12 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .task-composer {
+    grid-template-columns: 1fr 180px;
+  }
+
   .right-rail {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
   }
 }
-

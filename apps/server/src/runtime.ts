@@ -1,7 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import path from "node:path";
-import { spawn } from "node:child_process";
 import type { DatabaseSync } from "node:sqlite";
 import {
   insertEvent,
@@ -11,18 +8,107 @@ import {
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
+import { createDefaultProviders } from "./providers.js";
 import type { AgentRecord, ProjectRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
+const providers = createDefaultProviders(projectHarnessDir);
 
 export async function startTask(project: ProjectRecord, taskId: string) {
   if (runningTasks.has(taskId)) {
     return { accepted: false, reason: "Task is already running." };
   }
 
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    if (!task) {
+      return { accepted: false, reason: "Task not found." };
+    }
+
+    const dependencyBlocker = getDependencyBlocker(db, task);
+    if (dependencyBlocker) {
+      setTaskBlocked(db, task.id, dependencyBlocker);
+      insertEvent(db, {
+        taskId: task.id,
+        agentId: task.assigneeAgentId,
+        type: "task.blocked",
+        message: dependencyBlocker,
+        metadata: { dependencyTaskIds: task.dependencyTaskIds }
+      });
+      return { accepted: false, reason: dependencyBlocker };
+    }
+  } finally {
+    db.close();
+  }
+
   runningTasks.add(taskId);
   void executeTask(project, taskId).finally(() => runningTasks.delete(taskId));
   return { accepted: true };
+}
+
+export async function approveMerge(project: ProjectRecord, taskId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    if (!task) {
+      return { ok: false, reason: "Task not found." };
+    }
+
+    if (!task.branchName) {
+      return { ok: false, reason: "Task has no branch to merge." };
+    }
+
+    if (task.mergeStatus !== "pending" && task.mergeStatus !== "conflict") {
+      return { ok: false, reason: `Task merge status is ${task.mergeStatus}.` };
+    }
+
+    const dirty = await providers.platform().workingTreeStatus(project.path);
+    if (dirty.trim()) {
+      return { ok: false, reason: "Main project checkout has uncommitted changes. Commit or stash them before merging." };
+    }
+
+    const merge = await providers.platform().mergeBranch(
+      project.path,
+      task.branchName,
+      `Merge Harness task ${task.id.slice(0, 8)}`
+    );
+    if (!merge.ok) {
+      await providers.platform().run("git", ["merge", "--abort"], project.path, true);
+      db.prepare("UPDATE tasks SET merge_status = ?, merge_error = ?, updated_at = ? WHERE id = ?").run(
+        "conflict",
+        merge.stderr || merge.stdout || "Merge failed.",
+        now(),
+        task.id
+      );
+      insertEvent(db, {
+        taskId: task.id,
+        agentId: task.assigneeAgentId,
+        type: "merge.conflict",
+        message: "Merge approval hit a conflict and was aborted.",
+        metadata: { stderr: merge.stderr, stdout: merge.stdout }
+      });
+      return { ok: false, reason: "Merge failed and was aborted." };
+    }
+
+    db.prepare("UPDATE tasks SET merge_status = ?, merge_error = ?, updated_at = ? WHERE id = ?").run(
+      "merged",
+      null,
+      now(),
+      task.id
+    );
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: task.assigneeAgentId,
+      type: "merge.approved",
+      message: `Merged ${task.branchName} into the main project checkout.`,
+      metadata: { stdout: merge.stdout }
+    });
+
+    return { ok: true };
+  } finally {
+    db.close();
+  }
 }
 
 async function executeTask(project: ProjectRecord, taskId: string) {
@@ -52,7 +138,7 @@ async function executeTask(project: ProjectRecord, taskId: string) {
     updateTaskStatus(db, task.id, agent.role === "reviewer" ? "In Review" : "In Progress");
     setAgentBusy(db, agent.id, task.id);
 
-    const workspace = await ensureTaskWorktree(project.path, task);
+    const workspace = await providers.platform().ensureTaskWorktree(project.path, task);
     const startedAt = now();
     runId = randomUUID();
     db.prepare("INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
@@ -84,12 +170,18 @@ async function executeTask(project: ProjectRecord, taskId: string) {
     });
 
     const freshTask = getTask(db, task.id) ?? task;
-    const result = await runAgentAdapter(agent, freshTask, workspace.worktreePath);
+    const result = await providers.llm(agent.modelBackend).run(agent, freshTask, workspace);
     const completedAt = now();
+    const commitResult = result.ok
+      ? await providers.platform().commitAll(
+          workspace.worktreePath,
+          `Harness task ${task.id.slice(0, 8)}: ${task.title}`
+        )
+      : { committed: false, output: "", error: null };
 
     db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, completed_at = ? WHERE id = ?").run(
       result.ok ? "completed" : "failed",
-      result.output,
+      [result.output, commitResult.output].filter(Boolean).join("\n\n"),
       result.error,
       completedAt,
       runId
@@ -114,7 +206,7 @@ async function executeTask(project: ProjectRecord, taskId: string) {
       agentId: agent.id,
       type: "run.completed",
       message: `${agent.name} completed the run.`,
-      metadata: { output: result.output }
+      metadata: { output: result.output, commit: commitResult }
     });
 
     await autoHandoff(project, db, task.id, agent);
@@ -181,79 +273,32 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   }
 
   updateTaskStatus(db, task.id, "Done");
+  const mergeStatus = task.branchName ? "pending" : "none";
+  db.prepare("UPDATE tasks SET merge_status = ?, merge_error = ?, updated_at = ? WHERE id = ?").run(
+    mergeStatus,
+    null,
+    now(),
+    task.id
+  );
   insertEvent(db, {
     taskId: task.id,
     agentId: completedBy.id,
     type: "task.done",
     message: "PM Agent marked the task Done after automatic evaluation.",
-    metadata: {}
+    metadata: { mergeStatus }
   });
-}
 
-async function ensureTaskWorktree(projectPath: string, task: TaskRecord) {
-  if (task.worktreePath && task.branchName) {
-    return {
-      branchName: task.branchName,
-      worktreePath: task.worktreePath
-    };
+  if (mergeStatus === "pending") {
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: completedBy.id,
+      type: "merge.pending",
+      message: "Task changes are waiting for human merge approval.",
+      metadata: { branchName: task.branchName, worktreePath: task.worktreePath }
+    });
   }
 
-  await ensureGitReady(projectPath);
-
-  const safeTitle = task.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 32);
-  const branchName = `harness/task-${task.id.slice(0, 8)}-${safeTitle || "work"}`;
-  const worktreePath = path.join(projectHarnessDir(projectPath), "worktrees", task.id);
-  mkdirSync(path.dirname(worktreePath), { recursive: true });
-
-  const existingWorktree = await runCommand("git", ["worktree", "list", "--porcelain"], projectPath);
-  if (!existingWorktree.stdout.includes(worktreePath)) {
-    await runCommand("git", ["worktree", "add", "-B", branchName, worktreePath, "HEAD"], projectPath);
-  }
-
-  return { branchName, worktreePath };
-}
-
-async function ensureGitReady(projectPath: string) {
-  const inside = await runCommand("git", ["rev-parse", "--is-inside-work-tree"], projectPath, true);
-  if (!inside.ok) {
-    await runCommand("git", ["init"], projectPath);
-  }
-
-  const hasHead = await runCommand("git", ["rev-parse", "--verify", "HEAD"], projectPath, true);
-  if (!hasHead.ok) {
-    throw new Error("Git worktree execution requires at least one commit in the project repository.");
-  }
-}
-
-async function runAgentAdapter(agent: AgentRecord, task: TaskRecord, cwd: string) {
-  if (!agent.cliCommand || agent.modelBackend === "mock") {
-    const output = [
-      `Agent: ${agent.name}`,
-      `Role: ${agent.role}`,
-      `Task: ${task.title}`,
-      "",
-      "Mock adapter completed this task. Configure a shell CLI command on the agent to execute a real LLM CLI."
-    ].join("\n");
-    writeFileSync(
-      path.join(cwd, "HARNESS_AGENT_RESULT.md"),
-      `# Harness Agent Result\n\n${output}\n`,
-      "utf8"
-    );
-    return { ok: true, output, error: null };
-  }
-
-  return runShell(agent.cliCommand, cwd, {
-    HARNESS_AGENT_NAME: agent.name,
-    HARNESS_AGENT_ROLE: agent.role,
-    HARNESS_AGENT_PERSONA: agent.persona,
-    HARNESS_TASK_TITLE: task.title,
-    HARNESS_TASK_DESCRIPTION: task.description,
-    HARNESS_ACCEPTANCE_CRITERIA: task.acceptanceCriteria
-  });
+  scheduleReadyDependents(project, db, task.id);
 }
 
 function getTask(db: DatabaseSync, taskId: string): TaskRecord | null {
@@ -288,7 +333,21 @@ function assignTask(db: DatabaseSync, taskId: string, agentId: string) {
 }
 
 function updateTaskStatus(db: DatabaseSync, taskId: string, status: TaskRecord["status"]) {
-  db.prepare("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?").run(status, now(), taskId);
+  db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+    status,
+    null,
+    now(),
+    taskId
+  );
+}
+
+function setTaskBlocked(db: DatabaseSync, taskId: string, reason: string) {
+  db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+    "Blocked",
+    reason,
+    now(),
+    taskId
+  );
 }
 
 function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {
@@ -309,51 +368,54 @@ function setAgentIdle(db: DatabaseSync, agentId: string) {
   );
 }
 
-async function runCommand(command: string, args: string[], cwd: string, allowFailure = false) {
-  const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
-    const child = spawn(command, args, { cwd });
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
-  });
-
-  const ok = result.code === 0;
-  if (!ok && !allowFailure) {
-    throw new Error(result.stderr || `${command} ${args.join(" ")} failed`);
+function getDependencyBlocker(db: DatabaseSync, task: TaskRecord) {
+  if (!task.dependencyTaskIds.length) {
+    return null;
   }
 
-  return { ...result, ok };
+  const placeholders = task.dependencyTaskIds.map(() => "?").join(", ");
+  const rows = db.prepare(`SELECT * FROM tasks WHERE id IN (${placeholders})`).all(...task.dependencyTaskIds).map(mapTask);
+  const doneIds = new Set(rows.filter((dependency) => dependency.status === "Done").map((dependency) => dependency.id));
+  const missingIds = task.dependencyTaskIds.filter((id) => !rows.some((dependency) => dependency.id === id));
+  const blocked = rows.filter((dependency) => dependency.status !== "Done");
+
+  if (!missingIds.length && !blocked.length && doneIds.size === task.dependencyTaskIds.length) {
+    return null;
+  }
+
+  const blockedTitles = blocked.map((dependency) => `${dependency.title} (${dependency.status})`);
+  const missing = missingIds.map((id) => `${id.slice(0, 8)} (missing)`);
+  return `Waiting on dependencies: ${[...blockedTitles, ...missing].join(", ")}`;
 }
 
-async function runShell(command: string, cwd: string, extraEnv: Record<string, string>) {
-  const result = await new Promise<{ code: number | null; output: string; error: string }>((resolve) => {
-    const child = spawn(command, {
-      cwd,
-      shell: true,
-      env: { ...process.env, ...extraEnv }
-    });
-    let output = "";
-    let error = "";
+function scheduleReadyDependents(project: ProjectRecord, db: DatabaseSync, completedTaskId: string) {
+  const rows = db.prepare("SELECT * FROM tasks WHERE status IN (?, ?, ?)").all("Backlog", "Selected", "Blocked").map(mapTask);
+  for (const task of rows) {
+    if (!task.dependencyTaskIds.includes(completedTaskId)) {
+      continue;
+    }
 
-    child.stdout.on("data", (chunk) => {
-      output += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      error += chunk.toString();
-    });
-    child.on("close", (code) => resolve({ code, output, error }));
-  });
+    const blocker = getDependencyBlocker(db, task);
+    if (blocker) {
+      setTaskBlocked(db, task.id, blocker);
+      continue;
+    }
 
-  return {
-    ok: result.code === 0,
-    output: result.output,
-    error: result.error || (result.code === 0 ? null : `Command exited with code ${result.code}`)
-  };
+    db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+      "Selected",
+      null,
+      now(),
+      task.id
+    );
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: task.assigneeAgentId,
+      type: "task.unblocked",
+      message: "All dependencies are complete. PM Agent queued this task for execution.",
+      metadata: { completedTaskId }
+    });
+    setTimeout(() => {
+      void startTask(project, task.id);
+    }, 0);
+  }
 }

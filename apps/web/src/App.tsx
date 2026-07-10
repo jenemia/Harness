@@ -6,6 +6,8 @@ import {
   Columns3,
   FolderOpen,
   GitBranch,
+  GitMerge,
+  Link2,
   Play,
   Plus,
   RefreshCcw,
@@ -244,6 +246,7 @@ function TaskComposer(props: {
 }) {
   const [title, setTitle] = useState("");
   const [assigneeAgentId, setAssigneeAgentId] = useState("");
+  const [dependencyTaskId, setDependencyTaskId] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -253,11 +256,13 @@ function TaskComposer(props: {
         body: JSON.stringify({
           title,
           assigneeAgentId: assigneeAgentId || null,
+          dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
           status: "Backlog",
           priority: "Medium"
         })
       });
       setTitle("");
+      setDependencyTaskId("");
       await props.onChanged();
     });
   }
@@ -270,6 +275,14 @@ function TaskComposer(props: {
         {props.overview.agents.map((agent) => (
           <option key={agent.id} value={agent.id}>
             {agent.name}
+          </option>
+        ))}
+      </select>
+      <select value={dependencyTaskId} onChange={(event) => setDependencyTaskId(event.target.value)}>
+        <option value="">No dependency</option>
+        {props.overview.tasks.map((task) => (
+          <option key={task.id} value={task.id}>
+            waits on: {task.title}
           </option>
         ))}
       </select>
@@ -306,6 +319,13 @@ function TaskCard(props: {
     });
   }
 
+  async function merge() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/merge`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
   return (
     <article className={`task-card priority-${props.task.priority.toLowerCase()}`}>
       <div className="task-card-top">
@@ -325,6 +345,20 @@ function TaskCard(props: {
             {props.task.branchName}
           </span>
         )}
+        {props.task.dependencyTaskIds.length > 0 && (
+          <span className="dependency-chip">
+            <Link2 size={14} />
+            {props.task.dependencyTaskIds.length} dependency
+          </span>
+        )}
+        {props.task.blockedReason && <span className="blocked-note">{props.task.blockedReason}</span>}
+        {props.task.mergeStatus !== "none" && (
+          <span className={`merge-chip ${props.task.mergeStatus}`}>
+            <GitMerge size={14} />
+            merge {props.task.mergeStatus}
+          </span>
+        )}
+        {props.task.mergeError && <span className="blocked-note">{props.task.mergeError}</span>}
       </div>
       <div className="card-controls">
         <select
@@ -341,6 +375,12 @@ function TaskCard(props: {
         <button className="icon-button" type="button" onClick={() => void start()}>
           <Play size={16} />
         </button>
+        {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
+          <button className="merge-button" type="button" onClick={() => void merge()}>
+            <GitMerge size={16} />
+            <span>Merge</span>
+          </button>
+        )}
       </div>
     </article>
   );
@@ -456,4 +496,3 @@ function EventPanel({ overview }: { overview: Overview }) {
     </section>
   );
 }
-
