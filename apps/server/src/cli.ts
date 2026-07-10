@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  getGlobalSettings,
   getProject,
   getProjectOverview,
   getProjectSettings,
@@ -20,7 +21,9 @@ import {
   openProjectDb,
   registerProject,
   seedDefaultAgents,
-  seedProjectFromTemplate
+  seedProjectFromTemplate,
+  updateGlobalSettings,
+  updateProjectSettings
 } from "./db.js";
 import { createPlan, type PlanningMode } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
@@ -42,6 +45,10 @@ const commands: Record<string, CommandHandler> = {
   "projects:register": registerProjectCommand,
   "projects:overview": overviewCommand,
   "projects:report": reportCommand,
+  "settings:get": getSettingsCommand,
+  "settings:update": updateSettingsCommand,
+  "project-settings:get": getProjectSettingsCommand,
+  "project-settings:update": updateProjectSettingsCommand,
   "templates:agents": listAgentTemplatesCommand,
   "templates:workflows": listWorkflowTemplatesCommand,
   "templates:projects": listProjectTemplatesCommand,
@@ -114,6 +121,44 @@ function reportCommand(args: string[]) {
   const project = getRequiredProject(args);
   const overview = getProjectOverview(project);
   return { report: createProjectHealthReport(overview) };
+}
+
+function getSettingsCommand() {
+  return { settings: getGlobalSettings() };
+}
+
+function updateSettingsCommand(args: string[]) {
+  const options = parseOptions(args);
+  const settings = updateGlobalSettings({
+    defaultProjectRoot: options.defaultProjectRoot,
+    defaultModelBackend: options.defaultModelBackend,
+    defaultAgentMaxParallel: options.defaultAgentMaxParallel ? Number(options.defaultAgentMaxParallel) : undefined,
+    autoStartPlans: parseOptionalBoolean(options.autoStartPlans, "autoStartPlans"),
+    maxRunSeconds: options.maxRunSeconds ? Number(options.maxRunSeconds) : undefined,
+    providerCommands: readOptionalJsonMap(options, "providerCommands", "providerCommandsFile")
+  });
+  return { settings };
+}
+
+function getProjectSettingsCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  return { settings: getProjectSettings(project.path), overview: getProjectOverview(project) };
+}
+
+function updateProjectSettingsCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const settings = updateProjectSettings(project.path, {
+    defaultModelBackend: options.defaultModelBackend,
+    defaultAgentMaxParallel: options.defaultAgentMaxParallel ? Number(options.defaultAgentMaxParallel) : undefined,
+    autoStartPlans: parseOptionalBoolean(options.autoStartPlans, "autoStartPlans"),
+    requireCommandApproval: parseOptionalBoolean(options.requireCommandApproval, "requireCommandApproval"),
+    maxProjectParallel: options.maxProjectParallel ? Number(options.maxProjectParallel) : undefined,
+    maxRunSeconds: options.maxRunSeconds ? Number(options.maxRunSeconds) : undefined,
+    handoffRules: readOptionalJsonMap(options, "handoffRules", "handoffRulesFile"),
+    providerCommands: readOptionalJsonMap(options, "providerCommands", "providerCommandsFile")
+  });
+  return { settings, overview: getProjectOverview(project) };
 }
 
 async function scheduleCommand(args: string[]) {
@@ -836,6 +881,37 @@ function readRequiredText(options: Record<string, string>, inlineKey: string, fi
   return value;
 }
 
+function readOptionalJsonMap(options: Record<string, string>, inlineKey: string, fileKey: string) {
+  const value = readOptionalText(options, inlineKey, fileKey);
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const parsed = JSON.parse(value || "{}");
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`--${inlineKey} must be a JSON object.`);
+  }
+
+  return Object.fromEntries(
+    Object.entries(parsed as Record<string, unknown>)
+      .map(([key, item]) => [key.trim(), typeof item === "string" ? item.trim() : ""])
+      .filter(([key, item]) => key && item)
+  );
+}
+
+function parseOptionalBoolean(value: string | undefined, label: string) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  throw new Error(`--${label} must be true or false.`);
+}
+
 function normalizeMode(value: string | undefined): PlanningMode {
   if (!value) {
     return "sequential";
@@ -892,6 +968,10 @@ Usage:
   pnpm --filter @harness/server cli projects:register --path <folder> [--name <name>] [--seedDefaults false] [--projectTemplate <id>]
   pnpm --filter @harness/server cli projects:overview --project <projectId>
   pnpm --filter @harness/server cli projects:report --project <projectId>
+  pnpm --filter @harness/server cli settings:get
+  pnpm --filter @harness/server cli settings:update [--defaultProjectRoot <folder>] [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--maxRunSeconds 1800] [--providerCommands <json>|--providerCommandsFile <file>]
+  pnpm --filter @harness/server cli project-settings:get --project <projectId>
+  pnpm --filter @harness/server cli project-settings:update --project <projectId> [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--requireCommandApproval true|false] [--maxProjectParallel 4] [--maxRunSeconds 1800] [--handoffRules <json>|--handoffRulesFile <file>] [--providerCommands <json>|--providerCommandsFile <file>]
   pnpm --filter @harness/server cli templates:agents
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects

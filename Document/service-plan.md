@@ -423,6 +423,8 @@ Initial implementation: Harness stores global settings for app-wide defaults and
 
 Initial implementation: command-backed LLM providers respect a project-configurable run timeout inherited from global defaults. Timed-out commands fail the run, unblock the runner, and leave an audit error on the task.
 
+Initial implementation: global and project-local settings can be inspected and updated from the headless CLI, including provider command maps and handoff rule maps supplied as inline JSON or JSON files.
+
 Candidate paths:
 
 - Project-local: `<project>/.harness/`
@@ -451,7 +453,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, provider catalog inspection, template listing, agent create/update/list flows, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, configure agents, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing, agent create/update/list flows, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, configure agents, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 

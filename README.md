@@ -51,6 +51,8 @@ The server package also exposes a local JSON CLI for headless automation:
 pnpm cli projects:list
 pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
 pnpm cli projects:report --project <projectId>
+pnpm cli settings:update --defaultModelBackend codex --providerCommands '{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
+pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --requireCommandApproval true
 pnpm cli providers:list
 pnpm cli templates:projects
 pnpm cli templates:workflows
@@ -74,9 +76,9 @@ The CLI uses the same global/project-local storage as the web app and honors `HA
 
 ## Settings
 
-Use the Settings panel or `/api/settings` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.
+Use the Settings panel, `/api/settings`, or `settings:get` and `settings:update` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.
 
-Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel or `PATCH /api/projects/:projectId/settings` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, run timeout, PM plan auto-start behavior, command approval policy, and PM handoff rules.
+Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel, `PATCH /api/projects/:projectId/settings`, or `project-settings:get` and `project-settings:update` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, run timeout, PM plan auto-start behavior, command approval policy, and PM handoff rules.
 
 Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
