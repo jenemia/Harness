@@ -748,12 +748,28 @@ function TaskDetailDrawer(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(props.task.title);
+  const [editDescription, setEditDescription] = useState(props.task.description);
+  const [editAcceptanceCriteria, setEditAcceptanceCriteria] = useState(props.task.acceptanceCriteria);
+  const [editStatus, setEditStatus] = useState<TaskStatus>(props.task.status);
+  const [editPriority, setEditPriority] = useState<Task["priority"]>(props.task.priority);
+  const [editAssigneeAgentId, setEditAssigneeAgentId] = useState(props.task.assigneeAgentId || "");
   const runs = props.overview.runs.filter((run) => run.taskId === props.task.id);
   const events = props.overview.events.filter((event) => event.taskId === props.task.id);
   const handoffs = props.overview.handoffs.filter((handoff) => handoff.taskId === props.task.id);
   const dependencies = props.task.dependencyTaskIds
     .map((id) => props.overview.tasks.find((task) => task.id === id))
     .filter(Boolean) as Task[];
+
+  useEffect(() => {
+    setEditTitle(props.task.title);
+    setEditDescription(props.task.description);
+    setEditAcceptanceCriteria(props.task.acceptanceCriteria);
+    setEditStatus(props.task.status);
+    setEditPriority(props.task.priority);
+    setEditAssigneeAgentId(props.task.assigneeAgentId || "");
+  }, [props.task.id, props.task.updatedAt]);
 
   async function start() {
     await props.runAction(async () => {
@@ -765,6 +781,25 @@ function TaskDetailDrawer(props: {
   async function merge() {
     await props.runAction(async () => {
       await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/merge`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
+  async function saveTask(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: editTitle,
+          description: editDescription,
+          acceptanceCriteria: editAcceptanceCriteria,
+          status: editStatus,
+          priority: editPriority,
+          assigneeAgentId: editAssigneeAgentId || null
+        })
+      });
+      setIsEditing(false);
       await props.onChanged();
     });
   }
@@ -783,6 +818,10 @@ function TaskDetailDrawer(props: {
         </header>
 
         <div className="drawer-actions">
+          <button className="secondary-button" type="button" onClick={() => setIsEditing((current) => !current)}>
+            <Settings size={16} />
+            <span>{isEditing ? "Close edit" : "Edit"}</span>
+          </button>
           <button className="secondary-button" type="button" onClick={() => void start()}>
             <Play size={16} />
             <span>Start</span>
@@ -794,6 +833,49 @@ function TaskDetailDrawer(props: {
             </button>
           )}
         </div>
+
+        {isEditing && (
+          <form className="drawer-edit-form" onSubmit={saveTask}>
+            <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} />
+            <div className="drawer-edit-grid">
+              <select value={editStatus} onChange={(event) => setEditStatus(event.target.value as TaskStatus)}>
+                {columns.map((column) => (
+                  <option key={column} value={column}>
+                    {column}
+                  </option>
+                ))}
+              </select>
+              <select value={editPriority} onChange={(event) => setEditPriority(event.target.value as Task["priority"])}>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Urgent">Urgent</option>
+              </select>
+            </div>
+            <select value={editAssigneeAgentId} onChange={(event) => setEditAssigneeAgentId(event.target.value)}>
+              <option value="">Unassigned</option>
+              {props.overview.agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+            <textarea
+              value={editDescription}
+              onChange={(event) => setEditDescription(event.target.value)}
+              placeholder="Description"
+            />
+            <textarea
+              value={editAcceptanceCriteria}
+              onChange={(event) => setEditAcceptanceCriteria(event.target.value)}
+              placeholder="Acceptance criteria"
+            />
+            <button className="primary-button" type="submit">
+              <CheckCircle2 size={16} />
+              <span>Save task</span>
+            </button>
+          </form>
+        )}
 
         <section className="drawer-section">
           <h3>Details</h3>

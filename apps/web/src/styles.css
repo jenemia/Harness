@@ -761,6 +761,22 @@ textarea {
   gap: 8px;
 }
 
+.drawer-edit-form {
+  background: #f7f8f9;
+  border: 1px solid #dfe1e6;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.drawer-edit-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .drawer-section {
   display: flex;
   flex-direction: column;
