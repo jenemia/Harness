@@ -26,6 +26,7 @@ export type PlannedTaskSummary = {
 export type PlanPreviewTask = {
   title: string;
   role: string;
+  assigneeAgentId: string | null;
   description: string;
   acceptanceCriteria: string;
   dependencyIndexes: number[];
@@ -71,21 +72,30 @@ export function previewPlan(input: PlanRequest): PlanPreviewResult {
   return planningProvider.preview(input);
 }
 
-export function createPlan(project: ProjectRecord, input: PlanRequest) {
-  const preview = previewPlan(input);
-  const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
-  if (preview.tasks.length >= largePlanTaskThreshold && !input.allowLargePlan) {
-    throw new Error("Large plans require preview confirmation. Preview the plan first, then set allowLargePlan to true.");
-  }
+export function previewProjectPlan(project: ProjectRecord, input: PlanRequest): PlanPreviewResult {
   const db = openProjectDb(project.path);
   try {
+    return previewPlanWithAssignments(db, input);
+  } finally {
+    db.close();
+  }
+}
+
+export function createPlan(project: ProjectRecord, input: PlanRequest) {
+  const db = openProjectDb(project.path);
+  try {
+    const preview = previewPlanWithAssignments(db, input);
+    const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
+    if (preview.tasks.length >= largePlanTaskThreshold && !input.allowLargePlan) {
+      throw new Error("Large plans require preview confirmation. Preview the plan first, then set allowLargePlan to true.");
+    }
     const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
-    const agentLoads = createAgentPlanningLoads(db);
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
     const inserted: TaskRecord[] = [];
 
     for (const item of preview.tasks) {
       const dependencies = item.dependencyIndexes.map((index) => inserted[index]?.id).filter((id): id is string => Boolean(id));
-      const agent = chooseAgentForRole(agents, item.role, agentLoads);
+      const agent = item.assigneeAgentId ? agentsById.get(item.assigneeAgentId) || null : null;
       const task = insertPlannedTask({
         title: item.title,
         description: item.description,
@@ -97,9 +107,6 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
         status: item.status
       });
       inserted.push(task);
-      if (agent) {
-        incrementPlannedAgentLoad(agentLoads, agent.id);
-      }
     }
 
     const pmAgent = agents.find((agent) => agent.role === "project-manager") || null;
@@ -264,6 +271,7 @@ function createDeterministicPlanningProvider(): PlanningProvider {
         tasks: planItems.map<PlanPreviewTask>((item, index) => ({
           title: item.title,
           role: item.role,
+          assigneeAgentId: null,
           description: item.description,
           acceptanceCriteria: item.acceptanceCriteria,
           dependencyIndexes: mode === "sequential" && index > 0 ? [index - 1] : [],
@@ -272,6 +280,25 @@ function createDeterministicPlanningProvider(): PlanningProvider {
         warnings
       };
     }
+  };
+}
+
+function previewPlanWithAssignments(db: ReturnType<typeof openProjectDb>, input: PlanRequest) {
+  const preview = previewPlan(input);
+  const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
+  const agentLoads = createAgentPlanningLoads(db);
+  return {
+    ...preview,
+    tasks: preview.tasks.map((task) => {
+      const agent = chooseAgentForRole(agents, task.role, agentLoads);
+      if (agent) {
+        incrementPlannedAgentLoad(agentLoads, agent.id);
+      }
+      return {
+        ...task,
+        assigneeAgentId: agent?.id || null
+      };
+    })
   };
 }
 

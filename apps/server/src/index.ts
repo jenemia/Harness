@@ -39,7 +39,7 @@ import {
   updateProjectRecord,
   updateProjectSettings
 } from "./db.js";
-import { createPlan, previewPlan } from "./planner.js";
+import { createPlan, previewProjectPlan } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
@@ -284,7 +284,7 @@ const server = http.createServer(async (req, res) => {
           workflowTemplateId?: string;
         }>(req);
         const settings = getProjectSettings(project.path);
-        const preview = previewPlan({ ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold });
+        const preview = previewProjectPlan(project, { ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold });
         sendJson(res, { preview, overview: getProjectOverview(project) });
         return;
       }
@@ -460,7 +460,7 @@ const server = http.createServer(async (req, res) => {
           }>(req);
           const document = getDocument(project, documentId);
           const settings = getProjectSettings(project.path);
-          const preview = previewPlan({
+          const preview = previewProjectPlan(project, {
             goal: `Document: ${document.title}\n\n${document.content}`,
             mode: body.mode,
             workflowTemplateId: body.workflowTemplateId,

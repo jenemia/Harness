@@ -629,7 +629,7 @@ function PlanningPanel(props: {
           </button>
         </div>
       </form>
-      {lastPreview && <PlanPreviewBox preview={lastPreview} />}
+      {lastPreview && <PlanPreviewBox agents={props.overview.agents} preview={lastPreview} />}
       {lastPlan && (
         <div className="plan-result">
           <strong>{lastPlan.tasks.length} tasks created</strong>
@@ -648,7 +648,8 @@ function PlanningPanel(props: {
   );
 }
 
-function PlanPreviewBox(props: { preview: PlanPreviewResult }) {
+function PlanPreviewBox(props: { agents: Agent[]; preview: PlanPreviewResult }) {
+  const agentsById = useMemo(() => new Map(props.agents.map((agent) => [agent.id, agent])), [props.agents]);
   return (
     <div className="plan-preview">
       <div className="plan-preview-header">
@@ -665,7 +666,7 @@ function PlanPreviewBox(props: { preview: PlanPreviewResult }) {
           <div className="plan-preview-item" key={`${task.title}-${index}`}>
             <strong>{task.title}</strong>
             <span>
-              {task.role} · {task.status}
+              {agentsById.get(task.assigneeAgentId || "")?.name || "Unassigned"} · {task.role} · {task.status}
               {task.dependencyIndexes.length ? ` · after ${task.dependencyIndexes.map((item) => item + 1).join(", ")}` : ""}
             </span>
           </div>
@@ -868,6 +869,7 @@ function DocumentsPanel(props: {
       <DocumentEditor
         projectId={props.overview.project.id}
         document={selected}
+        agents={props.overview.agents}
         autoStartDefault={props.overview.settings.autoStartPlans}
         workflowTemplates={props.workflowTemplates}
         onSelect={setSelectedDocumentId}
@@ -993,6 +995,7 @@ function MemoryEditor(props: {
 function DocumentEditor(props: {
   projectId: string;
   document: DocumentRecord | null;
+  agents: Agent[];
   autoStartDefault: boolean;
   workflowTemplates: WorkflowTemplate[];
   documents: DocumentRecord[];
@@ -1143,7 +1146,7 @@ function DocumentEditor(props: {
               <span>Plan from doc</span>
             </button>
           </div>
-          {lastDocumentPreview && <PlanPreviewBox preview={lastDocumentPreview} />}
+          {lastDocumentPreview && <PlanPreviewBox agents={props.agents} preview={lastDocumentPreview} />}
           {lastDocumentPlan && (
             <span className="document-plan-result">
               {lastDocumentPlan.tasks.length} tickets created

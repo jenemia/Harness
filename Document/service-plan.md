@@ -77,7 +77,7 @@ The PM agent does not need to perform all work directly. Its primary job is orch
 
 The PM agent decides whether work can run in parallel or must proceed sequentially. When a task completes, the PM agent evaluates the result and chooses the next best agent or human handoff.
 
-Initial implementation: the PM planning endpoint can decompose a user goal into scoped Kanban tasks, assign them by agent role, spread same-role assignments across matching agents by current and planned load, and create sequential dependencies for planned handoff chains. The same planner can now preview the task breakdown before writing tasks, so large plans can be reviewed before board creation.
+Initial implementation: the PM planning endpoint can decompose a user goal into scoped Kanban tasks, assign them by agent role, spread same-role assignments across matching agents by current and planned load, and create sequential dependencies for planned handoff chains. The same planner can now preview the task breakdown and expected assignees before writing tasks, so large plans can be reviewed before board creation.
 
 ### Task
 

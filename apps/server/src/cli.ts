@@ -37,7 +37,7 @@ import {
   updateProjectRecord,
   updateProjectSettings
 } from "./db.js";
-import { createPlan, previewPlan, type PlanningMode } from "./planner.js";
+import { createPlan, previewProjectPlan, type PlanningMode } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
@@ -363,7 +363,7 @@ function previewPlanCommand(args: string[]) {
   const goal = readGoal(options);
   const mode = normalizeMode(options.mode);
   const settings = getProjectSettings(project.path);
-  const preview = previewPlan({
+  const preview = previewProjectPlan(project, {
     goal,
     mode,
     workflowTemplateId: options.workflowTemplate,
@@ -424,7 +424,7 @@ function previewDocumentPlanCommand(args: string[]) {
   const document = getCliDocument(project, getRequiredOption(options, "document"));
   const mode = normalizeMode(options.mode);
   const settings = getProjectSettings(project.path);
-  const preview = previewPlan({
+  const preview = previewProjectPlan(project, {
     goal: `Document: ${document.title}\n\n${document.content}`,
     mode,
     workflowTemplateId: options.workflowTemplate,

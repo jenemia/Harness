@@ -363,6 +363,7 @@ export type PlanPreviewResult = {
   tasks: Array<{
     title: string;
     role: string;
+    assigneeAgentId: string | null;
     description: string;
     acceptanceCriteria: string;
     dependencyIndexes: number[];
