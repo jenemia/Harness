@@ -63,6 +63,8 @@ pnpm cli documents:create --project <projectId> --title "Service Plan" --content
 pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId>
 pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
 pnpm cli board:show --project <projectId>
+pnpm cli runs:list --project <projectId> --status completed,failed
+pnpm cli runs:show --project <projectId> --run <runId>
 pnpm cli tasks:list --project <projectId> --status Selected,Blocked
 pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
@@ -115,7 +117,7 @@ Open a task from the board to inspect its status, assignee, labels, parent/subta
 
 Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, worktree path, and changed files.
 
-Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, and task-scoped `tasks:show`.
+Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, and run-scoped `runs:show`.
 
 ## Approvals
 

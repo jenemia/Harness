@@ -70,6 +70,8 @@ const commands: Record<string, CommandHandler> = {
   "approvals:approve": approveApprovalCommand,
   "approvals:reject": rejectApprovalCommand,
   "board:show": showBoardCommand,
+  "runs:list": listRunsCommand,
+  "runs:show": showRunCommand,
   "tasks:list": listTasksCommand,
   "tasks:show": showTaskCommand,
   "tasks:create": createTaskCommand,
@@ -353,6 +355,55 @@ function showBoardCommand(args: string[]) {
       columns,
       counts: Object.fromEntries(columns.map((column) => [column.status, column.tasks.length]))
     },
+    overview
+  };
+}
+
+function listRunsCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  const statuses = options.status ? new Set(parseCsv(options.status).map((status) => normalizeRunStatus(status))) : null;
+  const taskId = options.task || null;
+  const agentId = options.agent || null;
+  const providerId = options.provider || null;
+  const modelBackend = options.modelBackend || null;
+  const runs = overview.runs.filter((run) => {
+    if (statuses && !statuses.has(run.status)) {
+      return false;
+    }
+    if (taskId && run.taskId !== taskId) {
+      return false;
+    }
+    if (agentId && run.agentId !== agentId) {
+      return false;
+    }
+    if (providerId && run.providerId !== providerId) {
+      return false;
+    }
+    if (modelBackend && run.modelBackend !== modelBackend) {
+      return false;
+    }
+    return true;
+  });
+  return { runs, overview };
+}
+
+function showRunCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const runId = getRequiredOption(options, "run");
+  const overview = getProjectOverview(project);
+  const run = overview.runs.find((item) => item.id === runId);
+  if (!run) {
+    throw new Error("Run not found.");
+  }
+
+  return {
+    run,
+    task: overview.tasks.find((task) => task.id === run.taskId) || null,
+    agent: overview.agents.find((agent) => agent.id === run.agentId) || null,
+    events: overview.events.filter((event) => event.taskId === run.taskId || eventHasRunId(event.metadata, run.id)),
     overview
   };
 }
@@ -1004,6 +1055,15 @@ function normalizePriority(value: string): TaskRecord["priority"] {
   return priority;
 }
 
+function normalizeRunStatus(value: string) {
+  const statuses = ["running", "completed", "failed"] as const;
+  const status = statuses.find((item) => item.toLowerCase() === value.toLowerCase());
+  if (!status) {
+    throw new Error(`--status must be one of: ${statuses.join(", ")}`);
+  }
+  return status;
+}
+
 function parseCsv(value: string | undefined) {
   if (!value) {
     return [];
@@ -1012,6 +1072,10 @@ function parseCsv(value: string | undefined) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function eventHasRunId(metadata: Record<string, unknown>, runId: string) {
+  return metadata.runId === runId;
 }
 
 function optionPatchValue(options: Record<string, string>, valueKey: string, clearKey: string) {
@@ -1055,6 +1119,8 @@ Usage:
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli board:show --project <projectId>
+  pnpm --filter @harness/server cli runs:list --project <projectId> [--status running,completed,failed] [--task <taskId>] [--agent <agentId>] [--provider <providerId>] [--modelBackend <id>]
+  pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>
   pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]
   pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Blocked|Done]
