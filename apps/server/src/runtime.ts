@@ -334,7 +334,12 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const workspace = await providers.platform().ensureTaskWorktree(project.path, task);
     const startedAt = now();
     runId = randomUUID();
-    db.prepare("INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+    db.prepare(`
+      INSERT INTO runs (
+        id, task_id, agent_id, status, branch_name, worktree_path,
+        output, error, changed_files, started_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
       runId,
       task.id,
       agent.id,
@@ -343,6 +348,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       workspace.worktreePath,
       null,
       null,
+      JSON.stringify([]),
       startedAt,
       null
     );
@@ -366,6 +372,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const executionAgent = withProviderCommand(agent, settings);
     const result = await providers.llm(executionAgent.modelBackend).run(executionAgent, freshTask, workspace);
     const completedAt = now();
+    const changedFiles = await collectChangedFiles(workspace.worktreePath);
     const commitResult = result.ok
       ? await providers.platform().commitAll(
           workspace.worktreePath,
@@ -373,10 +380,11 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
         )
       : { committed: false, output: "", error: null };
 
-    db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, completed_at = ? WHERE id = ?").run(
+    db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, changed_files = ?, completed_at = ? WHERE id = ?").run(
       result.ok ? "completed" : "failed",
       [result.output, commitResult.output].filter(Boolean).join("\n\n"),
       result.error,
+      JSON.stringify(changedFiles),
       completedAt,
       runId
     );
@@ -430,6 +438,14 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     }
   } finally {
     db.close();
+  }
+}
+
+async function collectChangedFiles(worktreePath: string) {
+  try {
+    return await providers.platform().changedFiles(worktreePath);
+  } catch {
+    return [];
   }
 }
 

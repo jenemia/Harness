@@ -25,6 +25,7 @@ export type PlatformProvider = {
   commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null }>;
   mergeBranch(projectPath: string, branchName: string, message: string): Promise<CommandResult>;
   workingTreeStatus(projectPath: string): Promise<string>;
+  changedFiles(cwd: string): Promise<string[]>;
 };
 
 export type LlmProvider = {
@@ -203,6 +204,18 @@ function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => 
 
     async workingTreeStatus(projectPath) {
       return (await run("git", ["status", "--porcelain"], projectPath)).stdout;
+    },
+
+    async changedFiles(cwd) {
+      const status = await run("git", ["status", "--porcelain"], cwd);
+      return status.stdout
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter(Boolean)
+        .map((line) => {
+          const file = line.slice(3).trim();
+          return file.includes(" -> ") ? file.split(" -> ").pop()?.trim() || file : file;
+        });
     }
   };
 }

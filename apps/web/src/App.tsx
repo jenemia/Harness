@@ -1025,6 +1025,15 @@ function TaskRuns({ runs }: { runs: Run[] }) {
               </span>
               <span>{formatDate(run.startedAt)}</span>
             </div>
+            {run.changedFiles.length > 0 && (
+              <div className="changed-file-list">
+                {run.changedFiles.map((file) => (
+                  <span className="changed-file-row" key={file}>
+                    {file}
+                  </span>
+                ))}
+              </div>
+            )}
             {run.output && <pre>{run.output}</pre>}
             {run.error && <pre className="error-pre">{run.error}</pre>}
           </div>

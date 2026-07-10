@@ -139,6 +139,7 @@ export type RunRecord = {
   worktreePath: string | null;
   output: string | null;
   error: string | null;
+  changedFiles: string[];
   startedAt: string;
   completedAt: string | null;
 };

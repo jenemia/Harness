@@ -955,6 +955,26 @@ textarea {
   font-size: 12px;
 }
 
+.changed-file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.changed-file-row {
+  background: #f1f2f4;
+  border: 1px solid #dfe1e6;
+  border-radius: 4px;
+  color: #172b4d;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 3px 6px;
+}
+
 .run-detail pre,
 .timeline-row pre {
   background: #0c1f3a;

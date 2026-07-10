@@ -199,6 +199,7 @@ export function openProjectDb(projectPath: string) {
       worktree_path TEXT,
       output TEXT,
       error TEXT,
+      changed_files TEXT NOT NULL DEFAULT '[]',
       started_at TEXT NOT NULL,
       completed_at TEXT
     );
@@ -250,6 +251,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
+  ensureColumn(db, "runs", "changed_files", "TEXT NOT NULL DEFAULT '[]'");
   return db;
 }
 
@@ -707,6 +709,7 @@ export function mapRun(row: unknown): RunRecord {
     worktreePath: r.worktree_path ? String(r.worktree_path) : null,
     output: r.output ? String(r.output) : null,
     error: r.error ? String(r.error) : null,
+    changedFiles: JSON.parse(String(r.changed_files || "[]")) as string[],
     startedAt: String(r.started_at),
     completedAt: r.completed_at ? String(r.completed_at) : null
   };
