@@ -56,6 +56,9 @@ pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --
 pnpm cli providers:list
 pnpm cli templates:projects
 pnpm cli templates:workflows
+pnpm cli templates:agent-create --name "Docs Agent" --role writer --persona "Write concise project docs" --capabilities docs,writing
+pnpm cli templates:workflow-create --name "Build, Review, Docs" --stepsFile ./workflow.steps.json
+pnpm cli templates:project-create --name "Frontend Team" --agentsFile ./project-template-agents.json
 pnpm cli agents:create --project <projectId> --name "Frontend Agent" --role programmer --persona "Build polished React UI" --capabilities frontend,react --maxParallel 2
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
@@ -93,7 +96,9 @@ The provider catalog exposes the active OS platform provider, its shell/process/
 
 ## Project Templates
 
-Use the project create form or `/api/project-templates` to start a folder with a reusable team shape. Harness seeds software engineering, research, and content production project templates; each one creates the starter agents for that workflow.
+Use the project create form, `/api/project-templates`, or `templates:project-create` to start a folder with a reusable team shape. Harness seeds software engineering, research, and content production project templates; each one creates the starter agents for that workflow.
+
+Agent and workflow templates can also be managed headlessly with `templates:agent-create` and `templates:workflow-create`.
 
 ## Agents
 

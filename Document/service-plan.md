@@ -250,6 +250,8 @@ Initial implementation: global agent templates are stored in the app-wide Harnes
 
 Initial implementation: global project templates are also stored in the app-wide Harness database. The project create form can seed a new folder with a starter agent team such as software engineering, research, or content production, and `/api/project-templates` can create custom project templates.
 
+Initial implementation: agent, workflow, and project templates can also be created from the headless CLI, with workflow steps and project template agents supplied as inline JSON or JSON files.
+
 ### Parallel Agent Scheduling
 
 Harness should include a scheduler that can run multiple agent tasks at once while respecting dependencies, project limits, and human approval gates.
@@ -455,7 +457,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 

@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
+  createAgentTemplate,
+  createProjectTemplate,
+  createWorkflowTemplate,
   getGlobalSettings,
   getProject,
   getProjectOverview,
@@ -54,6 +57,9 @@ const commands: Record<string, CommandHandler> = {
   "templates:agents": listAgentTemplatesCommand,
   "templates:workflows": listWorkflowTemplatesCommand,
   "templates:projects": listProjectTemplatesCommand,
+  "templates:agent-create": createAgentTemplateCommand,
+  "templates:workflow-create": createWorkflowTemplateCommand,
+  "templates:project-create": createProjectTemplateCommand,
   "providers:list": listProvidersCommand,
   "agents:list": listAgentsCommand,
   "agents:create": createAgentCommand,
@@ -184,6 +190,42 @@ function listWorkflowTemplatesCommand() {
 
 function listProjectTemplatesCommand() {
   return { templates: listProjectTemplates() };
+}
+
+function createAgentTemplateCommand(args: string[]) {
+  const options = parseOptions(args);
+  const template = createAgentTemplate({
+    name: getRequiredOption(options, "name"),
+    role: options.role || "worker",
+    persona: readOptionalText(options, "persona", "personaFile") || "Perform assigned work carefully and report the result.",
+    modelBackend: options.modelBackend,
+    cliCommand: options.cliCommand || null,
+    capabilities: parseCsv(options.capabilities),
+    maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
+  });
+  return { template, templates: listAgentTemplates() };
+}
+
+function createWorkflowTemplateCommand(args: string[]) {
+  const options = parseOptions(args);
+  const steps = readRequiredJson(options, "steps", "stepsFile");
+  const template = createWorkflowTemplate({
+    name: getRequiredOption(options, "name"),
+    description: readOptionalText(options, "description", "descriptionFile") || "",
+    steps
+  });
+  return { template, templates: listWorkflowTemplates() };
+}
+
+function createProjectTemplateCommand(args: string[]) {
+  const options = parseOptions(args);
+  const agents = readRequiredJson(options, "agents", "agentsFile");
+  const template = createProjectTemplate({
+    name: getRequiredOption(options, "name"),
+    description: readOptionalText(options, "description", "descriptionFile") || "",
+    agents
+  });
+  return { template, templates: listProjectTemplates() };
 }
 
 function listProvidersCommand() {
@@ -997,6 +1039,11 @@ function readRequiredText(options: Record<string, string>, inlineKey: string, fi
   return value;
 }
 
+function readRequiredJson(options: Record<string, string>, inlineKey: string, fileKey: string) {
+  const value = readRequiredText(options, inlineKey, fileKey);
+  return JSON.parse(value);
+}
+
 function readOptionalJsonMap(options: Record<string, string>, inlineKey: string, fileKey: string) {
   const value = readOptionalText(options, inlineKey, fileKey);
   if (value === undefined) {
@@ -1103,6 +1150,9 @@ Usage:
   pnpm --filter @harness/server cli templates:agents
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects
+  pnpm --filter @harness/server cli templates:agent-create --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--maxParallel 2]
+  pnpm --filter @harness/server cli templates:workflow-create --name <text> (--steps <json>|--stepsFile <file>) [--description <text>|--descriptionFile <file>]
+  pnpm --filter @harness/server cli templates:project-create --name <text> (--agents <json>|--agentsFile <file>) [--description <text>|--descriptionFile <file>]
   pnpm --filter @harness/server cli providers:list
   pnpm --filter @harness/server cli agents:list --project <projectId>
   pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--maxParallel 2]
