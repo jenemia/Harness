@@ -14,6 +14,14 @@ export type ProjectRecord = {
   updatedAt: string;
 };
 
+export type GlobalSettings = {
+  defaultProjectRoot: string;
+  defaultModelBackend: string;
+  defaultAgentMaxParallel: number;
+  autoStartPlans: boolean;
+  updatedAt: string | null;
+};
+
 export type AgentRecord = {
   id: string;
   name: string;

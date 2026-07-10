@@ -15,6 +15,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Automatic PM-driven handoff with risk gates reserved for merge/destructive actions.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
+- Global settings for default project root, default LLM backend, default agent concurrency, and PM plan auto-start.
 
 LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
 
@@ -27,6 +28,10 @@ pnpm dev
 
 The server runs on `http://localhost:4000`.
 The web app runs on `http://localhost:5173`.
+
+## Settings
+
+Use the Settings panel or `/api/settings` to configure global defaults. These settings live in the global Harness data directory and are applied when creating new agents or planning new work.
 
 ## PM Planning
 

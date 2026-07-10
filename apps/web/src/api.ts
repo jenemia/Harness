@@ -14,6 +14,14 @@ export type Project = {
   updatedAt: string;
 };
 
+export type GlobalSettings = {
+  defaultProjectRoot: string;
+  defaultModelBackend: string;
+  defaultAgentMaxParallel: number;
+  autoStartPlans: boolean;
+  updatedAt: string | null;
+};
+
 export type Agent = {
   id: string;
   name: string;

@@ -19,6 +19,7 @@ import {
   UserRoundCog
 } from "lucide-react";
 import type { Agent, Event, Overview, PlanResult, Project, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
 const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
@@ -28,17 +29,20 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
+  const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
 
   async function loadProjects() {
-    const [data, providers] = await Promise.all([
+    const [data, providers, settingsResponse] = await Promise.all([
       api<{ projects: Project[] }>("/api/projects"),
-      api<ProviderCatalog>("/api/providers")
+      api<ProviderCatalog>("/api/providers"),
+      api<{ settings: GlobalSettings }>("/api/settings")
     ]);
     setProjects(data.projects);
     setProviderCatalog(providers);
+    setSettings(settingsResponse.settings);
     if (!selectedProjectId && data.projects[0]) {
       setSelectedProjectId(data.projects[0].id);
     }
@@ -133,6 +137,7 @@ export function App() {
         <ProjectPanel
           projects={projects}
           selectedProjectId={selectedProjectId}
+          settings={settings}
           onSelect={setSelectedProjectId}
           onCreated={async (project) => {
             await loadProjects();
@@ -201,12 +206,24 @@ export function App() {
             </section>
 
             <aside className="right-rail">
-              <PlanningPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
+              <PlanningPanel
+                overview={overview}
+                settings={settings}
+                runAction={runAction}
+                onChanged={() => loadOverview()}
+              />
               <AgentPanel
                 overview={overview}
                 providerCatalog={providerCatalog}
+                settings={settings}
                 runAction={runAction}
                 onChanged={() => loadOverview()}
+              />
+              <SettingsPanel
+                providerCatalog={providerCatalog}
+                settings={settings}
+                runAction={runAction}
+                onChanged={(next) => setSettings(next)}
               />
               <RunPanel overview={overview} />
               <EventPanel overview={overview} />
@@ -237,6 +254,7 @@ export function App() {
 
 function PlanningPanel(props: {
   overview: Overview;
+  settings: GlobalSettings | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -245,6 +263,12 @@ function PlanningPanel(props: {
   const [autoStart, setAutoStart] = useState(false);
   const [lastPlan, setLastPlan] = useState<PlanResult | null>(null);
   const [lastSchedule, setLastSchedule] = useState<ScheduleResult | null>(null);
+
+  useEffect(() => {
+    if (props.settings) {
+      setAutoStart(props.settings.autoStartPlans);
+    }
+  }, [props.settings?.autoStartPlans]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -301,6 +325,7 @@ function PlanningPanel(props: {
 function ProjectPanel(props: {
   projects: Project[];
   selectedProjectId: string;
+  settings: GlobalSettings | null;
   onSelect: (id: string) => void;
   onCreated: (project: Project) => Promise<void>;
   runAction: (action: () => Promise<void>) => Promise<void>;
@@ -342,7 +367,7 @@ function ProjectPanel(props: {
         <input
           value={projectPath}
           onChange={(event) => setProjectPath(event.target.value)}
-          placeholder="/path/to/project"
+          placeholder={props.settings ? `${props.settings.defaultProjectRoot}/my-project` : "/path/to/project"}
         />
         <button className="primary-button" type="submit">
           <Plus size={16} />
@@ -713,6 +738,7 @@ function formatDate(value: string) {
 function AgentPanel(props: {
   overview: Overview;
   providerCatalog: ProviderCatalog | null;
+  settings: GlobalSettings | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -723,6 +749,14 @@ function AgentPanel(props: {
   const [cliCommand, setCliCommand] = useState("");
   const [maxParallel, setMaxParallel] = useState(1);
   const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
+
+  useEffect(() => {
+    if (!props.settings) {
+      return;
+    }
+    setModelBackend(props.settings.defaultModelBackend);
+    setMaxParallel(props.settings.defaultAgentMaxParallel);
+  }, [props.settings?.defaultModelBackend, props.settings?.defaultAgentMaxParallel]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -801,6 +835,86 @@ function AgentPanel(props: {
         <button className="secondary-button" type="submit">
           <Plus size={16} />
           <span>Agent</span>
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function SettingsPanel(props: {
+  providerCatalog: ProviderCatalog | null;
+  settings: GlobalSettings | null;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: (settings: GlobalSettings) => void;
+}) {
+  const [defaultProjectRoot, setDefaultProjectRoot] = useState("");
+  const [defaultModelBackend, setDefaultModelBackend] = useState("mock");
+  const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
+  const [autoStartPlans, setAutoStartPlans] = useState(false);
+
+  useEffect(() => {
+    if (!props.settings) {
+      return;
+    }
+    setDefaultProjectRoot(props.settings.defaultProjectRoot);
+    setDefaultModelBackend(props.settings.defaultModelBackend);
+    setDefaultAgentMaxParallel(props.settings.defaultAgentMaxParallel);
+    setAutoStartPlans(props.settings.autoStartPlans);
+  }, [props.settings]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      const response = await api<{ settings: GlobalSettings }>("/api/settings", {
+        method: "PATCH",
+        body: JSON.stringify({
+          defaultProjectRoot,
+          defaultModelBackend,
+          defaultAgentMaxParallel,
+          autoStartPlans
+        })
+      });
+      props.onChanged(response.settings);
+    });
+  }
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <Settings size={17} />
+        <h2>Settings</h2>
+      </div>
+      <form className="stack-form" onSubmit={submit}>
+        <input
+          value={defaultProjectRoot}
+          onChange={(event) => setDefaultProjectRoot(event.target.value)}
+          placeholder="Default project root"
+        />
+        <select value={defaultModelBackend} onChange={(event) => setDefaultModelBackend(event.target.value)}>
+          {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => (
+            <option key={provider.id} value={provider.id}>
+              {provider.label}
+            </option>
+          ))}
+        </select>
+        <input
+          min={1}
+          max={8}
+          type="number"
+          value={defaultAgentMaxParallel}
+          onChange={(event) => setDefaultAgentMaxParallel(Math.max(1, Number(event.target.value || 1)))}
+        />
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={autoStartPlans}
+            onChange={(event) => setAutoStartPlans(event.target.checked)}
+          />
+          <span>Auto-start plans by default</span>
+        </label>
+        <button className="secondary-button" type="submit">
+          <Settings size={16} />
+          <span>Save</span>
         </button>
       </form>
     </section>

@@ -385,6 +385,8 @@ Global storage:
 - Global model/router settings
 - App update and telemetry preferences, if any
 
+Initial implementation: Harness stores global settings for default project root, default LLM backend, default agent concurrency, and PM plan auto-start behavior.
+
 Candidate paths:
 
 - Project-local: `<project>/.harness/`

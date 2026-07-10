@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import type {
   AgentRecord,
   EventRecord,
+  GlobalSettings,
   ProjectOverview,
   ProjectRecord,
   RunRecord,
@@ -43,8 +44,82 @@ export function openGlobalDb() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   return db;
+}
+
+export function defaultGlobalSettings(): GlobalSettings {
+  return {
+    defaultProjectRoot: path.join(homedir(), "Documents"),
+    defaultModelBackend: "mock",
+    defaultAgentMaxParallel: 1,
+    autoStartPlans: false,
+    updatedAt: null
+  };
+}
+
+export function getGlobalSettings(): GlobalSettings {
+  const db = openGlobalDb();
+  try {
+    const rows = db.prepare("SELECT key, value, updated_at FROM settings").all() as Array<{
+      key: string;
+      value: string;
+      updated_at: string;
+    }>;
+    const settings = defaultGlobalSettings();
+    let updatedAt: string | null = null;
+
+    for (const row of rows) {
+      if (!updatedAt || row.updated_at > updatedAt) {
+        updatedAt = row.updated_at;
+      }
+      if (row.key === "defaultProjectRoot") {
+        settings.defaultProjectRoot = row.value;
+      }
+      if (row.key === "defaultModelBackend") {
+        settings.defaultModelBackend = row.value;
+      }
+      if (row.key === "defaultAgentMaxParallel") {
+        settings.defaultAgentMaxParallel = Math.max(1, Number(row.value || 1));
+      }
+      if (row.key === "autoStartPlans") {
+        settings.autoStartPlans = row.value === "true";
+      }
+    }
+
+    return { ...settings, updatedAt };
+  } finally {
+    db.close();
+  }
+}
+
+export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSettings {
+  const current = getGlobalSettings();
+  const db = openGlobalDb();
+  try {
+    const next: GlobalSettings = {
+      defaultProjectRoot: input.defaultProjectRoot?.trim() || current.defaultProjectRoot,
+      defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
+      defaultAgentMaxParallel: Math.max(1, Number(input.defaultAgentMaxParallel || current.defaultAgentMaxParallel)),
+      autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
+      updatedAt: now()
+    };
+
+    const stmt = db.prepare("INSERT OR REPLACE INTO settings VALUES (?, ?, ?)");
+    stmt.run("defaultProjectRoot", next.defaultProjectRoot, next.updatedAt);
+    stmt.run("defaultModelBackend", next.defaultModelBackend, next.updatedAt);
+    stmt.run("defaultAgentMaxParallel", String(next.defaultAgentMaxParallel), next.updatedAt);
+    stmt.run("autoStartPlans", String(next.autoStartPlans), next.updatedAt);
+    return next;
+  } finally {
+    db.close();
+  }
 }
 
 export function projectHarnessDir(projectPath: string) {

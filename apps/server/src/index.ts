@@ -5,13 +5,15 @@ import path from "node:path";
 import {
   getProject,
   getProjectOverview,
+  getGlobalSettings,
   globalHarnessDir,
   insertEvent,
   listProjects,
   now,
   openProjectDb,
   registerProject,
-  seedDefaultAgents
+  seedDefaultAgents,
+  updateGlobalSettings
 } from "./db.js";
 import { createPlan } from "./planner.js";
 import { approveMerge, listRuntimeProviders, startReadyTasks, startTask } from "./runtime.js";
@@ -47,6 +49,17 @@ const server = http.createServer(async (req, res) => {
 
     if (route === "GET /api/providers") {
       sendJson(res, listRuntimeProviders());
+      return;
+    }
+
+    if (route === "GET /api/settings") {
+      sendJson(res, { settings: getGlobalSettings() });
+      return;
+    }
+
+    if (route === "PATCH /api/settings") {
+      const settings = updateGlobalSettings(await readBody(req));
+      sendJson(res, { settings });
       return;
     }
 
@@ -150,16 +163,17 @@ function createAgent(project: ProjectRecord, input: Partial<AgentRecord>) {
 
   const db = openProjectDb(project.path);
   try {
+    const settings = getGlobalSettings();
     const timestamp = now();
     const agent: AgentRecord = {
       id: randomUUID(),
       name: input.name.trim(),
       role: input.role?.trim() || "worker",
       persona: input.persona?.trim() || "Perform assigned work carefully and report the result.",
-      modelBackend: input.modelBackend?.trim() || "mock",
+      modelBackend: input.modelBackend?.trim() || settings.defaultModelBackend,
       cliCommand: input.cliCommand?.trim() || null,
       capabilities: Array.isArray(input.capabilities) ? input.capabilities : [],
-      maxParallel: Number(input.maxParallel || 1),
+      maxParallel: Number(input.maxParallel || settings.defaultAgentMaxParallel),
       status: "idle",
       currentTaskId: null,
       createdAt: timestamp,
