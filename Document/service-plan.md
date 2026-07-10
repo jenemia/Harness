@@ -248,7 +248,7 @@ Initial implementation: tasks can optionally override the agent's model backend.
 
 Every agent action should be auditable. Users should be able to answer: who did what, when, why, and with which model.
 
-Initial implementation: every run stores the assigned agent, effective model backend, provider id, command preview when applicable, worktree path, branch, snapshot ref, changed files, output, error, and timestamps. Task detail and timeline views expose this audit trail.
+Initial implementation: every run stores the assigned agent, effective model backend, provider id, command preview when applicable, workspace path, branch when present, snapshot ref, changed files, output, error, and timestamps. Task detail and timeline views expose this audit trail.
 
 Initial implementation: run audit trails can also be inspected from the headless CLI with status/task/agent/provider/model filters and run-scoped detail output.
 
@@ -256,7 +256,7 @@ Initial implementation: run audit trails can also be inspected from the headless
 
 Before an agent starts risky work, Harness can create a lightweight snapshot such as a Git branch, stash, patch file, or checkpoint record.
 
-Initial implementation: every run records the task worktree's starting Git `HEAD` as a snapshot reference before the agent provider executes, and the task detail run list displays the short snapshot SHA.
+Initial implementation: every run records a starting snapshot reference before the agent provider executes. Git worktree tasks store the starting Git `HEAD`; Harness workspace tasks store a synthetic `harness:` snapshot. The task detail run list displays the short snapshot reference.
 
 ### Templates
 
@@ -425,7 +425,7 @@ LLM providers should receive a generated prompt file and normalized environment 
 
 Initial implementation: provider command defaults can be configured globally and per project. Agent-specific CLI commands override project provider commands, and project provider commands inherit from global defaults.
 
-Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a workspace provider that owns task worktree/workspace creation, snapshotting, changed-file collection, commits, and merge operations. The first provider supports both Git worktrees and Harness-managed non-Git workspaces, selected by each task's `workspaceMode` or inferred automatically at task creation. Runtime approval behavior is selected through a `local-human` approval provider that owns command approval policy, decision messages, and rejection reasons while the project database stores the approval records. Runtime policy behavior is selected through a `local-agent-policy` provider that blocks command-backed LLM providers unless the assigned agent allows `shell`, `llm-cli`, the provider kind, or the provider id, and forces approval for risky shell command patterns even when project command approvals are disabled. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, approval provider capabilities, policy provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
+Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a workspace provider that owns task worktree/workspace creation, snapshotting, changed-file collection, commits, and merge operations. The first provider supports both Git worktrees and Harness-managed non-Git workspaces, selected by each task's `workspaceMode` or inferred automatically at task creation. LLM providers receive mode-aware workspace context through `HARNESS_WORKSPACE_KIND`, `HARNESS_WORKSPACE_MODE`, `HARNESS_WORKSPACE_PATH`, and a compatibility `HARNESS_WORKTREE_PATH`. Runtime approval behavior is selected through a `local-human` approval provider that owns command approval policy, decision messages, and rejection reasons while the project database stores the approval records. Runtime policy behavior is selected through a `local-agent-policy` provider that blocks command-backed LLM providers unless the assigned agent allows `shell`, `llm-cli`, the provider kind, or the provider id, and forces approval for risky shell command patterns even when project command approvals are disabled. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, approval provider capabilities, policy provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
 
 ### Database
 

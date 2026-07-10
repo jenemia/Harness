@@ -34,7 +34,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Task-level model backend overrides for routing specific work to a different provider.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
 
-LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
+LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, `HARNESS_WORKSPACE_KIND`, `HARNESS_WORKSPACE_PATH`, and the backward-compatible `HARNESS_WORKTREE_PATH`.
 
 Global memory is written to `.harness/global-memory.md` and exposed as `HARNESS_GLOBAL_MEMORY` and `HARNESS_GLOBAL_MEMORY_FILE`. Project memory is written to `.harness/project-memory.md` and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 

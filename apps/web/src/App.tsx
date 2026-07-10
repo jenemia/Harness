@@ -1603,7 +1603,7 @@ function TaskDetailDrawer(props: {
           <h3>Workspace</h3>
           <div className="path-list">
             <PathLine icon={<GitBranch size={14} />} value={props.task.branchName || "No branch yet"} />
-            <PathLine icon={<FolderOpen size={14} />} value={props.task.worktreePath || "No worktree yet"} />
+            <PathLine icon={<FolderOpen size={14} />} value={props.task.worktreePath || "No workspace yet"} />
           </div>
           {props.task.blockedReason && (
             <div className="drawer-warning">

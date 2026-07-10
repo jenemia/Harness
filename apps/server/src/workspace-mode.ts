@@ -25,7 +25,6 @@ const codeSignals = [
   "test",
   "tests",
   "git",
-  "shell",
   "worktree",
   "build",
   "deploy"

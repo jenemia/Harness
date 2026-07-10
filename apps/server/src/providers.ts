@@ -233,25 +233,25 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
     createCliLlmProvider(platformProvider, {
       id: "codex",
       label: "Codex CLI",
-      description: "Runs a user-configured Codex CLI command inside the task worktree.",
+      description: "Runs a user-configured Codex CLI command inside the task workspace.",
       commandExample: "codex exec \"$HARNESS_PROMPT_FILE\""
     }),
     createCliLlmProvider(platformProvider, {
       id: "claude",
       label: "Claude Code CLI",
-      description: "Runs a user-configured Claude Code CLI command inside the task worktree.",
+      description: "Runs a user-configured Claude Code CLI command inside the task workspace.",
       commandExample: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\""
     }),
     createCliLlmProvider(platformProvider, {
       id: "gemini",
       label: "Gemini CLI",
-      description: "Runs a user-configured Gemini CLI command inside the task worktree.",
+      description: "Runs a user-configured Gemini CLI command inside the task workspace.",
       commandExample: "gemini -p \"$(cat $HARNESS_PROMPT_FILE)\""
     }),
     createCliLlmProvider(platformProvider, {
       id: "ollama",
       label: "Ollama",
-      description: "Runs a user-configured Ollama command inside the task worktree.",
+      description: "Runs a user-configured Ollama command inside the task workspace.",
       commandExample: "ollama run llama3.1 \"$(cat $HARNESS_PROMPT_FILE)\""
     }),
     createCliLlmProvider(platformProvider, {
@@ -895,6 +895,9 @@ function buildLlmEnvironment(
     HARNESS_TASK_DESCRIPTION: task.description,
     HARNESS_ACCEPTANCE_CRITERIA: task.acceptanceCriteria,
     HARNESS_BRANCH_NAME: workspace.branchName || "",
+    HARNESS_WORKSPACE_KIND: workspace.kind,
+    HARNESS_WORKSPACE_MODE: task.workspaceMode,
+    HARNESS_WORKSPACE_PATH: workspace.worktreePath,
     HARNESS_WORKTREE_PATH: workspace.worktreePath
   };
 }
@@ -913,6 +916,10 @@ function writePromptFiles(
   const projectMemoryFile = path.join(promptDir, "project-memory.md");
   const globalMemoryText = formatMemory(context?.globalMemory || []);
   const projectMemoryText = formatMemory(context?.projectMemory || []);
+  const workspaceInstruction =
+    workspace.kind === "git-worktree"
+      ? "Work only inside this task Git worktree. Report changed files, verification performed, and any blockers."
+      : "Work only inside this Harness-managed workspace. Do not assume a Git branch or merge step exists. Report produced artifacts, verification performed, and any blockers.";
   writeFileSync(globalMemoryFile, globalMemoryText, "utf8");
   writeFileSync(projectMemoryFile, projectMemoryText, "utf8");
   const prompt = [
@@ -947,10 +954,12 @@ function writePromptFiles(
     projectMemoryText,
     ``,
     `## Workspace`,
+    `Kind: ${workspace.kind}`,
+    `Mode: ${task.workspaceMode}`,
     `Branch: ${workspace.branchName || "none"}`,
     `Path: ${workspace.worktreePath}`,
     ``,
-    `Work only inside this task worktree. Report changed files, verification performed, and any blockers.`
+    workspaceInstruction
   ].join("\n");
   writeFileSync(promptFile, prompt, "utf8");
   return { promptFile, globalMemoryFile, projectMemoryFile, globalMemoryText, projectMemoryText };
