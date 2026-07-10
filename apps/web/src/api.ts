@@ -89,6 +89,25 @@ export type WorkflowTemplate = {
   updatedAt: string;
 };
 
+export type ProjectTemplateAgent = {
+  name: string;
+  role: string;
+  persona: string;
+  modelBackend: string;
+  cliCommand: string | null;
+  capabilities: string[];
+  maxParallel: number;
+};
+
+export type ProjectTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  agents: ProjectTemplateAgent[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Task = {
   id: string;
   title: string;

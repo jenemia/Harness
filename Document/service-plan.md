@@ -240,6 +240,8 @@ Examples:
 
 Initial implementation: global agent templates are stored in the app-wide Harness database. The agent panel can apply templates to the create form and save the current form as a reusable template; PM, programmer, and review templates are seeded by default.
 
+Initial implementation: global project templates are also stored in the app-wide Harness database. The project create form can seed a new folder with a starter agent team such as software engineering, research, or content production, and `/api/project-templates` can create custom project templates.
+
 ### Parallel Agent Scheduling
 
 Harness should include a scheduler that can run multiple agent tasks at once while respecting dependencies, project limits, and human approval gates.

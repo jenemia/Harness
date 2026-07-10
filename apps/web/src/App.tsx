@@ -22,7 +22,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -35,23 +35,26 @@ export function App() {
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
+  const [projectTemplates, setProjectTemplates] = useState<ProjectTemplate[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
 
   async function loadProjects() {
-    const [data, providers, templatesResponse, workflowTemplatesResponse, settingsResponse] = await Promise.all([
+    const [data, providers, templatesResponse, workflowTemplatesResponse, projectTemplatesResponse, settingsResponse] = await Promise.all([
       api<{ projects: ProjectListItem[] }>("/api/projects"),
       api<ProviderCatalog>("/api/providers"),
       api<{ templates: AgentTemplate[] }>("/api/agent-templates"),
       api<{ templates: WorkflowTemplate[] }>("/api/workflow-templates"),
+      api<{ templates: ProjectTemplate[] }>("/api/project-templates"),
       api<{ settings: GlobalSettings }>("/api/settings")
     ]);
     setProjects(data.projects);
     setProviderCatalog(providers);
     setAgentTemplates(templatesResponse.templates);
     setWorkflowTemplates(workflowTemplatesResponse.templates);
+    setProjectTemplates(projectTemplatesResponse.templates);
     setSettings(settingsResponse.settings);
     if (!selectedProjectId && data.projects[0]) {
       setSelectedProjectId(data.projects[0].id);
@@ -148,6 +151,7 @@ export function App() {
           projects={projects}
           selectedProjectId={selectedProjectId}
           settings={settings}
+          projectTemplates={projectTemplates}
           onSelect={setSelectedProjectId}
           onCreated={async (project) => {
             await loadProjects();
@@ -417,20 +421,27 @@ function ProjectPanel(props: {
   projects: ProjectListItem[];
   selectedProjectId: string;
   settings: GlobalSettings | null;
+  projectTemplates: ProjectTemplate[];
   onSelect: (id: string) => void;
   onCreated: (project: Project) => Promise<void>;
   runAction: (action: () => Promise<void>) => Promise<void>;
 }) {
   const [projectPath, setProjectPath] = useState("");
+  const [projectTemplateId, setProjectTemplateId] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
       const data = await api<{ project: Project }>("/api/projects", {
         method: "POST",
-        body: JSON.stringify({ path: projectPath, seedDefaults: true })
+        body: JSON.stringify({
+          path: projectPath,
+          seedDefaults: true,
+          projectTemplateId: projectTemplateId || undefined
+        })
       });
       setProjectPath("");
+      setProjectTemplateId("");
       await props.onCreated(data.project);
     });
   }
@@ -461,6 +472,14 @@ function ProjectPanel(props: {
           onChange={(event) => setProjectPath(event.target.value)}
           placeholder={props.settings ? `${props.settings.defaultProjectRoot}/my-project` : "/path/to/project"}
         />
+        <select value={projectTemplateId} onChange={(event) => setProjectTemplateId(event.target.value)}>
+          <option value="">Default agent team</option>
+          {props.projectTemplates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name} ({template.agents.length} agents)
+            </option>
+          ))}
+        </select>
         <button className="primary-button" type="submit">
           <Plus size={16} />
           <span>Add</span>

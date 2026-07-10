@@ -6,6 +6,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 
 - Local project registry with project-local `.harness/` storage.
 - Project sidebar summaries for task, blocker, approval, running, and merge counts across local folders.
+- Project templates for seeding new folders with a useful starter agent team.
 - Jira-like Kanban board.
 - Jira-like task detail drawer with editable metadata, labels, parent/subtask links, dependencies, runs, changed files, timeline, worktree, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.
@@ -60,6 +61,10 @@ Each project also has project-local settings stored inside `<project>/.harness/h
 Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`; roles without a matching rule move to Done after successful completion.
+
+## Project Templates
+
+Use the project create form or `/api/project-templates` to start a folder with a reusable team shape. Harness seeds software engineering, research, and content production project templates; each one creates the starter agents for that workflow.
 
 ## PM Planning
 

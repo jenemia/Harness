@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import {
   createAgentTemplate,
+  createProjectTemplate,
   createWorkflowTemplate,
   getProject,
   getProjectOverview,
@@ -12,6 +13,7 @@ import {
   globalHarnessDir,
   insertEvent,
   listAgentTemplates,
+  listProjectTemplates,
   listProjects,
   listProjectsWithSummaries,
   listWorkflowTemplates,
@@ -25,6 +27,7 @@ import {
   openProjectDb,
   registerProject,
   seedDefaultAgents,
+  seedProjectFromTemplate,
   updateGlobalSettings,
   updateProjectSettings
 } from "./db.js";
@@ -39,7 +42,15 @@ import {
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
-import type { AgentRecord, AgentTemplateRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
+import type {
+  AgentRecord,
+  AgentTemplateRecord,
+  ProjectRecord,
+  ProjectTemplateRecord,
+  TaskRecord,
+  TaskStatus,
+  WorkflowTemplateRecord
+} from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
 
@@ -96,6 +107,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (route === "GET /api/project-templates") {
+      sendJson(res, { templates: listProjectTemplates() });
+      return;
+    }
+
+    if (route === "POST /api/project-templates") {
+      const template = createProjectTemplate(await readBody<Partial<ProjectTemplateRecord>>(req));
+      sendJson(res, { template, templates: listProjectTemplates() }, 201);
+      return;
+    }
+
     if (route === "GET /api/settings") {
       sendJson(res, { settings: getGlobalSettings() });
       return;
@@ -108,7 +130,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === "POST /api/projects") {
-      const body = await readBody<{ path?: string; name?: string; seedDefaults?: boolean }>(req);
+      const body = await readBody<{
+        path?: string;
+        name?: string;
+        seedDefaults?: boolean;
+        projectTemplateId?: string;
+      }>(req);
       if (!body.path) {
         sendError(res, 400, "Project path is required.");
         return;
@@ -117,7 +144,9 @@ const server = http.createServer(async (req, res) => {
       const projectPath = path.resolve(body.path);
       mkdirSync(projectPath, { recursive: true });
       const project = registerProject(projectPath, body.name?.trim() || path.basename(projectPath));
-      if (body.seedDefaults !== false) {
+      if (body.projectTemplateId) {
+        seedProjectFromTemplate(project.path, body.projectTemplateId);
+      } else if (body.seedDefaults !== false) {
         seedDefaultAgents(project.path);
       }
       sendJson(res, { project, overview: getProjectOverview(project) }, 201);

@@ -17,6 +17,8 @@ import type {
   ProjectOverview,
   ProjectRecord,
   ProjectSettings,
+  ProjectTemplateAgent,
+  ProjectTemplateRecord,
   RunRecord,
   TaskRecord,
   TaskStatus,
@@ -82,9 +84,19 @@ export function openGlobalDb() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS project_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      agents TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   seedDefaultAgentTemplates(db);
   seedDefaultWorkflowTemplates(db);
+  seedDefaultProjectTemplates(db);
   return db;
 }
 
@@ -215,6 +227,146 @@ function seedDefaultWorkflowTemplates(db: DatabaseSync) {
       template.name,
       template.description,
       JSON.stringify(template.steps),
+      timestamp,
+      timestamp
+    );
+  }
+}
+
+function seedDefaultProjectTemplates(db: DatabaseSync) {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM project_templates").get() as { count: number };
+  if (count.count > 0) {
+    return;
+  }
+
+  const timestamp = now();
+  const templates: Array<{
+    name: string;
+    description: string;
+    agents: ProjectTemplateAgent[];
+  }> = [
+    {
+      name: "Software Engineering Team",
+      description: "PM, programmer, and reviewer agents for local code projects.",
+      agents: [
+        {
+          name: "PM Agent",
+          role: "project-manager",
+          persona: "Decompose work, choose the next best agent, track blockers, and keep the Kanban board honest.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["planning", "assignment", "handoff"],
+          maxParallel: 1
+        },
+        {
+          name: "Programmer Agent",
+          role: "programmer",
+          persona: "Implement scoped engineering tasks inside the task worktree and report the result clearly.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["implementation", "debugging"],
+          maxParallel: 2
+        },
+        {
+          name: "Review Agent",
+          role: "reviewer",
+          persona: "Review completed work for correctness, risk, and missing verification before the task is done.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["review", "quality"],
+          maxParallel: 1
+        }
+      ]
+    },
+    {
+      name: "Research Team",
+      description: "Research, analysis, and writing agents for knowledge work projects.",
+      agents: [
+        {
+          name: "Research PM",
+          role: "project-manager",
+          persona: "Break research goals into evidence-gathering, synthesis, and writing tasks while tracking assumptions.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["planning", "research-management"],
+          maxParallel: 1
+        },
+        {
+          name: "Research Agent",
+          role: "researcher",
+          persona: "Collect sources, extract facts, and record uncertainty clearly for the rest of the team.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["research", "source-review"],
+          maxParallel: 2
+        },
+        {
+          name: "Analyst Agent",
+          role: "analyst",
+          persona: "Synthesize research into structured findings, tradeoffs, and recommended next steps.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["analysis", "synthesis"],
+          maxParallel: 1
+        },
+        {
+          name: "Writer Agent",
+          role: "writer",
+          persona: "Turn validated findings into clear project documents and stakeholder-ready summaries.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["writing", "documentation"],
+          maxParallel: 1
+        }
+      ]
+    },
+    {
+      name: "Content Production Team",
+      description: "Planning, drafting, editing, and QA agents for content workflows.",
+      agents: [
+        {
+          name: "Content PM",
+          role: "project-manager",
+          persona: "Plan content production, sequence drafts and reviews, and keep publication blockers visible.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["planning", "content-strategy"],
+          maxParallel: 1
+        },
+        {
+          name: "Drafting Agent",
+          role: "writer",
+          persona: "Create clear first drafts that match the brief, audience, and acceptance criteria.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["drafting", "writing"],
+          maxParallel: 2
+        },
+        {
+          name: "Editor Agent",
+          role: "reviewer",
+          persona: "Edit for accuracy, tone, structure, and publication readiness.",
+          modelBackend: "mock",
+          cliCommand: null,
+          capabilities: ["editing", "quality"],
+          maxParallel: 1
+        }
+      ]
+    }
+  ];
+
+  const stmt = db.prepare(`
+    INSERT INTO project_templates (
+      id, name, description, agents, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const template of templates) {
+    stmt.run(
+      randomUUID(),
+      template.name,
+      template.description,
+      JSON.stringify(template.agents),
       timestamp,
       timestamp
     );
@@ -410,6 +562,118 @@ export function createWorkflowTemplate(input: Partial<WorkflowTemplateRecord>): 
   }
 }
 
+export function listProjectTemplates(): ProjectTemplateRecord[] {
+  const db = openGlobalDb();
+  try {
+    return db.prepare("SELECT * FROM project_templates ORDER BY updated_at DESC").all().map(mapProjectTemplate);
+  } finally {
+    db.close();
+  }
+}
+
+export function getProjectTemplate(templateId: string): ProjectTemplateRecord | null {
+  const db = openGlobalDb();
+  try {
+    const row = db.prepare("SELECT * FROM project_templates WHERE id = ?").get(templateId);
+    return row ? mapProjectTemplate(row) : null;
+  } finally {
+    db.close();
+  }
+}
+
+export function createProjectTemplate(input: Partial<ProjectTemplateRecord>): ProjectTemplateRecord {
+  if (!input.name?.trim()) {
+    throw new Error("Project template name is required.");
+  }
+
+  const agents = normalizeProjectTemplateAgents(input.agents);
+  if (agents.length === 0) {
+    throw new Error("Project template needs at least one agent.");
+  }
+
+  const timestamp = now();
+  const template: ProjectTemplateRecord = {
+    id: randomUUID(),
+    name: input.name.trim(),
+    description: input.description?.trim() || "",
+    agents,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  const db = openGlobalDb();
+  try {
+    db.prepare(`
+      INSERT INTO project_templates (
+        id, name, description, agents, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      template.id,
+      template.name,
+      template.description,
+      JSON.stringify(template.agents),
+      template.createdAt,
+      template.updatedAt
+    );
+
+    return template;
+  } finally {
+    db.close();
+  }
+}
+
+export function seedProjectFromTemplate(projectPath: string, templateId: string): ProjectTemplateRecord {
+  const template = getProjectTemplate(templateId);
+  if (!template) {
+    throw new Error("Project template not found.");
+  }
+
+  const db = openProjectDb(projectPath);
+  try {
+    const count = db.prepare("SELECT COUNT(*) AS count FROM agents").get() as { count: number };
+    if (count.count > 0) {
+      return template;
+    }
+
+    const timestamp = now();
+    const stmt = db.prepare(`
+      INSERT INTO agents (
+        id, name, role, persona, model_backend, cli_command, capabilities,
+        max_parallel, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const agent of template.agents) {
+      stmt.run(
+        randomUUID(),
+        agent.name,
+        agent.role,
+        agent.persona,
+        agent.modelBackend,
+        agent.cliCommand,
+        JSON.stringify(agent.capabilities),
+        agent.maxParallel,
+        "idle",
+        null,
+        timestamp,
+        timestamp
+      );
+    }
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "project.template.applied",
+      message: `${template.name} project template created ${template.agents.length} agent(s).`,
+      metadata: { projectTemplateId: template.id, agentRoles: template.agents.map((agent) => agent.role) }
+    });
+
+    return template;
+  } finally {
+    db.close();
+  }
+}
+
 function normalizeWorkflowSteps(input: unknown): WorkflowTemplateStep[] {
   if (!Array.isArray(input)) {
     return [];
@@ -426,6 +690,29 @@ function normalizeWorkflowSteps(input: unknown): WorkflowTemplateStep[] {
       };
     })
     .filter((step) => step.titleTemplate);
+}
+
+function normalizeProjectTemplateAgents(input: unknown): ProjectTemplateAgent[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .map((agent) => {
+      const value = agent as Partial<ProjectTemplateAgent>;
+      return {
+        name: value.name?.trim() || "",
+        role: value.role?.trim() || "worker",
+        persona: value.persona?.trim() || "Perform assigned work carefully and report the result.",
+        modelBackend: value.modelBackend?.trim() || "mock",
+        cliCommand: value.cliCommand?.trim() || null,
+        capabilities: Array.isArray(value.capabilities)
+          ? value.capabilities.map((capability) => capability.trim()).filter(Boolean)
+          : [],
+        maxParallel: Math.max(1, Number(value.maxParallel || 1))
+      };
+    })
+    .filter((agent) => agent.name);
 }
 
 export function projectHarnessDir(projectPath: string) {
@@ -942,6 +1229,18 @@ export function mapWorkflowTemplate(row: unknown): WorkflowTemplateRecord {
     name: String(r.name),
     description: String(r.description),
     steps: normalizeWorkflowSteps(JSON.parse(String(r.steps || "[]"))),
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapProjectTemplate(row: unknown): ProjectTemplateRecord {
+  const r = row as Record<string, string>;
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    description: String(r.description),
+    agents: normalizeProjectTemplateAgents(JSON.parse(String(r.agents || "[]"))),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };
