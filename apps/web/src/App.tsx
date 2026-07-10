@@ -1,8 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   Activity,
   Bot,
   CheckCircle2,
+  Clock3,
   Columns3,
   FolderOpen,
   GitBranch,
@@ -13,9 +15,10 @@ import {
   RefreshCcw,
   Sparkles,
   Settings,
+  X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Overview, PlanResult, Project, ProviderCatalog, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, Event, Overview, PlanResult, Project, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import { api } from "./api";
 
 const columns: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Blocked", "Done"];
@@ -25,6 +28,7 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
 
@@ -92,6 +96,9 @@ export function App() {
   const agentsById = useMemo(() => {
     return new Map((overview?.agents || []).map((agent) => [agent.id, agent]));
   }, [overview]);
+  const selectedTask = useMemo(() => {
+    return overview?.tasks.find((task) => task.id === selectedTaskId) || null;
+  }, [overview, selectedTaskId]);
 
   return (
     <div className="app-shell">
@@ -182,6 +189,7 @@ export function App() {
                             agents={overview.agents}
                             assignee={task.assigneeAgentId ? agentsById.get(task.assigneeAgentId) : null}
                             projectId={overview.project.id}
+                            onOpen={() => setSelectedTaskId(task.id)}
                             runAction={runAction}
                             onChanged={() => loadOverview()}
                           />
@@ -212,6 +220,16 @@ export function App() {
         )}
 
         {isBusy && <div className="busy-line">Working...</div>}
+        {overview && selectedTask && (
+          <TaskDetailDrawer
+            overview={overview}
+            task={selectedTask}
+            assignee={selectedTask.assigneeAgentId ? agentsById.get(selectedTask.assigneeAgentId) : null}
+            onClose={() => setSelectedTaskId("")}
+            runAction={runAction}
+            onChanged={() => loadOverview()}
+          />
+        )}
       </main>
     </div>
   );
@@ -395,6 +413,7 @@ function TaskCard(props: {
   agents: Agent[];
   assignee: Agent | null | undefined;
   projectId: string;
+  onOpen: () => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -428,7 +447,9 @@ function TaskCard(props: {
         <span className="issue-key">{props.task.id.slice(0, 8)}</span>
         <span className="priority-pill">{props.task.priority}</span>
       </div>
-      <h3>{props.task.title}</h3>
+      <button className="task-title-button" type="button" onClick={props.onOpen}>
+        {props.task.title}
+      </button>
       {props.task.description && <p>{props.task.description}</p>}
       <div className="task-meta">
         <span className={`agent-chip ${props.assignee?.status || "idle"}`}>
@@ -480,6 +501,213 @@ function TaskCard(props: {
       </div>
     </article>
   );
+}
+
+function TaskDetailDrawer(props: {
+  overview: Overview;
+  task: Task;
+  assignee: Agent | null | undefined;
+  onClose: () => void;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const runs = props.overview.runs.filter((run) => run.taskId === props.task.id);
+  const events = props.overview.events.filter((event) => event.taskId === props.task.id);
+  const dependencies = props.task.dependencyTaskIds
+    .map((id) => props.overview.tasks.find((task) => task.id === id))
+    .filter(Boolean) as Task[];
+
+  async function start() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/start`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
+  async function merge() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/merge`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
+  return (
+    <div className="drawer-backdrop" role="presentation" onClick={props.onClose}>
+      <aside className="task-drawer" aria-label="Task detail" onClick={(event) => event.stopPropagation()}>
+        <header className="drawer-header">
+          <div>
+            <span className="issue-key">{props.task.id.slice(0, 8)}</span>
+            <h2>{props.task.title}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={props.onClose}>
+            <X size={18} />
+          </button>
+        </header>
+
+        <div className="drawer-actions">
+          <button className="secondary-button" type="button" onClick={() => void start()}>
+            <Play size={16} />
+            <span>Start</span>
+          </button>
+          {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
+            <button className="merge-button inline" type="button" onClick={() => void merge()}>
+              <GitMerge size={16} />
+              <span>Merge</span>
+            </button>
+          )}
+        </div>
+
+        <section className="drawer-section">
+          <h3>Details</h3>
+          <div className="detail-grid">
+            <DetailItem label="Status" value={props.task.status} />
+            <DetailItem label="Priority" value={props.task.priority} />
+            <DetailItem label="Assignee" value={props.assignee?.name || "Unassigned"} />
+            <DetailItem label="Backend" value={props.assignee?.modelBackend || "-"} />
+            <DetailItem label="Merge" value={props.task.mergeStatus} />
+            <DetailItem label="Reporter" value={props.task.reporter} />
+          </div>
+        </section>
+
+        <section className="drawer-section">
+          <h3>Description</h3>
+          <p className="drawer-copy">{props.task.description || "No description."}</p>
+        </section>
+
+        <section className="drawer-section">
+          <h3>Acceptance Criteria</h3>
+          <p className="drawer-copy">{props.task.acceptanceCriteria || "No acceptance criteria."}</p>
+        </section>
+
+        <section className="drawer-section">
+          <h3>Workspace</h3>
+          <div className="path-list">
+            <PathLine icon={<GitBranch size={14} />} value={props.task.branchName || "No branch yet"} />
+            <PathLine icon={<FolderOpen size={14} />} value={props.task.worktreePath || "No worktree yet"} />
+          </div>
+          {props.task.blockedReason && (
+            <div className="drawer-warning">
+              <AlertTriangle size={15} />
+              <span>{props.task.blockedReason}</span>
+            </div>
+          )}
+          {props.task.mergeError && (
+            <div className="drawer-warning">
+              <AlertTriangle size={15} />
+              <span>{props.task.mergeError}</span>
+            </div>
+          )}
+        </section>
+
+        {dependencies.length > 0 && (
+          <section className="drawer-section">
+            <h3>Dependencies</h3>
+            <div className="dependency-list">
+              {dependencies.map((dependency) => (
+                <div className="dependency-row" key={dependency.id}>
+                  <span>{dependency.title}</span>
+                  <b>{dependency.status}</b>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <TaskRuns runs={runs} />
+        <TaskTimeline events={events} runs={runs} />
+      </aside>
+    </div>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-item">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function PathLine({ icon, value }: { icon: ReactNode; value: string }) {
+  return (
+    <div className="path-line-row">
+      {icon}
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function TaskRuns({ runs }: { runs: Run[] }) {
+  return (
+    <section className="drawer-section">
+      <h3>Runs</h3>
+      <div className="run-list">
+        {runs.length === 0 && <p className="drawer-copy">No runs yet.</p>}
+        {runs.map((run) => (
+          <div className="run-detail" key={run.id}>
+            <div className="run-detail-top">
+              <span className={`run-state ${run.status}`}>
+                {run.status === "completed" ? <CheckCircle2 size={14} /> : <Activity size={14} />}
+                {run.status}
+              </span>
+              <span>{formatDate(run.startedAt)}</span>
+            </div>
+            {run.output && <pre>{run.output}</pre>}
+            {run.error && <pre className="error-pre">{run.error}</pre>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {
+  const items = [
+    ...events.map((event) => ({
+      id: event.id,
+      at: event.createdAt,
+      type: event.type,
+      message: event.message,
+      detail: JSON.stringify(event.metadata, null, 2)
+    })),
+    ...runs.map((run) => ({
+      id: run.id,
+      at: run.completedAt || run.startedAt,
+      type: `run.${run.status}`,
+      message: run.branchName || run.id.slice(0, 8),
+      detail: run.error || ""
+    }))
+  ].sort((a, b) => b.at.localeCompare(a.at));
+
+  return (
+    <section className="drawer-section">
+      <h3>Timeline</h3>
+      <div className="timeline-list">
+        {items.length === 0 && <p className="drawer-copy">No timeline entries yet.</p>}
+        {items.map((item) => (
+          <div className="timeline-row" key={`${item.type}-${item.id}`}>
+            <Clock3 size={14} />
+            <div>
+              <strong>{item.type}</strong>
+              <span>{item.message}</span>
+              <small>{formatDate(item.at)}</small>
+              {item.detail && item.detail !== "{}" && <pre>{item.detail}</pre>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
 }
 
 function AgentPanel(props: {

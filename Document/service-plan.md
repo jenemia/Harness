@@ -447,6 +447,8 @@ The task detail view should include:
 - Comments
 - Human approval prompts
 
+Initial implementation: board cards can open a task detail drawer showing metadata, dependencies, branch/worktree, merge state, task-scoped runs, run output/errors, and an activity timeline.
+
 ### Agent Directory
 
 The agent directory should include:
