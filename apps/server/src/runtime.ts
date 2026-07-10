@@ -173,7 +173,9 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
         message: `PM Agent handed the task from ${completedBy.name} to ${reviewer.name}.`,
         metadata: { fromAgentId: completedBy.id, toAgentId: reviewer.id }
       });
-      await startTask(project, task.id);
+      setTimeout(() => {
+        void startTask(project, task.id);
+      }, 0);
       return;
     }
   }
