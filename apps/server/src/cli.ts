@@ -1,12 +1,18 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   getProject,
   getProjectOverview,
+  listAgentTemplates,
+  listProjectTemplates,
   listProjectsWithSummaries,
+  listWorkflowTemplates,
   registerProject,
-  seedDefaultAgents
+  seedDefaultAgents,
+  seedProjectFromTemplate
 } from "./db.js";
+import { createPlan, type PlanningMode } from "./planner.js";
 import { startReadyTasks, startTask } from "./runtime.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
@@ -15,6 +21,10 @@ const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
   "projects:register": registerProjectCommand,
   "projects:overview": overviewCommand,
+  "templates:agents": listAgentTemplatesCommand,
+  "templates:workflows": listWorkflowTemplatesCommand,
+  "templates:projects": listProjectTemplatesCommand,
+  "plans:create": createPlanCommand,
   "tasks:start": startTaskCommand,
   "tasks:schedule": scheduleCommand
 };
@@ -47,7 +57,9 @@ function registerProjectCommand(args: string[]) {
   const name = options.name || path.basename(projectPath);
   const seedDefaults = options.seedDefaults !== "false";
   const project = registerProject(path.resolve(projectPath), name);
-  if (seedDefaults) {
+  if (options.projectTemplate) {
+    seedProjectFromTemplate(project.path, options.projectTemplate);
+  } else if (seedDefaults) {
     seedDefaultAgents(project.path);
   }
   return { project, overview: getProjectOverview(project) };
@@ -62,6 +74,33 @@ async function scheduleCommand(args: string[]) {
   const project = getRequiredProject(args);
   const schedule = await startReadyTasks(project);
   return { schedule, overview: getProjectOverview(project) };
+}
+
+function listAgentTemplatesCommand() {
+  return { templates: listAgentTemplates() };
+}
+
+function listWorkflowTemplatesCommand() {
+  return { templates: listWorkflowTemplates() };
+}
+
+function listProjectTemplatesCommand() {
+  return { templates: listProjectTemplates() };
+}
+
+async function createPlanCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const goal = readGoal(options);
+  const mode = normalizeMode(options.mode);
+  const plan = createPlan(project, {
+    goal,
+    mode,
+    workflowTemplateId: options.workflowTemplate
+  });
+  const shouldAutoStart = options.autoStart === "true";
+  const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
+  return { plan, schedule, overview: getProjectOverview(project) };
 }
 
 async function startTaskCommand(args: string[]) {
@@ -111,13 +150,35 @@ function getRequiredOption(options: Record<string, string>, key: string) {
   return value;
 }
 
+function readGoal(options: Record<string, string>) {
+  if (options.goalFile) {
+    return readFileSync(path.resolve(options.goalFile), "utf8");
+  }
+
+  return getRequiredOption(options, "goal");
+}
+
+function normalizeMode(value: string | undefined): PlanningMode {
+  if (!value) {
+    return "sequential";
+  }
+  if (value === "sequential" || value === "parallel") {
+    return value;
+  }
+  throw new Error("--mode must be sequential or parallel.");
+}
+
 function printHelp() {
   console.log(`Harness CLI
 
 Usage:
   pnpm --filter @harness/server cli projects:list
-  pnpm --filter @harness/server cli projects:register --path <folder> [--name <name>] [--seedDefaults false]
+  pnpm --filter @harness/server cli projects:register --path <folder> [--name <name>] [--seedDefaults false] [--projectTemplate <id>]
   pnpm --filter @harness/server cli projects:overview --project <projectId>
+  pnpm --filter @harness/server cli templates:agents
+  pnpm --filter @harness/server cli templates:workflows
+  pnpm --filter @harness/server cli templates:projects
+  pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
   pnpm --filter @harness/server cli tasks:schedule --project <projectId>
   pnpm --filter @harness/server cli tasks:start --project <projectId> --task <taskId>
 

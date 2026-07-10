@@ -47,7 +47,11 @@ The server package also exposes a local JSON CLI for headless automation:
 
 ```bash
 pnpm cli projects:list
-pnpm cli projects:register --path ./my-project --name "My Project"
+pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
+pnpm cli templates:projects
+pnpm cli templates:workflows
+pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
+pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
 pnpm cli tasks:schedule --project <projectId>
 ```
 
