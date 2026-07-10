@@ -12,6 +12,7 @@ import {
   listWorkflowTemplates,
   mapComment,
   mapDocument,
+  mapMemory,
   mapTask,
   now,
   openProjectDb,
@@ -30,7 +31,7 @@ import {
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
-import type { DocumentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import type { DocumentRecord, MemoryRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
@@ -48,6 +49,9 @@ const commands: Record<string, CommandHandler> = {
   "documents:create": createDocumentCommand,
   "documents:update": updateDocumentCommand,
   "documents:plan": planDocumentCommand,
+  "memories:list": listMemoriesCommand,
+  "memories:create": createMemoryCommand,
+  "memories:update": updateMemoryCommand,
   "approvals:list": listApprovalsCommand,
   "approvals:approve": approveApprovalCommand,
   "approvals:reject": rejectApprovalCommand,
@@ -185,6 +189,33 @@ async function planDocumentCommand(args: string[]) {
   const shouldAutoStart = options.autoStart === "true";
   const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
   return { document, plan, schedule, overview: getProjectOverview(project) };
+}
+
+function listMemoriesCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  return { memories: overview.memories, overview };
+}
+
+function createMemoryCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const memory = createCliMemory(project, {
+    title: getRequiredOption(options, "title"),
+    content: readOptionalText(options, "content", "contentFile") || ""
+  });
+  return { memory, overview: getProjectOverview(project) };
+}
+
+function updateMemoryCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const memoryId = getRequiredOption(options, "memory");
+  const memory = updateCliMemory(project, memoryId, {
+    title: options.title,
+    content: readOptionalText(options, "content", "contentFile")
+  });
+  return { memory, overview: getProjectOverview(project) };
 }
 
 async function startTaskCommand(args: string[]) {
@@ -532,6 +563,67 @@ function getCliDocument(project: ProjectRecord, documentId: string) {
   }
 }
 
+function createCliMemory(project: ProjectRecord, input: Pick<MemoryRecord, "title" | "content">) {
+  if (!input.title.trim()) {
+    throw new Error("Memory title is required.");
+  }
+
+  const db = openProjectDb(project.path);
+  try {
+    const timestamp = now();
+    const id = randomUUID();
+    db.prepare("INSERT INTO memories VALUES (?, ?, ?, ?, ?)").run(
+      id,
+      input.title.trim(),
+      input.content,
+      timestamp,
+      timestamp
+    );
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "memory.created",
+      message: `${input.title.trim()} was added to project memory from CLI.`,
+      metadata: { memoryId: id }
+    });
+
+    return mapMemory(db.prepare("SELECT * FROM memories WHERE id = ?").get(id));
+  } finally {
+    db.close();
+  }
+}
+
+function updateCliMemory(project: ProjectRecord, memoryId: string, input: Partial<Pick<MemoryRecord, "title" | "content">>) {
+  const db = openProjectDb(project.path);
+  try {
+    const existing = db.prepare("SELECT * FROM memories WHERE id = ?").get(memoryId);
+    if (!existing) {
+      throw new Error("Memory not found.");
+    }
+
+    db.prepare(`
+      UPDATE memories
+      SET title = COALESCE(?, title),
+          content = COALESCE(?, content),
+          updated_at = ?
+      WHERE id = ?
+    `).run(input.title?.trim() || null, input.content ?? null, now(), memoryId);
+
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "memory.updated",
+      message: "Project memory was updated from CLI.",
+      metadata: { memoryId }
+    });
+
+    return mapMemory(db.prepare("SELECT * FROM memories WHERE id = ?").get(memoryId));
+  } finally {
+    db.close();
+  }
+}
+
 function parseOptions(args: string[]) {
   const options: Record<string, string> = {};
   for (let index = 0; index < args.length; index += 1) {
@@ -649,6 +741,9 @@ Usage:
   pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli documents:update --project <projectId> --document <documentId> [--title <text>] [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli documents:plan --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
+  pnpm --filter @harness/server cli memories:list --project <projectId>
+  pnpm --filter @harness/server cli memories:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
+  pnpm --filter @harness/server cli memories:update --project <projectId> --memory <memoryId> [--title <text>] [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli approvals:list --project <projectId>
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>

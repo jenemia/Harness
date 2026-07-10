@@ -58,6 +58,7 @@ pnpm cli plans:create --project <projectId> --goal "Build the next feature" --wo
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
 pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId>
+pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
 pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
@@ -119,3 +120,5 @@ The same document flow is available headlessly through `documents:list`, `docume
 ## Memory
 
 Use the Memory panel to store project conventions, user preferences, recurring decisions, and other durable context. Saved memory is project-local and included in every agent prompt.
+
+The same project memory can be managed headlessly through `memories:list`, `memories:create`, and `memories:update`.

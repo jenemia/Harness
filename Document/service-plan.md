@@ -201,6 +201,8 @@ Agents should remember project-specific conventions, decisions, recurring mistak
 
 Initial implementation: project-local memory entries can be created and edited from the UI, stored in the project `.harness` database, and injected into every agent run through the generated prompt file plus `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 
+Initial implementation: project memory can also be listed, created, and updated through the headless CLI so automation scripts can maintain conventions and preferences before scheduling agent work.
+
 ### Model Router
 
 Harness should route tasks to different models or CLI tools based on cost, quality, speed, and task type.
@@ -449,7 +451,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, provider catalog inspection, template listing, document create/update/list/plan flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, create plans from goal text/files, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration, project overview, project health reporting, provider catalog inspection, template listing, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can seed project templates, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 
