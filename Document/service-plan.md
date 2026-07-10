@@ -44,7 +44,7 @@ Project-local data should live inside the project folder so the project can be m
 
 Initial implementation: the project sidebar shows per-project summary counts for total tasks, blocked tasks, running tasks, pending approvals, pending merges, and busy agents so users can scan multiple local projects quickly.
 
-Initial implementation: each project also exposes a health report through the UI, API, and CLI. The report summarizes status counts, ready work, blockers, pending approvals, pending merges, failed/running runs, unassigned work, busy/idle agents, and recommended next actions.
+Initial implementation: each project also exposes a health report through the UI, API, and CLI. The report summarizes status counts, ready work, blockers, pending approvals, pending merges, failed/running runs, unassigned work, busy/idle agents, provider command setup gaps for command-backed LLM backends, and recommended next actions.
 
 Initial implementation: projects can be unregistered from the global Harness project list through the UI, API, or CLI without deleting the project folder or project-local `.harness` data.
 

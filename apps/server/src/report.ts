@@ -1,7 +1,9 @@
-import { now } from "./db.js";
-import type { ProjectHealthReport, ProjectOverview, TaskStatus } from "./types.js";
+import { now, projectHarnessDir } from "./db.js";
+import { createDefaultProviders, resolveProviderCommand } from "./providers.js";
+import type { AgentRecord, ProjectHealthReport, ProjectOverview, TaskRecord, TaskStatus } from "./types.js";
 
 const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
+const providers = createDefaultProviders(projectHarnessDir);
 
 export function createProjectHealthReport(overview: ProjectOverview): ProjectHealthReport {
   const statusCounts = Object.fromEntries(taskStatuses.map((status) => [status, 0])) as Record<TaskStatus, number>;
@@ -20,6 +22,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
   const unassignedTasks = overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
   const busyAgents = overview.agents.filter((agent) => agent.status === "busy").length;
   const idleAgents = overview.agents.filter((agent) => agent.status === "idle").length;
+  const providerCommandIssues = buildProviderCommandIssues(overview);
 
   return {
     projectId: overview.project.id,
@@ -34,6 +37,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
     unassignedTasks,
     busyAgents,
     idleAgents,
+    providerCommandIssues,
     recommendations: buildRecommendations({
       readyTasks,
       blockedTasks: blockedTasks.length,
@@ -43,9 +47,55 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
       runningRuns,
       unassignedTasks,
       busyAgents,
-      idleAgents
+      idleAgents,
+      providerCommandIssues
     })
   };
+}
+
+function buildProviderCommandIssues(overview: ProjectOverview): ProjectHealthReport["providerCommandIssues"] {
+  const agentsById = new Map(overview.agents.map((agent) => [agent.id, agent]));
+  const issues = new Map<string, ProjectHealthReport["providerCommandIssues"][number]>();
+
+  for (const agent of overview.agents) {
+    collectProviderCommandIssue(issues, overview, agent.modelBackend, agent, null);
+  }
+
+  for (const task of overview.tasks) {
+    if (task.status === "Done") {
+      continue;
+    }
+    const agent = task.assigneeAgentId ? agentsById.get(task.assigneeAgentId) || null : null;
+    const modelBackend = task.modelBackend || agent?.modelBackend || overview.settings.defaultModelBackend;
+    collectProviderCommandIssue(issues, overview, modelBackend, agent, task);
+  }
+
+  return Array.from(issues.values());
+}
+
+function collectProviderCommandIssue(
+  issues: Map<string, ProjectHealthReport["providerCommandIssues"][number]>,
+  overview: ProjectOverview,
+  modelBackend: string,
+  agent: AgentRecord | null,
+  task: TaskRecord | null
+) {
+  const provider = providers.llm(modelBackend).definition;
+  if (!provider.requiresCommand) {
+    return;
+  }
+  const commandResolution = resolveProviderCommand(providers.platform(), agent || { cliCommand: null }, modelBackend, overview.settings);
+  if (commandResolution.command) {
+    return;
+  }
+  const issue = {
+    modelBackend,
+    providerId: provider.id,
+    agentId: agent?.id || null,
+    taskId: task?.id || null,
+    candidateKeys: commandResolution.candidateKeys
+  };
+  issues.set(`${issue.modelBackend}:${issue.providerId}:${issue.agentId || "-"}:${issue.taskId || "-"}`, issue);
 }
 
 function buildRecommendations(input: {
@@ -58,8 +108,15 @@ function buildRecommendations(input: {
   unassignedTasks: number;
   busyAgents: number;
   idleAgents: number;
+  providerCommandIssues: ProjectHealthReport["providerCommandIssues"];
 }) {
   const recommendations: string[] = [];
+  if (input.providerCommandIssues.length > 0) {
+    const firstIssue = input.providerCommandIssues[0];
+    recommendations.push(
+      `Configure provider command defaults for ${firstIssue.modelBackend}; try one of: ${firstIssue.candidateKeys.join(", ")}.`
+    );
+  }
   if (input.pendingApprovals > 0) {
     recommendations.push("Review pending approvals so blocked command-backed tasks can resume.");
   }

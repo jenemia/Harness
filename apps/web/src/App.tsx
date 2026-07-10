@@ -324,7 +324,7 @@ export function App() {
             </section>
 
             <aside className="right-rail">
-              <ProjectHealthPanel overview={overview} />
+              <ProjectHealthPanel overview={overview} providerCatalog={providerCatalog} />
               <PlanningPanel
                 overview={overview}
                 workflowTemplates={workflowTemplates}
@@ -484,7 +484,7 @@ function ApprovalsPanel(props: {
   );
 }
 
-function ProjectHealthPanel({ overview }: { overview: Overview }) {
+function ProjectHealthPanel({ overview, providerCatalog }: { overview: Overview; providerCatalog: ProviderCatalog | null }) {
   const blockedTasks = overview.tasks.filter((task) => task.status === "Blocked");
   const pausedTasks = overview.tasks.filter((task) => task.status === "Paused").length;
   const pendingApprovals = overview.approvals.filter((approval) => approval.status === "pending").length;
@@ -493,8 +493,14 @@ function ProjectHealthPanel({ overview }: { overview: Overview }) {
   const readyTasks = overview.tasks.filter((task) => task.status === "Selected" || task.status === "Backlog").length;
   const idleAgents = overview.agents.filter((agent) => agent.status === "idle").length;
   const unassignedTasks = overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
+  const providerCommandIssues = useMemo(
+    () => findProviderCommandIssues(overview, providerCatalog),
+    [overview, providerCatalog]
+  );
   const recommendation =
-    pendingApprovals > 0
+    providerCommandIssues.length > 0
+      ? "Configure provider commands"
+      : pendingApprovals > 0
       ? "Review approvals"
       : pendingMerges > 0
         ? "Resolve merges"
@@ -538,12 +544,67 @@ function ProjectHealthPanel({ overview }: { overview: Overview }) {
           <span>unassigned</span>
         </div>
         <div className="compact-row">
+          <strong>{providerCommandIssues.length}</strong>
+          <span>provider commands</span>
+        </div>
+        <div className="compact-row">
           <strong>{recommendation}</strong>
           <span>next</span>
         </div>
       </div>
+      {providerCommandIssues[0] && (
+        <p className="provider-help">
+          Set {providerCommandIssues[0].candidateKeys.join(", ")} for {providerCommandIssues[0].modelBackend}.
+        </p>
+      )}
     </section>
   );
+}
+
+function findProviderCommandIssues(overview: Overview, providerCatalog: ProviderCatalog | null) {
+  if (!providerCatalog) {
+    return [];
+  }
+  const catalog = providerCatalog;
+  const agentsById = new Map(overview.agents.map((agent) => [agent.id, agent]));
+  const providersById = new Map(catalog.llmProviders.map((provider) => [provider.id, provider]));
+  const issues = new Map<string, { modelBackend: string; agentId: string | null; taskId: string | null; candidateKeys: string[] }>();
+
+  function collect(modelBackend: string, agent: Agent | null, task: Task | null) {
+    const provider = providersById.get(modelBackend);
+    if (!provider?.requiresCommand || agent?.cliCommand) {
+      return;
+    }
+    const candidateKeys = [
+      `${catalog.platform.id}.${modelBackend}`,
+      `${catalog.platform.platform}.${modelBackend}`,
+      modelBackend
+    ];
+    const hasCommand = candidateKeys.some((key) => overview.settings.providerCommands[key]?.trim());
+    if (hasCommand) {
+      return;
+    }
+    const issue = {
+      modelBackend,
+      agentId: agent?.id || null,
+      taskId: task?.id || null,
+      candidateKeys
+    };
+    issues.set(`${issue.modelBackend}:${issue.agentId || "-"}:${issue.taskId || "-"}`, issue);
+  }
+
+  for (const agent of overview.agents) {
+    collect(agent.modelBackend, agent, null);
+  }
+  for (const task of overview.tasks) {
+    if (task.status === "Done") {
+      continue;
+    }
+    const agent = task.assigneeAgentId ? agentsById.get(task.assigneeAgentId) || null : null;
+    collect(task.modelBackend || agent?.modelBackend || overview.settings.defaultModelBackend, agent, task);
+  }
+
+  return Array.from(issues.values());
 }
 
 function PlanningPanel(props: {

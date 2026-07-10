@@ -14,7 +14,7 @@ import {
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
-import { createDefaultProviders } from "./providers.js";
+import { createDefaultProviders, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
 import { getPlanningProviderDefinition } from "./planner.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
@@ -1266,7 +1266,7 @@ function ensureCommandApproval(
 ) {
   const effectiveBackend = getEffectiveModelBackend(agent, task);
   const provider = providers.llm(effectiveBackend);
-  const commandResolution = resolveProviderCommand(agent, effectiveBackend, settings);
+  const commandResolution = resolveProviderCommand(providers.platform(), agent, effectiveBackend, settings);
   const commandPreview = commandResolution.command || provider.definition.commandExample;
   const commandMetadata = providerCommandMetadata(commandResolution);
   const policy = providers.policy().evaluateLlmExecution({
@@ -1401,7 +1401,7 @@ function ensureMergeApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRec
 
 function withProviderCommand(agent: AgentRecord, task: TaskRecord, settings: ProjectSettings) {
   const effectiveBackend = getEffectiveModelBackend(agent, task);
-  const commandResolution = resolveProviderCommand(agent, effectiveBackend, settings);
+  const commandResolution = resolveProviderCommand(providers.platform(), agent, effectiveBackend, settings);
   return {
     agent: {
       ...agent,
@@ -1414,49 +1414,6 @@ function withProviderCommand(agent: AgentRecord, task: TaskRecord, settings: Pro
 
 function getEffectiveModelBackend(agent: AgentRecord, task: TaskRecord) {
   return task.modelBackend || agent.modelBackend;
-}
-
-type ProviderCommandResolution = {
-  command: string | null;
-  source: "agent" | "settings" | "none";
-  key: string | null;
-  platformProviderId: string;
-  nodePlatform: NodeJS.Platform;
-};
-
-function resolveProviderCommand(agent: AgentRecord, modelBackend: string, settings: ProjectSettings): ProviderCommandResolution {
-  const platform = providers.platform();
-  if (agent.cliCommand) {
-    return {
-      command: agent.cliCommand,
-      source: "agent",
-      key: "agent.cliCommand",
-      platformProviderId: platform.id,
-      nodePlatform: platform.platform
-    };
-  }
-  const commandKeys = [
-    `${platform.id}.${modelBackend}`,
-    `${platform.platform}.${modelBackend}`,
-    modelBackend
-  ];
-  const matchingKey = commandKeys.find((key) => settings.providerCommands[key]?.trim());
-  return {
-    command: matchingKey ? settings.providerCommands[matchingKey] : null,
-    source: matchingKey ? "settings" : "none",
-    key: matchingKey || null,
-    platformProviderId: platform.id,
-    nodePlatform: platform.platform
-  };
-}
-
-function providerCommandMetadata(resolution: ProviderCommandResolution) {
-  return {
-    providerCommandSource: resolution.source,
-    providerCommandKey: resolution.key,
-    platformProviderId: resolution.platformProviderId,
-    nodePlatform: resolution.nodePlatform
-  };
 }
 
 function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {

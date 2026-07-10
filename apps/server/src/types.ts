@@ -47,6 +47,13 @@ export type ProjectHealthReport = {
   unassignedTasks: number;
   busyAgents: number;
   idleAgents: number;
+  providerCommandIssues: Array<{
+    modelBackend: string;
+    providerId: string;
+    agentId: string | null;
+    taskId: string | null;
+    candidateKeys: string[];
+  }>;
   recommendations: string[];
 };
 

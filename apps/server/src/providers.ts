@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { AgentRecord, ApprovalRecord, CommentRecord, MemoryRecord, RunRecord, TaskRecord } from "./types.js";
+import type { AgentRecord, ApprovalRecord, CommentRecord, MemoryRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 export type CommandResult = {
   ok: boolean;
@@ -86,6 +86,15 @@ export type LlmProviderDefinition = {
   description: string;
   requiresCommand: boolean;
   commandExample: string | null;
+};
+
+export type ProviderCommandResolution = {
+  command: string | null;
+  source: "agent" | "settings" | "none";
+  key: string | null;
+  candidateKeys: string[];
+  platformProviderId: string;
+  nodePlatform: NodeJS.Platform;
 };
 
 export type ApprovalProviderDefinition = {
@@ -223,6 +232,47 @@ export class ProviderRegistry {
   llmDefinitions() {
     return this.llmProviders.map((provider) => provider.definition);
   }
+}
+
+export function resolveProviderCommand(
+  platformProvider: PlatformProvider,
+  agent: Pick<AgentRecord, "cliCommand">,
+  modelBackend: string,
+  settings: Pick<ProjectSettings, "providerCommands">
+): ProviderCommandResolution {
+  const commandKeys = [
+    `${platformProvider.id}.${modelBackend}`,
+    `${platformProvider.platform}.${modelBackend}`,
+    modelBackend
+  ];
+  if (agent.cliCommand) {
+    return {
+      command: agent.cliCommand,
+      source: "agent",
+      key: "agent.cliCommand",
+      candidateKeys: commandKeys,
+      platformProviderId: platformProvider.id,
+      nodePlatform: platformProvider.platform
+    };
+  }
+  const matchingKey = commandKeys.find((key) => settings.providerCommands[key]?.trim());
+  return {
+    command: matchingKey ? settings.providerCommands[matchingKey] : null,
+    source: matchingKey ? "settings" : "none",
+    key: matchingKey || null,
+    candidateKeys: commandKeys,
+    platformProviderId: platformProvider.id,
+    nodePlatform: platformProvider.platform
+  };
+}
+
+export function providerCommandMetadata(resolution: ProviderCommandResolution) {
+  return {
+    providerCommandSource: resolution.source,
+    providerCommandKey: resolution.key,
+    platformProviderId: resolution.platformProviderId,
+    nodePlatform: resolution.nodePlatform
+  };
 }
 
 export function createDefaultProviders(projectHarnessDir: (projectPath: string) => string) {
