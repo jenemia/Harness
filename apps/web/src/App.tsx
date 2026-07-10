@@ -416,6 +416,9 @@ function DocumentEditor(props: {
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [planMode, setPlanMode] = useState<"sequential" | "parallel">("sequential");
+  const [autoStartPlan, setAutoStartPlan] = useState(false);
+  const [lastDocumentPlan, setLastDocumentPlan] = useState<PlanResult | null>(null);
 
   useEffect(() => {
     setTitle(props.document?.title || "");
@@ -441,6 +444,25 @@ function DocumentEditor(props: {
     });
   }
 
+  async function planFromDocument() {
+    const document = props.document;
+    if (!document) {
+      return;
+    }
+
+    await props.runAction(async () => {
+      const response = await api<{ plan: PlanResult; schedule: ScheduleResult | null }>(
+        `/api/projects/${props.projectId}/documents/${document.id}/plan`,
+        {
+          method: "POST",
+          body: JSON.stringify({ mode: planMode, autoStart: autoStartPlan })
+        }
+      );
+      setLastDocumentPlan(response.plan);
+      await props.onChanged();
+    });
+  }
+
   return (
     <form className="stack-form" onSubmit={save}>
       <select value={props.document?.id || ""} onChange={(event) => props.onSelect(event.target.value)}>
@@ -462,6 +484,29 @@ function DocumentEditor(props: {
         <FileText size={16} />
         <span>Save</span>
       </button>
+      {props.document && (
+        <div className="document-plan-box">
+          <select value={planMode} onChange={(event) => setPlanMode(event.target.value as "sequential" | "parallel")}>
+            <option value="sequential">Sequential tickets</option>
+            <option value="parallel">Parallel tickets</option>
+          </select>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={autoStartPlan}
+              onChange={(event) => setAutoStartPlan(event.target.checked)}
+            />
+            <span>Auto-start</span>
+          </label>
+          <button className="primary-button" type="button" onClick={() => void planFromDocument()}>
+            <Sparkles size={16} />
+            <span>Plan from doc</span>
+          </button>
+          {lastDocumentPlan && (
+            <span className="document-plan-result">{lastDocumentPlan.tasks.length} tickets created</span>
+          )}
+        </div>
+      )}
     </form>
   );
 }

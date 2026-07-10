@@ -425,6 +425,8 @@ Candidate paths:
 
 Initial implementation: project-local documents can be created and edited from the UI, stored in the project `.harness` database, and returned as part of the project overview.
 
+Documents can also be used as PM planning input so a stored spec or service plan can be decomposed into Kanban tickets.
+
 ### Board Columns
 
 Initial Jira-like columns:

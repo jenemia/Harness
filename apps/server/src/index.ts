@@ -152,11 +152,30 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      const documentMatch = childPath.match(/^documents\/([^/]+)$/);
-      if (documentMatch && req.method === "PATCH") {
-        const document = updateDocument(project, documentMatch[1], await readBody(req));
-        sendJson(res, { document, overview: getProjectOverview(project) });
-        return;
+      const documentActionMatch = childPath.match(/^documents\/([^/]+)(?:\/([^/]+))?$/);
+      if (documentActionMatch) {
+        const documentId = documentActionMatch[1];
+        const action = documentActionMatch[2] || "";
+
+        if (req.method === "PATCH" && !action) {
+          const document = updateDocument(project, documentId, await readBody(req));
+          sendJson(res, { document, overview: getProjectOverview(project) });
+          return;
+        }
+
+        if (req.method === "POST" && action === "plan") {
+          const body = await readBody<{ mode?: "sequential" | "parallel"; autoStart?: boolean }>(req);
+          const document = getDocument(project, documentId);
+          const plan = createPlan(project, {
+            goal: `Document: ${document.title}\n\n${document.content}`,
+            mode: body.mode,
+            autoStart: body.autoStart,
+            sourceDocumentId: document.id
+          });
+          const schedule = body.autoStart ? await startReadyTasks(project) : null;
+          sendJson(res, { document, plan, schedule, overview: getProjectOverview(project) }, 201);
+          return;
+        }
       }
     }
 
@@ -402,6 +421,19 @@ function updateDocument(project: ProjectRecord, documentId: string, input: { tit
     });
 
     return mapDocument(db.prepare("SELECT * FROM documents WHERE id = ?").get(documentId));
+  } finally {
+    db.close();
+  }
+}
+
+function getDocument(project: ProjectRecord, documentId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const row = db.prepare("SELECT * FROM documents WHERE id = ?").get(documentId);
+    if (!row) {
+      throw new Error("Document not found.");
+    }
+    return mapDocument(row);
   } finally {
     db.close();
   }

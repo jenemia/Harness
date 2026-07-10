@@ -8,6 +8,7 @@ export type PlanRequest = {
   goal?: string;
   mode?: PlanningMode;
   autoStart?: boolean;
+  sourceDocumentId?: string;
 };
 
 export type PlannedTaskSummary = {
@@ -54,6 +55,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       metadata: {
         goal,
         mode,
+        sourceDocumentId: input.sourceDocumentId || null,
         taskIds: inserted.map((task) => task.id)
       }
     });
@@ -214,4 +216,3 @@ function chooseAgentForRole(agents: AgentRecord[], role: string) {
     null
   );
 }
-

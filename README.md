@@ -47,3 +47,5 @@ Open a task from the board to inspect its status, assignee, worktree branch/path
 ## Documents
 
 Use the Documents panel to create and edit project-local notes, service plans, specs, and acceptance criteria. Documents are stored in the project-local Harness database and included in project overview state.
+
+Selected documents can be sent to PM planning to create detailed Kanban tickets from a spec or bullet list.
