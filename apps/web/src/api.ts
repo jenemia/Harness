@@ -349,6 +349,17 @@ export type ProviderCatalog = {
       riskyCommandApproval: boolean;
     };
   };
+  providerCommandKeys: {
+    platformProviderId: string;
+    nodePlatform: string;
+    precedence: string[];
+    examples: Array<{
+      modelBackend: string;
+      label: string;
+      keys: string[];
+      commandExample: string | null;
+    }>;
+  };
   llmProviders: Array<{
     id: string;
     label: string;

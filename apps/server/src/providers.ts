@@ -97,6 +97,14 @@ export type ProviderCommandResolution = {
   nodePlatform: NodeJS.Platform;
 };
 
+export function providerCommandCandidateKeys(platformProvider: PlatformProvider, modelBackend: string) {
+  return [
+    `${platformProvider.id}.${modelBackend}`,
+    `${platformProvider.platform}.${modelBackend}`,
+    modelBackend
+  ];
+}
+
 export type ApprovalProviderDefinition = {
   id: string;
   label: string;
@@ -240,11 +248,7 @@ export function resolveProviderCommand(
   modelBackend: string,
   settings: Pick<ProjectSettings, "providerCommands">
 ): ProviderCommandResolution {
-  const commandKeys = [
-    `${platformProvider.id}.${modelBackend}`,
-    `${platformProvider.platform}.${modelBackend}`,
-    modelBackend
-  ];
+  const commandKeys = providerCommandCandidateKeys(platformProvider, modelBackend);
   if (agent.cliCommand) {
     return {
       command: agent.cliCommand,

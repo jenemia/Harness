@@ -903,11 +903,12 @@ function findProviderCommandIssues(overview: Overview, providerCatalog: Provider
     if (!provider?.requiresCommand || agent?.cliCommand) {
       return;
     }
-    const candidateKeys = [
-      `${catalog.platform.id}.${modelBackend}`,
-      `${catalog.platform.platform}.${modelBackend}`,
-      modelBackend
-    ];
+    const candidateKeys =
+      catalog.providerCommandKeys.examples.find((example) => example.modelBackend === modelBackend)?.keys || [
+        `${catalog.platform.id}.${modelBackend}`,
+        `${catalog.platform.platform}.${modelBackend}`,
+        modelBackend
+      ];
     const hasCommand = candidateKeys.some((key) => overview.settings.providerCommands[key]?.trim());
     if (hasCommand) {
       return;
@@ -2648,6 +2649,23 @@ function formatProviderCommandResolution(metadata: Record<string, unknown>) {
   return [commandLabel, platformProvider].filter(Boolean).join(" on ");
 }
 
+function formatProviderCommandPlaceholder(providerCatalog: ProviderCatalog | null, modelBackend: string) {
+  const examples = providerCatalog?.providerCommandKeys.examples || [];
+  const example = examples.find((item) => item.modelBackend === modelBackend) || examples[0];
+  if (!example) {
+    return '{\n  "codex": "codex exec \\"$HARNESS_PROMPT_FILE\\""\n}';
+  }
+  const command = example.commandExample || `run-${example.modelBackend} "$HARNESS_PROMPT_FILE"`;
+  return JSON.stringify(
+    {
+      [example.keys[0]]: command,
+      [example.keys[example.keys.length - 1]]: command
+    },
+    null,
+    2
+  );
+}
+
 function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {
   const items = [
     ...events.map((event) => ({
@@ -3034,6 +3052,10 @@ function SettingsPanel(props: {
     setProjectSettings((current) => ({ ...current, [key]: value }));
   }
 
+  const providerCommandKeyGuide = props.providerCatalog?.providerCommandKeys;
+  const globalProviderCommandPlaceholder = formatProviderCommandPlaceholder(props.providerCatalog, defaultModelBackend);
+  const projectProviderCommandPlaceholder = formatProviderCommandPlaceholder(props.providerCatalog, projectSettings.defaultModelBackend);
+
   return (
     <section className="rail-panel">
       <div className="panel-header">
@@ -3091,6 +3113,20 @@ function SettingsPanel(props: {
             {props.providerCatalog.policy.capabilities.boundaryPromptInjection ? "on" : "off"} | risky commands{" "}
             {props.providerCatalog.policy.capabilities.riskyCommandApproval ? "approval" : "off"}
           </span>
+          {providerCommandKeyGuide && (
+            <>
+              <strong>Provider command keys</strong>
+              <span>
+                {providerCommandKeyGuide.platformProviderId} on {providerCommandKeyGuide.nodePlatform} |{" "}
+                {providerCommandKeyGuide.precedence.join(" > ")}
+              </span>
+              {providerCommandKeyGuide.examples.slice(0, 4).map((example) => (
+                <span key={example.modelBackend}>
+                  {example.label}: {example.keys.join(", ")}
+                </span>
+              ))}
+            </>
+          )}
         </div>
       )}
       <form className="stack-form" onSubmit={submitGlobal}>
@@ -3141,7 +3177,7 @@ function SettingsPanel(props: {
         <textarea
           value={globalProviderCommandsText}
           onChange={(event) => setGlobalProviderCommandsText(event.target.value)}
-          placeholder='{"node-darwin.codex":"codex exec \"$HARNESS_PROMPT_FILE\"","codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
+          placeholder={globalProviderCommandPlaceholder}
         />
         <button className="secondary-button" type="submit">
           <Settings size={16} />
@@ -3216,7 +3252,7 @@ function SettingsPanel(props: {
         <textarea
           value={projectProviderCommandsText}
           onChange={(event) => setProjectProviderCommandsText(event.target.value)}
-          placeholder='{"darwin.shell":"node ./scripts/agent-runner.js","shell":"node ./scripts/agent-runner.js"}'
+          placeholder={projectProviderCommandPlaceholder}
         />
         <button className="secondary-button" type="submit">
           <Settings size={16} />

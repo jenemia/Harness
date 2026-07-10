@@ -15,7 +15,7 @@ import {
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
-import { createDefaultProviders, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
+import { createDefaultProviders, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
 import { getPlanningProviderDefinition } from "./planner.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
@@ -28,12 +28,14 @@ const mergeApprovalKind = "merge";
 const handoffApprovalKind = "handoff";
 
 export function listRuntimeProviders() {
+  const platform = providers.platform();
+  const llmProviders = providers.llmDefinitions();
   return {
     platform: {
-      id: providers.platform().id,
-      label: providers.platform().label,
-      platform: providers.platform().platform,
-      capabilities: providers.platform().capabilities
+      id: platform.id,
+      label: platform.label,
+      platform: platform.platform,
+      capabilities: platform.capabilities
     },
     workspace: {
       id: providers.workspace().id,
@@ -45,7 +47,20 @@ export function listRuntimeProviders() {
     planning: getPlanningProviderDefinition(),
     approval: providers.approval().definition,
     policy: providers.policy().definition,
-    llmProviders: providers.llmDefinitions()
+    providerCommandKeys: {
+      platformProviderId: platform.id,
+      nodePlatform: platform.platform,
+      precedence: ["<platformProviderId>.<modelBackend>", "<nodePlatform>.<modelBackend>", "<modelBackend>"],
+      examples: llmProviders
+        .filter((provider) => provider.requiresCommand)
+        .map((provider) => ({
+          modelBackend: provider.id,
+          label: provider.label,
+          keys: providerCommandCandidateKeys(platform, provider.id),
+          commandExample: provider.commandExample
+        }))
+    },
+    llmProviders
   };
 }
 
