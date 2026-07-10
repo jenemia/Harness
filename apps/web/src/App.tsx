@@ -531,6 +531,9 @@ function ProjectHealthPanel({
   const readyTasks = healthReport?.readyTasks ?? overview.tasks.filter((task) => task.status === "Selected").length;
   const idleAgents = healthReport?.idleAgents ?? overview.agents.filter((agent) => agent.status === "idle").length;
   const unassignedTasks = healthReport?.unassignedTasks ?? overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
+  const followUpBacklogTasks =
+    healthReport?.followUpBacklogTasks ??
+    overview.tasks.filter((task) => task.status === "Backlog" && task.labels.includes("follow-up")).length;
   const providerCommandIssues = healthReport?.providerCommandIssues || fallbackProviderCommandIssues;
   const schedulerIssues = healthReport?.schedulerIssues || fallbackSchedulerIssues;
   const recommendation =
@@ -546,9 +549,11 @@ function ProjectHealthPanel({
               ? "Clear blockers"
               : failedRuns > 0
                 ? "Review failed runs"
-                : readyTasks > 0 && idleAgents > 0
-                  ? "Run ready tasks"
-                  : "No immediate blockers";
+                : followUpBacklogTasks > 0
+                  ? "Review follow-ups"
+                  : readyTasks > 0 && idleAgents > 0
+                    ? "Run ready tasks"
+                    : "No immediate blockers";
 
   return (
     <section className="rail-panel">
@@ -580,6 +585,10 @@ function ProjectHealthPanel({
         <div className="compact-row">
           <strong>{unassignedTasks}</strong>
           <span>unassigned</span>
+        </div>
+        <div className="compact-row">
+          <strong>{followUpBacklogTasks}</strong>
+          <span>follow-ups</span>
         </div>
         <div className="compact-row">
           <strong>{providerCommandIssues.length}</strong>

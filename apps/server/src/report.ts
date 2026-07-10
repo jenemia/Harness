@@ -20,6 +20,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
   const failedRuns = overview.runs.filter((run) => run.status === "failed").length;
   const runningRuns = overview.runs.filter((run) => run.status === "running").length;
   const unassignedTasks = overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
+  const followUpBacklogTasks = overview.tasks.filter((task) => task.status === "Backlog" && task.labels.includes("follow-up")).length;
   const busyAgents = overview.agents.filter((agent) => agent.status === "busy").length;
   const idleAgents = overview.agents.filter((agent) => agent.status === "idle").length;
   const schedulerIssues = buildSchedulerIssues(overview);
@@ -36,6 +37,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
     failedRuns,
     runningRuns,
     unassignedTasks,
+    followUpBacklogTasks,
     busyAgents,
     idleAgents,
     schedulerIssues,
@@ -48,6 +50,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
       failedRuns,
       runningRuns,
       unassignedTasks,
+      followUpBacklogTasks,
       busyAgents,
       idleAgents,
       schedulerIssues,
@@ -221,6 +224,7 @@ function buildRecommendations(input: {
   failedRuns: number;
   runningRuns: number;
   unassignedTasks: number;
+  followUpBacklogTasks: number;
   busyAgents: number;
   idleAgents: number;
   schedulerIssues: ProjectHealthReport["schedulerIssues"];
@@ -252,6 +256,9 @@ function buildRecommendations(input: {
   }
   if (input.unassignedTasks > 0) {
     recommendations.push("Assign open tasks to agents so the scheduler can use available capacity.");
+  }
+  if (input.followUpBacklogTasks > 0) {
+    recommendations.push(`Review ${input.followUpBacklogTasks} follow-up backlog task(s) from agent output.`);
   }
   if (input.readyTasks > 0 && input.idleAgents > 0 && input.pendingApprovals === 0 && input.schedulerIssues.length === 0) {
     recommendations.push("Run ready tasks to use available idle agent capacity.");

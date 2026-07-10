@@ -49,6 +49,7 @@ export type ProjectHealthReport = {
   failedRuns: number;
   runningRuns: number;
   unassignedTasks: number;
+  followUpBacklogTasks: number;
   busyAgents: number;
   idleAgents: number;
   schedulerIssues: Array<{

@@ -44,7 +44,7 @@ Project-local data should live inside the project folder so the project can be m
 
 Initial implementation: the project sidebar shows per-project summary counts for total tasks, backlog tasks, Selected tasks, blocked tasks, failed runs, running tasks, pending approvals, pending merges, follow-up backlog tasks, and busy agents so users can scan multiple local projects quickly.
 
-Initial implementation: each project also exposes a health report through the UI, API, and CLI. The report summarizes status counts, Selected ready work, blockers, pending approvals, pending merges, failed/running runs, unassigned work, busy/idle agents, scheduler readiness gaps, provider command setup gaps for command-backed LLM backends, and recommended next actions.
+Initial implementation: each project also exposes a health report through the UI, API, and CLI. The report summarizes status counts, Selected ready work, blockers, pending approvals, pending merges, failed/running runs, unassigned work, follow-up backlog tasks, busy/idle agents, scheduler readiness gaps, provider command setup gaps for command-backed LLM backends, and recommended next actions.
 
 Initial implementation: the project workspace includes an Attention panel that collects pending approvals, pending/conflicted merges, failed runs, blocked tasks, and follow-up backlog items so the user can jump directly to the task that needs action.
 
