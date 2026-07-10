@@ -19,7 +19,14 @@ import {
   seedProjectFromTemplate
 } from "./db.js";
 import { createPlan, type PlanningMode } from "./planner.js";
-import { startReadyTasks, startTask, unblockReadyDependents } from "./runtime.js";
+import {
+  approveMerge,
+  decideApproval,
+  requestMergeChanges,
+  startReadyTasks,
+  startTask,
+  unblockReadyDependents
+} from "./runtime.js";
 import type { ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
@@ -32,9 +39,14 @@ const commands: Record<string, CommandHandler> = {
   "templates:workflows": listWorkflowTemplatesCommand,
   "templates:projects": listProjectTemplatesCommand,
   "plans:create": createPlanCommand,
+  "approvals:list": listApprovalsCommand,
+  "approvals:approve": approveApprovalCommand,
+  "approvals:reject": rejectApprovalCommand,
   "tasks:create": createTaskCommand,
   "tasks:update": updateTaskCommand,
   "tasks:comment": commentTaskCommand,
+  "tasks:merge": mergeTaskCommand,
+  "tasks:request-changes": requestTaskChangesCommand,
   "tasks:start": startTaskCommand,
   "tasks:schedule": scheduleCommand
 };
@@ -121,6 +133,28 @@ async function startTaskCommand(args: string[]) {
   return { result, overview: getProjectOverview(project) };
 }
 
+function listApprovalsCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  return { approvals: overview.approvals, overview };
+}
+
+async function approveApprovalCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const approvalId = getRequiredOption(options, "approval");
+  const result = await decideApproval(project, approvalId, "approved");
+  return { result, overview: getProjectOverview(project) };
+}
+
+async function rejectApprovalCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const approvalId = getRequiredOption(options, "approval");
+  const result = await decideApproval(project, approvalId, "rejected");
+  return { result, overview: getProjectOverview(project) };
+}
+
 function createTaskCommand(args: string[]) {
   const options = parseOptions(args);
   const project = getRequiredProject(args);
@@ -170,6 +204,23 @@ function commentTaskCommand(args: string[]) {
     body: readRequiredText(options, "body", "bodyFile")
   });
   return { comment, overview: getProjectOverview(project) };
+}
+
+async function mergeTaskCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const result = await approveMerge(project, taskId);
+  return { result, overview: getProjectOverview(project) };
+}
+
+async function requestTaskChangesCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const reason = readOptionalText(options, "reason", "reasonFile") || "Human requested changes before merge.";
+  const result = await requestMergeChanges(project, taskId, reason);
+  return { result, overview: getProjectOverview(project) };
 }
 
 function getRequiredProject(args: string[]) {
@@ -456,9 +507,14 @@ Usage:
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
+  pnpm --filter @harness/server cli approvals:list --project <projectId>
+  pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
+  pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Blocked|Done]
   pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
+  pnpm --filter @harness/server cli tasks:merge --project <projectId> --task <taskId>
+  pnpm --filter @harness/server cli tasks:request-changes --project <projectId> --task <taskId> [--reason <text>|--reasonFile <file>]
   pnpm --filter @harness/server cli tasks:schedule --project <projectId>
   pnpm --filter @harness/server cli tasks:start --project <projectId> --task <taskId>
 

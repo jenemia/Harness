@@ -55,6 +55,10 @@ pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.m
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
 pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
+pnpm cli approvals:list --project <projectId>
+pnpm cli approvals:approve --project <projectId> --approval <approvalId>
+pnpm cli tasks:merge --project <projectId> --task <taskId>
+pnpm cli tasks:request-changes --project <projectId> --task <taskId> --reason "Needs another pass"
 pnpm cli tasks:schedule --project <projectId>
 ```
 
