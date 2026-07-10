@@ -26,7 +26,15 @@ import {
   updateProjectSettings
 } from "./db.js";
 import { createPlan } from "./planner.js";
-import { approveMerge, decideApproval, listRuntimeProviders, requestMergeChanges, startReadyTasks, startTask } from "./runtime.js";
+import {
+  approveMerge,
+  decideApproval,
+  listRuntimeProviders,
+  requestMergeChanges,
+  startReadyTasks,
+  startTask,
+  unblockReadyDependents
+} from "./runtime.js";
 import type { AgentRecord, AgentTemplateRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -182,7 +190,8 @@ const server = http.createServer(async (req, res) => {
 
         if (req.method === "PATCH" && !action) {
           const task = updateTask(project, taskId, await readBody(req));
-          sendJson(res, { task, overview: getProjectOverview(project) });
+          const unblocked = task.status === "Done" ? unblockReadyDependents(project, task.id) : [];
+          sendJson(res, { task, unblocked, overview: getProjectOverview(project) });
           return;
         }
 

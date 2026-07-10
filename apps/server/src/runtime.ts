@@ -274,6 +274,15 @@ export async function requestMergeChanges(project: ProjectRecord, taskId: string
   }
 }
 
+export function unblockReadyDependents(project: ProjectRecord, completedTaskId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    return scheduleReadyDependents(project, db, completedTaskId);
+  } finally {
+    db.close();
+  }
+}
+
 export async function decideApproval(
   project: ProjectRecord,
   approvalId: string,
@@ -328,9 +337,7 @@ export async function decideApproval(
   }
 
   if (shouldStartTaskId) {
-    setTimeout(() => {
-      void startTask(project, shouldStartTaskId);
-    }, 0);
+    deferRuntimeTask(() => startTask(project, shouldStartTaskId));
   }
 
   return { ok: true };
@@ -527,9 +534,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
       message: `PM Agent handed the task from ${completedBy.name} to ${nextAgent.name}.`,
       metadata: { fromAgentId: completedBy.id, toAgentId: nextAgent.id, fromRole: completedBy.role, toRole: nextRole }
     });
-    setTimeout(() => {
-      void startTask(project, task.id);
-    }, 0);
+    deferRuntimeTask(() => startTask(project, task.id));
     return;
   }
 
@@ -757,6 +762,7 @@ function getDependencyBlocker(db: DatabaseSync, task: TaskRecord) {
 
 function scheduleReadyDependents(project: ProjectRecord, db: DatabaseSync, completedTaskId: string) {
   const rows = db.prepare("SELECT * FROM tasks WHERE status IN (?, ?, ?)").all("Backlog", "Selected", "Blocked").map(mapTask);
+  const unblocked: string[] = [];
   for (const task of rows) {
     if (!task.dependencyTaskIds.includes(completedTaskId)) {
       continue;
@@ -781,10 +787,18 @@ function scheduleReadyDependents(project: ProjectRecord, db: DatabaseSync, compl
       message: "All dependencies are complete. PM Agent queued this task for execution.",
       metadata: { completedTaskId }
     });
-    setTimeout(() => {
-      void startReadyTasks(project);
-    }, 0);
+    unblocked.push(task.id);
+    deferRuntimeTask(() => startReadyTasks(project));
   }
+  return unblocked;
+}
+
+function deferRuntimeTask(task: () => Promise<unknown>) {
+  setTimeout(() => {
+    task().catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+    });
+  }, 0);
 }
 
 function hasAgentCapacity(db: DatabaseSync, agent: AgentRecord) {

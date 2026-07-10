@@ -65,6 +65,8 @@ Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal int
 
 Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.
 
+When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
+
 ## Task Tracking
 
 Open a task from the board to inspect its status, assignee, labels, parent/subtask links, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
