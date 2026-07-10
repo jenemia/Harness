@@ -88,6 +88,7 @@ export function TaskCard(props: {
   agents: Agent[];
   assignee: Agent | null | undefined;
   projectId: string;
+  hasPendingInteraction: boolean;
   onOpen: () => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
@@ -250,7 +251,7 @@ export function TaskCard(props: {
         >
           <ArrowDown size={16} />
         </button>
-        {props.task.status === "Paused" ? (
+        {props.task.status === "Paused" && !props.hasPendingInteraction ? (
           <button
             className="icon-button"
             title="Resume task"
@@ -259,7 +260,8 @@ export function TaskCard(props: {
           >
             <Play size={16} />
           </button>
-        ) : (
+        ) : props.task.status !== "Paused" && props.task.status !== "In Progress" &&
+          props.task.status !== "In Review" && props.task.status !== "Done" ? (
           <>
             <button
               className="icon-button"
@@ -269,20 +271,16 @@ export function TaskCard(props: {
             >
               <Play size={16} />
             </button>
-            {props.task.status !== "In Progress" &&
-              props.task.status !== "In Review" &&
-              props.task.status !== "Done" && (
-                <button
-                  className="icon-button"
-                  title="Pause task"
-                  type="button"
-                  onClick={() => void pause()}
-                >
-                  <Clock3 size={16} />
-                </button>
-              )}
+            <button
+              className="icon-button"
+              title="Pause task"
+              type="button"
+              onClick={() => void pause()}
+            >
+              <Clock3 size={16} />
+            </button>
           </>
-        )}
+        ) : null}
         {(props.task.mergeStatus === "pending" ||
           props.task.mergeStatus === "conflict") && (
           <>

@@ -51,6 +51,9 @@ export function ProjectHealthPanel({
     healthReport?.pendingApprovals ??
     overview.approvals.filter((approval) => approval.status === "pending")
       .length;
+  const pendingInteractions = overview.interactions.filter(
+    (interaction) => interaction.status === "pending" && interaction.kind !== "approval",
+  ).length;
   const pendingMerges =
     healthReport?.pendingMerges ??
     overview.tasks.filter(
@@ -83,6 +86,8 @@ export function ProjectHealthPanel({
   const recommendation =
     providerCommandIssues.length > 0
       ? "Configure provider commands"
+      : pendingInteractions > 0
+        ? "Answer pending interactions"
       : schedulerIssues.length > 0
         ? "Fix ready task blockers"
         : pendingApprovals > 0
@@ -121,6 +126,10 @@ export function ProjectHealthPanel({
         <div className="compact-row">
           <strong>{pendingApprovals}</strong>
           <span>approvals</span>
+        </div>
+        <div className="compact-row">
+          <strong>{pendingInteractions}</strong>
+          <span>interactions</span>
         </div>
         <div className="compact-row">
           <strong>{pendingMerges}</strong>
@@ -172,6 +181,25 @@ export function AttentionPanel(props: {
     [props.overview.tasks],
   );
   const items = useMemo(() => {
+    const pendingInteractions = props.overview.interactions
+      .filter((interaction) => interaction.status === "pending" && interaction.kind !== "approval" && interaction.taskId)
+      .map((interaction) => {
+        const taskId = interaction.taskId as string;
+        const task = tasksById.get(taskId);
+        const prompt = typeof interaction.requestPayload.prompt === "string"
+          ? interaction.requestPayload.prompt
+          : typeof interaction.requestPayload.reason === "string"
+            ? interaction.requestPayload.reason
+            : "Response is waiting.";
+        return {
+          key: `interaction-${interaction.id}`,
+          tone: interaction.kind === "permission" ? "approval" : "neutral",
+          kind: interaction.kind,
+          title: task?.title || taskId.slice(0, 8),
+          meta: prompt,
+          taskId,
+        };
+      });
     const pendingApprovals = props.overview.approvals
       .filter((approval) => approval.status === "pending")
       .map((approval) => {
@@ -240,6 +268,7 @@ export function AttentionPanel(props: {
         taskId: task.id,
       }));
     return [
+      ...pendingInteractions,
       ...pendingApprovals,
       ...mergeTasks,
       ...failedRuns,
@@ -248,6 +277,7 @@ export function AttentionPanel(props: {
     ].slice(0, 6);
   }, [
     props.overview.approvals,
+    props.overview.interactions,
     props.overview.runs,
     props.overview.tasks,
     tasksById,

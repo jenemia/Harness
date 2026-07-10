@@ -246,6 +246,9 @@ export function AppView({ controller }: { controller: AppController }) {
                                       : null
                                   }
                                   projectId={overview.project.id}
+                                  hasPendingInteraction={overview.interactions.some(
+                                    (interaction) => interaction.taskId === task.id && interaction.status === "pending" && Boolean(interaction.runId),
+                                  )}
                                   onOpen={() => setSelectedTaskId(task.id)}
                                   runAction={runAction}
                                   onChanged={refreshOverview}

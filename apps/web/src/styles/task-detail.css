@@ -352,6 +352,64 @@
   cursor: default;
 }
 
+.interaction-list {
+  display: grid;
+  gap: 9px;
+}
+
+.interaction-row {
+  background: #f7f8f9;
+  border: 1px solid #dfe1e6;
+  border-left: 4px solid #0c66e4;
+  border-radius: 7px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.interaction-row.rejected,
+.interaction-row.expired {
+  border-left-color: #ae2a19;
+}
+
+.interaction-row.resolved {
+  border-left-color: #22a06b;
+}
+
+.interaction-row header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.interaction-row header strong,
+.interaction-row header span,
+.interaction-row small {
+  font-size: 11px;
+}
+
+.interaction-row header span,
+.interaction-row small {
+  color: #626f86;
+}
+
+.interaction-row p {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.interaction-row textarea {
+  min-height: 72px;
+}
+
+.interaction-actions {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
 .draft-comment header span,
 .draft-reply strong {
   color: #626f86;

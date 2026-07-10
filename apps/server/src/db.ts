@@ -897,7 +897,10 @@ export function openProjectDb(projectPath: string) {
       error TEXT,
       changed_files TEXT NOT NULL DEFAULT '[]',
       started_at TEXT NOT NULL,
-      completed_at TEXT
+      completed_at TEXT,
+      correlation_id TEXT,
+      parent_run_id TEXT,
+      resumed_from_interaction_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS project_metadata (
@@ -1059,7 +1062,10 @@ export function openProjectDb(projectPath: string) {
       checkpoint TEXT,
       expires_at TEXT,
       created_at TEXT NOT NULL,
-      resolved_at TEXT
+      resolved_at TEXT,
+      response_key TEXT,
+      resumed_run_id TEXT,
+      resume_state TEXT NOT NULL DEFAULT 'none'
     );
     CREATE INDEX IF NOT EXISTS interactions_status_created
       ON interactions(status, created_at);
@@ -1076,6 +1082,16 @@ export function openProjectDb(projectPath: string) {
   `);
   migrateDraftReviewRequestsForConversationTurns(db);
   ensureColumn(db, "approvals", "interaction_id", "TEXT");
+  ensureColumn(db, "runs", "correlation_id", "TEXT");
+  ensureColumn(db, "runs", "parent_run_id", "TEXT");
+  ensureColumn(db, "runs", "resumed_from_interaction_id", "TEXT");
+  ensureColumn(db, "interactions", "response_key", "TEXT");
+  ensureColumn(db, "interactions", "resumed_run_id", "TEXT");
+  ensureColumn(db, "interactions", "resume_state", "TEXT NOT NULL DEFAULT 'none'");
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS runs_resumed_interaction_once
+      ON runs(resumed_from_interaction_id) WHERE resumed_from_interaction_id IS NOT NULL;
+  `);
   db.prepare(`
     INSERT INTO project_metadata (key, value) VALUES ('project_id', ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE value != excluded.value
@@ -2116,7 +2132,10 @@ export function mapInteraction(row: unknown): InteractionRecord {
     checkpoint: r.checkpoint ? JSON.parse(String(r.checkpoint)) as Record<string, unknown> : null,
     expiresAt: r.expires_at ? String(r.expires_at) : null,
     createdAt: String(r.created_at),
-    resolvedAt: r.resolved_at ? String(r.resolved_at) : null
+    resolvedAt: r.resolved_at ? String(r.resolved_at) : null,
+    responseKey: r.response_key ? String(r.response_key) : null,
+    resumedRunId: r.resumed_run_id ? String(r.resumed_run_id) : null,
+    resumeState: String(r.resume_state || "none") as InteractionRecord["resumeState"]
   };
 }
 
@@ -2179,7 +2198,10 @@ export function mapRun(row: unknown): RunRecord {
         : Number(r.agent_definition_schema_version),
     agentDefinitionSnapshot: r.agent_definition_snapshot ? String(r.agent_definition_snapshot) : null,
     startedAt: String(r.started_at),
-    completedAt: r.completed_at ? String(r.completed_at) : null
+    completedAt: r.completed_at ? String(r.completed_at) : null,
+    correlationId: r.correlation_id ? String(r.correlation_id) : null,
+    parentRunId: r.parent_run_id ? String(r.parent_run_id) : null,
+    resumedFromInteractionId: r.resumed_from_interaction_id ? String(r.resumed_from_interaction_id) : null
   };
 }
 

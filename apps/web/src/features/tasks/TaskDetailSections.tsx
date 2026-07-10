@@ -9,16 +9,18 @@ import {
   Plus,
   Settings,
 } from "lucide-react";
-import { FormEvent, type ReactNode, useMemo } from "react";
+import { FormEvent, type ReactNode, useMemo, useState } from "react";
 import type {
   Agent,
   CommentRecord,
   Event,
   Handoff,
+  Interaction,
   ProviderEvent,
   Run,
 } from "../../api/contracts";
 import { runService } from "../../services/runService";
+import { interactionService } from "../../services/interactionService";
 import { formatDate } from "../../shared/format";
 import {
   asRecord,
@@ -78,6 +80,77 @@ export function TaskComments(props: {
             <p>{comment.body}</p>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+export function TaskInteractions(props: {
+  projectId: string;
+  interactions: Interaction[];
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const [responses, setResponses] = useState<Record<string, string>>({});
+
+  async function respond(interaction: Interaction, action: "resolve" | "reject") {
+    await props.runAction(async () => {
+      await interactionService.respond(props.projectId, interaction.id, {
+        action,
+        responsePayload: { text: responses[interaction.id] || "" },
+        idempotencyKey: window.crypto.randomUUID(),
+      });
+      setResponses((current) => ({ ...current, [interaction.id]: "" }));
+      if (action === "resolve" && interaction.runId) {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+      }
+      await props.onChanged();
+    });
+  }
+
+  return (
+    <section className="drawer-section interaction-section">
+      <h3>Interactions</h3>
+      <div className="interaction-list">
+        {props.interactions.length === 0 && <p className="drawer-copy">No interactions for this task.</p>}
+        {props.interactions.map((interaction) => {
+          const prompt = typeof interaction.requestPayload.prompt === "string"
+            ? interaction.requestPayload.prompt
+            : typeof interaction.requestPayload.reason === "string"
+              ? interaction.requestPayload.reason
+              : `${interaction.kind} response requested`;
+          return (
+            <article className={`interaction-row ${interaction.status}`} key={interaction.id}>
+              <header><strong>{interaction.kind}</strong><span>{interaction.status}</span></header>
+              <p>{prompt}</p>
+              {interaction.status === "pending" && (
+                <>
+                  {(interaction.kind === "question" || interaction.kind === "review") && (
+                    <textarea
+                      aria-label={`Response for ${interaction.kind}`}
+                      placeholder="Enter a response"
+                      value={responses[interaction.id] || ""}
+                      onChange={(event) => setResponses((current) => ({ ...current, [interaction.id]: event.target.value }))}
+                    />
+                  )}
+                  <div className="interaction-actions">
+                    <button className="secondary-button compact" type="button" onClick={() => void respond(interaction, "reject")}>Reject</button>
+                    <button
+                      className="primary-button compact"
+                      disabled={(interaction.kind === "question" || interaction.kind === "review") && !(responses[interaction.id] || "").trim()}
+                      type="button"
+                      onClick={() => void respond(interaction, "resolve")}
+                    >
+                      {interaction.runId ? "Respond & resume" : "Resolve"}
+                    </button>
+                  </div>
+                </>
+              )}
+              {interaction.responsePayload && <small>Response: {String(interaction.responsePayload.text || interaction.responsePayload.decision || "recorded")}</small>}
+              {interaction.resumedRunId && <small>Resumed run {interaction.resumedRunId.slice(0, 8)} · {interaction.resumeState}</small>}
+            </article>
+          );
+        })}
       </div>
     </section>
   );

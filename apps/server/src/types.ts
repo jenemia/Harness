@@ -263,6 +263,9 @@ export type InteractionRecord = {
   expiresAt: string | null;
   createdAt: string;
   resolvedAt: string | null;
+  responseKey: string | null;
+  resumedRunId: string | null;
+  resumeState: "none" | "pending" | "started" | "completed" | "failed";
 };
 
 export type HandoffRecord = {
@@ -407,6 +410,9 @@ export type RunRecord = {
   agentDefinitionSnapshot: string | null;
   startedAt: string;
   completedAt: string | null;
+  correlationId: string | null;
+  parentRunId: string | null;
+  resumedFromInteractionId: string | null;
 };
 
 export type ProjectOverview = {

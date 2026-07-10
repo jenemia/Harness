@@ -33,6 +33,13 @@ export type LlmRunContext = {
   taskRuns?: RunRecord[];
   agentDefinitionSnapshot?: string;
   timeoutMs?: number;
+  resume?: {
+    interactionId: string;
+    parentRunId: string;
+    correlationId: string;
+    responsePayload: Record<string, unknown>;
+    checkpoint: Record<string, unknown> | null;
+  };
   onEvent?: (event: { type: ProviderEventType; payload: Record<string, unknown>; metadata?: { originalEventType?: string } }) => void;
 };
 
@@ -986,9 +993,10 @@ function createMockLlmProvider(): LlmProvider {
       capabilities: { ...nonStreamingCapabilities, structuredDecision: true }
     },
     async run(agent, task, workspace, context) {
-      const interactionKind = (["question", "approval", "permission", "review"] as const).find((kind) =>
-        task.labels.includes(`mock-interaction-${kind}`)
-      );
+      const interactionKind = !context?.resume && !context?.taskRuns?.some((run) => run.status === "suspended") &&
+        (["question", "approval", "permission", "review"] as const).find((kind) =>
+          task.labels.includes(`mock-interaction-${kind}`)
+        );
       const output = [
         `Agent: ${agent.name}`,
         `Role: ${agent.role}`,
@@ -998,6 +1006,10 @@ function createMockLlmProvider(): LlmProvider {
         `Previous task runs: ${context?.taskRuns?.length || 0}`,
         `Global memory entries: ${context?.globalMemory.length || 0}`,
         `Project memory entries: ${context?.projectMemory.length || 0}`,
+        ...(context?.resume ? [
+          `Resumed interaction: ${context.resume.interactionId}`,
+          `Human response: ${JSON.stringify(context.resume.responsePayload)}`
+        ] : []),
         "",
         "Mock adapter completed this task. Configure a shell CLI command on the agent to execute a real LLM CLI."
       ].join("\n");
@@ -1178,6 +1190,7 @@ function buildLlmEnvironment(
     HARNESS_PROJECT_MEMORY_FILE: files.projectMemoryFile,
     HARNESS_TASK_COMMENTS: files.taskCommentsText,
     HARNESS_TASK_RUN_SUMMARY: files.taskRunSummaryText,
+    HARNESS_RESUME_CONTEXT: context?.resume ? JSON.stringify(context.resume) : "",
     HARNESS_AGENT_NAME: agent.name,
     HARNESS_AGENT_ROLE: agent.role,
     HARNESS_AGENT_PERSONA: agent.persona,
@@ -1263,6 +1276,15 @@ function writePromptFiles(
     `## Recent Task Runs`,
     taskRunSummaryText,
     ``,
+    ...(context?.resume ? [
+      `## Resume Context`,
+      `Interaction: ${context.resume.interactionId}`,
+      `Parent run: ${context.resume.parentRunId}`,
+      `Correlation: ${context.resume.correlationId}`,
+      `Human response: ${JSON.stringify(context.resume.responsePayload)}`,
+      `Checkpoint: ${JSON.stringify(context.resume.checkpoint || {})}`,
+      ``
+    ] : []),
     `## Workspace`,
     `Kind: ${workspace.kind}`,
     `Mode: ${task.workspaceMode}`,

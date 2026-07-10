@@ -31,6 +31,7 @@ import {
   PathLine,
   TaskComments,
   TaskHandoffs,
+  TaskInteractions,
   TaskRuns,
   TaskTimeline,
 } from "./TaskDetailSections";
@@ -93,6 +94,12 @@ export function TaskDetailDrawer(props: {
   );
   const comments = props.overview.comments.filter(
     (comment) => comment.taskId === props.task.id,
+  );
+  const interactions = props.overview.interactions.filter(
+    (interaction) => interaction.taskId === props.task.id,
+  );
+  const hasPendingRunInteraction = interactions.some(
+    (interaction) => interaction.status === "pending" && Boolean(interaction.runId),
   );
   const parentTask = props.overview.tasks.find(
     (task) => task.id === props.task.parentTaskId,
@@ -285,7 +292,7 @@ export function TaskDetailDrawer(props: {
             <ArrowDown size={16} />
             <span>Down</span>
           </button>
-          {props.task.status === "Paused" ? (
+          {props.task.status === "Paused" && !hasPendingRunInteraction ? (
             <button
               className="secondary-button"
               type="button"
@@ -294,7 +301,7 @@ export function TaskDetailDrawer(props: {
               <Play size={16} />
               <span>Resume</span>
             </button>
-          ) : (
+          ) : props.task.status !== "Paused" ? (
             <>
               <button
                 className="secondary-button"
@@ -317,7 +324,7 @@ export function TaskDetailDrawer(props: {
                   </button>
                 )}
             </>
-          )}
+          ) : null}
           {(props.task.mergeStatus === "pending" ||
             props.task.mergeStatus === "conflict") && (
             <>
@@ -631,6 +638,12 @@ export function TaskDetailDrawer(props: {
           body={commentBody}
           onBodyChange={setCommentBody}
           onSubmit={addComment}
+        />
+        <TaskInteractions
+          projectId={props.overview.project.id}
+          interactions={interactions}
+          runAction={props.runAction}
+          onChanged={props.onChanged}
         />
         <TaskRuns
           projectId={props.overview.project.id}

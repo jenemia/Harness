@@ -184,11 +184,15 @@ Status: 완료
 
 Depends on: A12
 
+Status: 완료
+
 - checkpoint, provider session 또는 후속 run으로 동일 맥락을 재개한다.
 - 중복·만료 응답, 취소 run, 거절과 재시작 recovery를 안전하게 처리한다.
 - Attention, card, CLI와 timeline에서 같은 interaction 상태를 표시한다.
 
 완료 조건: 사용자 응답 뒤 기존 task/run/agent correlation을 유지하며 실행이 이어진다.
+
+검증: suspended question 응답의 후속 run, parent/correlation/agent 연계, response·checkpoint 전달, idempotency key 중복 방지, 충돌·만료·거절·서버 재시작 복구와 재개 중단 정리를 서버 통합 테스트로 검증했다. typed application/HTTP/CLI 응답 경로와 desktop IPC payload를 확인했고, 브라우저 smoke에서 Attention·카드·상세 interaction 상태, 일반 Resume 우회 차단, 응답 후 timeline·후속 run 표시와 console 오류 없음을 확인했다.
 
 ### A14: Completion report와 post-run diff review
 

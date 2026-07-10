@@ -8,10 +8,11 @@ import {
   createInteraction,
   listInteractions,
   recoverInteractions,
+  respondInteractionState,
   suspendRunForInteraction,
   transitionInteraction
 } from "../src/interactions.js";
-import { recoverInterruptedRuns, startTask } from "../src/runtime.js";
+import { recoverInterruptedRuns, respondInteraction, startTask } from "../src/runtime.js";
 import { createAgentService, createTaskService, registerProjectService } from "../src/services.js";
 
 test("interactions persist all kinds, suspend structured provider runs, recover, transition, and link legacy approvals", async () => {
@@ -81,12 +82,116 @@ test("interactions persist all kinds, suspend structured provider runs, recover,
       requestPayload: { prompt: "This duplicate payload is ignored." }
     });
     assert.equal(duplicate.id, question.id);
-    const resolved = transitionInteraction(project, question.id, "resolved", { answer: "CSV" });
-    assert.equal(resolved.status, "resolved");
-    assert.deepEqual(resolved.responsePayload, { answer: "CSV" });
-    assert.equal(transitionInteraction(project, question.id, "resolved", { answer: "duplicate" }).id, question.id);
-    assert.throws(() => transitionInteraction(project, question.id, "rejected", {}), /already resolved/);
-    assert.equal(getProjectOverview(project).runs.find((item) => item.id === run.id)?.status, "suspended", "A13 owns run resume");
+    const responseInput = {
+      action: "resolve" as const,
+      responsePayload: { answer: "CSV" },
+      idempotencyKey: "question-response"
+    };
+    const accepted = await respondInteraction(project, question.id, responseInput);
+    assert.equal(accepted.interaction.status, "resolved");
+    assert.equal(accepted.resume.queued, true);
+    const resumed = await waitForOverview(project, (value) => value.runs.some((item) =>
+      item.resumedFromInteractionId === question.id && item.status === "completed"
+    ));
+    const resumedRun = resumed.runs.find((item) => item.resumedFromInteractionId === question.id);
+    const resumedInteraction = resumed.interactions.find((item) => item.id === question.id);
+    assert.ok(resumedRun && resumedInteraction);
+    assert.equal(resumedRun.parentRunId, run.id);
+    assert.equal(resumedRun.correlationId, run.correlationId);
+    assert.equal(resumedInteraction.resumedRunId, resumedRun.id);
+    assert.equal(resumedInteraction.resumeState, "completed");
+    assert.match(resumedRun.output || "", /Human response: \{"answer":"CSV"\}/);
+    assert.ok(resumed.events.some((event) =>
+      event.type === "run.resumed" && event.metadata.interactionId === question.id
+    ));
+    const resumedCount = resumed.runs.filter((item) => item.resumedFromInteractionId === question.id).length;
+    assert.equal((await respondInteraction(project, question.id, responseInput)).deduplicated, true);
+    assert.equal(getProjectOverview(project).runs.filter((item) => item.resumedFromInteractionId === question.id).length, resumedCount);
+    await assert.rejects(
+      () => respondInteraction(project, question.id, { ...responseInput, idempotencyKey: "conflict" }),
+      /already resolved/
+    );
+    const cancelledRunInteraction = createInteraction(project, {
+      taskId: task.id,
+      runId: resumedRun.id,
+      agentId: agent.id,
+      correlationId: "cancelled-run-response",
+      kind: "question",
+      requestPayload: { prompt: "This run already ended." }
+    });
+    await assert.rejects(
+      () => respondInteraction(project, cancelledRunInteraction.id, {
+        action: "resolve",
+        responsePayload: { answer: "Too late" },
+        idempotencyKey: "cancelled-run-key"
+      }),
+      /cannot be resumed/
+    );
+    transitionInteraction(project, cancelledRunInteraction.id, "expired", { reason: "Run already ended" });
+
+    await waitForOverview(project, (value) => value.runs.every((item) => item.status !== "running"));
+    const recoveryTask = createTaskService(project, {
+      title: "Resume after restart",
+      description: "Review the recovery response.",
+      assigneeAgentId: agent.id,
+      labels: ["mock-interaction-review"],
+      status: "Selected",
+      workspaceMode: "harness"
+    });
+    assert.equal((await startTask(project, recoveryTask.id)).accepted, true);
+    const recoverySuspended = await waitForOverview(project, (value) => value.interactions.some((item) =>
+      item.taskId === recoveryTask.id && item.status === "pending"
+    ));
+    const recoveryInteraction = recoverySuspended.interactions.find((item) => item.taskId === recoveryTask.id && item.status === "pending");
+    assert.ok(recoveryInteraction);
+    assert.equal(respondInteractionState(project, recoveryInteraction.id, {
+      action: "resolve",
+      responsePayload: { text: "Recovery approved" },
+      idempotencyKey: "recovery-response"
+    }).interaction.resumeState, "pending");
+    assert.ok(recoverInterruptedRuns(project).pendingInteractions.every((id) => id !== recoveryInteraction.id));
+    const recoveredResume = await waitForOverview(project, (value) => value.runs.some((item) =>
+      item.resumedFromInteractionId === recoveryInteraction.id && item.status === "completed"
+    ));
+    assert.equal(recoveredResume.interactions.find((item) => item.id === recoveryInteraction.id)?.resumeState, "completed");
+
+    const interruptedResume = recoveredResume.runs.find((item) => item.resumedFromInteractionId === recoveryInteraction.id);
+    assert.ok(interruptedResume);
+    let interruptedDb = openProjectDb(project.path);
+    interruptedDb.prepare("UPDATE runs SET status = 'running', completed_at = NULL WHERE id = ?").run(interruptedResume.id);
+    interruptedDb.prepare("UPDATE interactions SET resume_state = 'started' WHERE id = ?").run(recoveryInteraction.id);
+    interruptedDb.prepare("UPDATE tasks SET status = 'In Progress' WHERE id = ?").run(recoveryTask.id);
+    interruptedDb.prepare("UPDATE agents SET status = 'busy', current_task_id = ? WHERE id = ?").run(recoveryTask.id, agent.id);
+    interruptedDb.close();
+    const interruptedRecovery = recoverInterruptedRuns(project);
+    assert.ok(interruptedRecovery.interruptedRuns.includes(interruptedResume.id));
+    assert.equal(getProjectOverview(project).interactions.find((item) => item.id === recoveryInteraction.id)?.resumeState, "failed");
+
+    await waitForOverview(project, (value) => value.runs.every((item) => item.status !== "running"));
+    const rejectTask = createTaskService(project, {
+      title: "Reject permission",
+      description: "Allow external file access?",
+      assigneeAgentId: agent.id,
+      labels: ["mock-interaction-permission"],
+      status: "Selected",
+      workspaceMode: "harness"
+    });
+    assert.equal((await startTask(project, rejectTask.id)).accepted, true);
+    const rejectOverview = await waitForOverview(project, (value) => value.interactions.some((item) =>
+      item.taskId === rejectTask.id && item.status === "pending"
+    ));
+    const rejectInteraction = rejectOverview.interactions.find((item) => item.taskId === rejectTask.id && item.status === "pending");
+    assert.ok(rejectInteraction);
+    const rejectedRunResponse = await respondInteraction(project, rejectInteraction.id, {
+      action: "reject",
+      responsePayload: { reason: "Permission denied" },
+      idempotencyKey: "reject-response"
+    });
+    assert.equal(rejectedRunResponse.interaction.status, "rejected");
+    assert.equal(rejectedRunResponse.resume.queued, false);
+    const rejectedOverview = getProjectOverview(project);
+    assert.equal(rejectedOverview.runs.find((item) => item.id === rejectInteraction.runId)?.status, "failed");
+    assert.equal(rejectedOverview.tasks.find((item) => item.id === rejectTask.id)?.status, "Blocked");
 
     const approval = createInteraction(project, {
       taskId: task.id, agentId: agent.id, correlationId: "manual-approval", kind: "approval",
@@ -156,6 +261,13 @@ test("interactions persist all kinds, suspend structured provider runs, recover,
     const linked = getProjectOverview(project).approvals.find((item) => item.taskId === approvalTask.id);
     assert.ok(linked?.interactionId);
     assert.equal(getProjectOverview(project).interactions.find((item) => item.id === linked.interactionId)?.approvalId, linked.id);
+    const linkedResponse = await respondInteraction(project, linked.interactionId, {
+      action: "reject",
+      responsePayload: { reason: "Not approved" },
+      idempotencyKey: "linked-approval-response"
+    });
+    assert.equal(linkedResponse.interaction.status, "rejected");
+    assert.equal(getProjectOverview(project).approvals.find((item) => item.id === linked.id)?.status, "rejected");
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;

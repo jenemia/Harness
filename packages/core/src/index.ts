@@ -35,6 +35,13 @@ export type HarnessCommandInputs = {
     taskId?: string;
     runId?: string;
   };
+  "interactions:respond": {
+    projectId: string;
+    interactionId: string;
+    action: "resolve" | "reject";
+    responsePayload: Record<string, unknown>;
+    idempotencyKey: string;
+  };
   "drafts:create": {
     projectId: string;
     payload: { content?: string; reviewers?: Array<{ role: "planning-reviewer" | "edge-case-reviewer" | "planner"; agentId?: string | null }> };
@@ -180,6 +187,9 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
     (payload.taskId === undefined || isText(payload.taskId)) &&
     (payload.runId === undefined || isText(payload.runId))
   );
+  if (command === "interactions:respond") return isText(payload.interactionId) &&
+    (payload.action === "resolve" || payload.action === "reject") && isRecord(payload.responsePayload) &&
+    isText(payload.idempotencyKey);
   if (command === "drafts:create") return isDraftCreatePayload(payload.payload);
   if (command === "drafts:get") return isText(payload.draftId);
   if (command === "drafts:update") return isText(payload.draftId) && isNonNegativeInteger(payload.expectedRevision) && typeof payload.content === "string";
@@ -209,7 +219,8 @@ const commandNames = new Set<HarnessCommand>([
   "projects:report", "projects:init-git", "projects:schedule", "providers:list", "templates:agents", "templates:workflows",
   "templates:projects", "templates:agent-create", "settings:get", "settings:update", "project-settings:update",
   "system:select-folder", "agents:save", "documents:create", "documents:update", "global-memories:create",
-  "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups", "interactions:list",
+  "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
+  "interactions:list", "interactions:respond",
   "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",

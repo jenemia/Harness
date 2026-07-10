@@ -27,6 +27,7 @@ import {
   pauseTask,
   recoverInterruptedRuns,
   requestMergeChanges,
+  respondInteraction,
   resolveMerge,
   resumeTask,
   startReadyTasks,
@@ -208,6 +209,10 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
     case "interactions:list": {
       const value = input(payload) as HarnessCommandInputs["interactions:list"];
       return { interactions: listInteractions(requiredProject(value.projectId), value) };
+    }
+    case "interactions:respond": {
+      const value = input(payload) as HarnessCommandInputs["interactions:respond"];
+      return { result: await respondInteraction(requiredProject(value.projectId), value.interactionId, value) };
     }
     case "drafts:create": {
       const value = input(payload) as HarnessCommandInputs["drafts:create"];

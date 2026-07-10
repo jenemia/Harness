@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -29,12 +30,14 @@ import {
   listRuntimeProviders,
   pauseTask,
   requestMergeChanges,
+  respondInteraction,
   resolveMerge,
   resumeTask,
   startReadyTasks,
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
+import { listInteractions } from "./interactions.js";
 import { parseWorkspaceModeOption } from "./workspace-mode.js";
 import { withProjectWriterLockAsync } from "./project-store.js";
 import {
@@ -74,6 +77,7 @@ const projectMutationCommands = new Set([
   "approvals:approve",
   "approvals:reject",
   "runs:followups",
+  "interactions:respond",
   "tasks:create",
   "tasks:update",
   "tasks:decompose",
@@ -127,6 +131,8 @@ const commands: Record<string, CommandHandler> = {
   "approvals:list": listApprovalsCommand,
   "approvals:approve": approveApprovalCommand,
   "approvals:reject": rejectApprovalCommand,
+  "interactions:list": listInteractionsCommand,
+  "interactions:respond": respondInteractionCommand,
   "board:show": showBoardCommand,
   "runs:list": listRunsCommand,
   "runs:show": showRunCommand,
@@ -589,6 +595,36 @@ async function rejectApprovalCommand(args: string[]) {
   return { result, overview: getProjectOverview(project) };
 }
 
+function listInteractionsCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const status = options.status ? normalizeInteractionStatus(options.status) : undefined;
+  const kind = options.kind ? normalizeInteractionKind(options.kind) : undefined;
+  return {
+    interactions: listInteractions(project, {
+      status,
+      kind,
+      taskId: options.task || undefined,
+      runId: options.run || undefined
+    })
+  };
+}
+
+async function respondInteractionCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const interactionId = getRequiredOption(options, "interaction");
+  const action = options.action === "reject" ? "reject" : options.action === "resolve" ? "resolve" : null;
+  if (!action) throw new Error("--action must be resolve or reject");
+  const response = readOptionalText(options, "response", "responseFile") || "";
+  const result = await respondInteraction(project, interactionId, {
+    action,
+    responsePayload: { text: response },
+    idempotencyKey: options.idempotencyKey || randomUUID()
+  });
+  return { result, overview: getProjectOverview(project) };
+}
+
 function showBoardCommand(args: string[]) {
   const project = getRequiredProject(args);
   const overview = getProjectOverview(project);
@@ -995,6 +1031,20 @@ function normalizeApprovalStatus(value: string) {
   return status;
 }
 
+function normalizeInteractionStatus(value: string) {
+  const statuses = ["pending", "resolved", "rejected", "expired"] as const;
+  const status = statuses.find((item) => item === value.toLowerCase());
+  if (!status) throw new Error(`--status must be one of: ${statuses.join(", ")}`);
+  return status;
+}
+
+function normalizeInteractionKind(value: string) {
+  const kinds = ["question", "approval", "permission", "review"] as const;
+  const kind = kinds.find((item) => item === value.toLowerCase());
+  if (!kind) throw new Error(`--kind must be one of: ${kinds.join(", ")}`);
+  return kind;
+}
+
 function normalizeApprovalKind(value: string) {
   const kinds: Array<ApprovalRecord["kind"]> = ["command_execution", "merge", "handoff"];
   const normalized = value.toLowerCase().replace("-", "_");
@@ -1071,6 +1121,8 @@ Usage:
   pnpm --filter @harness/server cli approvals:list --project <projectId> [--status pending,approved,rejected] [--kind command_execution,merge,handoff] [--task <taskId>] [--agent <agentId>]
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>
+  pnpm --filter @harness/server cli interactions:list --project <projectId> [--status pending,resolved,rejected,expired] [--kind question,approval,permission,review] [--task <taskId>] [--run <runId>]
+  pnpm --filter @harness/server cli interactions:respond --project <projectId> --interaction <interactionId> --action resolve|reject [--response <text>|--responseFile <file>] [--idempotencyKey <key>]
   pnpm --filter @harness/server cli board:show --project <projectId>
   pnpm --filter @harness/server cli runs:list --project <projectId> [--status running,completed,failed,suspended] [--task <taskId>] [--agent <agentId>] [--provider <providerId>] [--modelBackend <id>]
   pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>

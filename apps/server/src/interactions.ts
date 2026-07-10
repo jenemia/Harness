@@ -24,6 +24,12 @@ export type CreateInteractionInput = {
   expiresAt?: string | null;
 };
 
+export type RespondInteractionInput = {
+  action: "resolve" | "reject";
+  responsePayload: Record<string, unknown>;
+  idempotencyKey: string;
+};
+
 export function createInteraction(project: ProjectRecord, input: CreateInteractionInput) {
   return withProjectWriterLock(project.path, () => {
     const db = openProjectDb(project.path);
@@ -236,6 +242,91 @@ export function transitionInteraction(
   });
 }
 
+export function respondInteractionState(project: ProjectRecord, interactionId: string, input: RespondInteractionInput) {
+  return withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      return inTransaction(db, () => respondInteractionInDb(db, interactionId, input));
+    } finally {
+      db.close();
+    }
+  });
+}
+
+export function respondInteractionInDb(db: DatabaseSync, interactionId: string, input: RespondInteractionInput) {
+  if (input.action !== "resolve" && input.action !== "reject") throw new Error("Interaction response action is invalid.");
+  const key = input.idempotencyKey?.trim();
+  if (!key) throw new Error("Interaction response idempotency key is required.");
+  if (!isRecord(input.responsePayload)) throw new Error("Interaction response payload must be an object.");
+  assertNoCredentialMaterial(JSON.stringify(input.responsePayload), "Interaction response");
+  const row = db.prepare("SELECT * FROM interactions WHERE id = ?").get(interactionId);
+  if (!row) throw new Error("Interaction not found.");
+  const existing = mapInteraction(row);
+  if (existing.status !== "pending") {
+    if (existing.responseKey === key) {
+      return { interaction: existing, shouldResume: existing.resumeState === "pending", deduplicated: true };
+    }
+    throw new Error(`Interaction is already ${existing.status}.`);
+  }
+  const timestamp = now();
+  if (existing.expiresAt && existing.expiresAt <= timestamp) {
+    db.prepare(`
+      UPDATE interactions
+      SET status = 'expired', response_payload = ?, response_key = ?, resolved_at = ?
+      WHERE id = ?
+    `).run(JSON.stringify({ reason: "Interaction expired before the response was accepted." }), key, timestamp, existing.id);
+    const expired = mapInteraction(db.prepare("SELECT * FROM interactions WHERE id = ?").get(existing.id));
+    insertEvent(db, {
+      taskId: expired.taskId,
+      agentId: expired.agentId,
+      type: "interaction.expired",
+      message: "Interaction expired before the response was accepted.",
+      metadata: { interactionId: expired.id, runId: expired.runId, correlationId: expired.correlationId }
+    });
+    return { interaction: expired, shouldResume: false, deduplicated: false };
+  }
+  let run = null as ReturnType<typeof mapRun> | null;
+  if (existing.runId) {
+    const runRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(existing.runId);
+    if (!runRow) throw new Error("Interaction run not found.");
+    run = mapRun(runRow);
+  }
+  if (run && run.status !== "suspended") {
+    throw new Error(`Interaction run is ${run.status} and cannot be resumed.`);
+  }
+  const status: InteractionStatus = input.action === "resolve" ? "resolved" : "rejected";
+  const shouldResume = status === "resolved" && Boolean(run);
+  db.prepare(`
+    UPDATE interactions
+    SET status = ?, response_payload = ?, response_key = ?, resolved_at = ?, resume_state = ?
+    WHERE id = ?
+  `).run(
+    status, JSON.stringify(input.responsePayload), key, timestamp, shouldResume ? "pending" : "none", existing.id
+  );
+  if (run && status === "resolved") {
+    db.prepare("UPDATE tasks SET status = 'Selected', blocked_reason = NULL, updated_at = ? WHERE id = ?").run(timestamp, run.taskId);
+  } else if (run) {
+    const reason = "Interaction was rejected by the user.";
+    db.prepare("UPDATE runs SET status = 'failed', error = ?, completed_at = ? WHERE id = ?").run(reason, timestamp, run.id);
+    db.prepare("UPDATE tasks SET status = 'Blocked', blocked_reason = ?, updated_at = ? WHERE id = ?").run(reason, timestamp, run.taskId);
+  }
+  const updated = mapInteraction(db.prepare("SELECT * FROM interactions WHERE id = ?").get(existing.id));
+  insertEvent(db, {
+    taskId: updated.taskId,
+    agentId: updated.agentId,
+    type: `interaction.${status}`,
+    message: status === "resolved" ? "Interaction response was accepted." : "Interaction was rejected by the user.",
+    metadata: {
+      interactionId: updated.id,
+      runId: updated.runId,
+      correlationId: updated.correlationId,
+      kind: updated.kind,
+      resumePending: shouldResume
+    }
+  });
+  return { interaction: updated, shouldResume, deduplicated: false };
+}
+
 export function listInteractions(project: ProjectRecord, filter: {
   status?: InteractionStatus;
   kind?: InteractionKind;
@@ -283,6 +374,9 @@ export function recoverInteractions(project: ProjectRecord) {
         }
         const suspendedRuns = db.prepare("SELECT * FROM runs WHERE status = 'suspended'").all().map(mapRun);
         const pending = db.prepare("SELECT * FROM interactions WHERE status = 'pending'").all().map(mapInteraction);
+        const pendingResumes = db.prepare(`
+          SELECT * FROM interactions WHERE status = 'resolved' AND resume_state = 'pending'
+        `).all().map(mapInteraction);
         const pendingRunIds = new Set(pending.map((interaction) => interaction.runId).filter(Boolean));
         for (const run of suspendedRuns) {
           if (!pendingRunIds.has(run.id)) continue;
@@ -292,7 +386,8 @@ export function recoverInteractions(project: ProjectRecord) {
         return {
           expiredInteractionIds: expiring.map((interaction) => interaction.id),
           pendingInteractionIds: pending.map((interaction) => interaction.id),
-          suspendedRunIds: suspendedRuns.map((run) => run.id)
+          suspendedRunIds: suspendedRuns.map((run) => run.id),
+          pendingResumeInteractionIds: pendingResumes.map((interaction) => interaction.id)
         };
       });
     } finally {

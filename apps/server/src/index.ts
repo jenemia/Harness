@@ -33,6 +33,7 @@ import {
   pauseTask,
   recoverInterruptedRuns,
   requestMergeChanges,
+  respondInteraction,
   resolveMerge,
   resumeTask,
   startReadyTasks,
@@ -370,6 +371,14 @@ const server = http.createServer(async (req, res) => {
           taskId: requestUrl.searchParams.get("taskId") || undefined,
           runId: requestUrl.searchParams.get("runId") || undefined
         }) });
+        return;
+      }
+
+      const interactionResponseMatch = childPath.match(/^interactions\/([^/]+)\/respond$/);
+      if (interactionResponseMatch && req.method === "POST") {
+        sendJson(res, {
+          result: await respondInteraction(project, interactionResponseMatch[1], await readBody(req))
+        });
         return;
       }
 

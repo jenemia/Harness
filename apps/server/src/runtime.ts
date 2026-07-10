@@ -7,6 +7,7 @@ import {
   mapAgent,
   mapApproval,
   mapComment,
+  mapInteraction,
   mapMemory,
   mapRun,
   mapTask,
@@ -19,18 +20,28 @@ import { createDefaultProviders, diagnoseCliAuthentication, providerCommandCandi
 import { getPlanningProviderDefinition } from "./planner.js";
 import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriterLock } from "./project-store.js";
 import { createAgentRunSnapshot } from "./agent-store.js";
-import { redactCredentialMaterial } from "./credential-security.js";
+import { assertNoCredentialMaterial, redactCredentialMaterial } from "./credential-security.js";
 import { appendProviderEvent, nextProviderEventSequence } from "./provider-events.js";
-import { createApprovalRecordInDb, recoverInteractions, suspendRunForInteractionInDb } from "./interactions.js";
+import { createApprovalRecordInDb, recoverInteractions, respondInteractionInDb, suspendRunForInteractionInDb, type RespondInteractionInput } from "./interactions.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
+const resumingInteractions = new Set<string>();
 const reservedAgentRuns = new Map<string, number>();
 const reservedProjectRuns = new Map<string, number>();
 const providers = createDefaultProviders(projectHarnessDir);
 const commandApprovalKind = "command_execution";
 const mergeApprovalKind = "merge";
 const handoffApprovalKind = "handoff";
+
+type ResumeRunContext = {
+  interactionId: string;
+  parentRunId: string;
+  correlationId: string;
+  responsePayload: Record<string, unknown>;
+  checkpoint: Record<string, unknown> | null;
+  agentId: string;
+};
 
 export function listRuntimeProviders() {
   const platform = providers.platform();
@@ -97,6 +108,13 @@ function recoverInterruptedRunsMutation(project: ProjectRecord): RecoveryResult 
         timestamp,
         run.id
       );
+      if (run.resumedFromInteractionId) {
+        db.prepare(`
+          UPDATE interactions
+          SET resume_state = 'failed'
+          WHERE id = ? AND resumed_run_id = ? AND resume_state = 'started'
+        `).run(run.resumedFromInteractionId, run.id);
+      }
       insertEvent(db, {
         taskId: run.taskId,
         agentId: run.agentId,
@@ -755,6 +773,141 @@ async function decideApprovalMutation(
   return { ok: true };
 }
 
+async function respondInteractionMutation(
+  project: ProjectRecord,
+  interactionId: string,
+  input: RespondInteractionInput
+) {
+  if (input.action !== "resolve" && input.action !== "reject") throw new Error("Interaction response action is invalid.");
+  const responseKey = input.idempotencyKey?.trim();
+  if (!responseKey) throw new Error("Interaction response idempotency key is required.");
+  if (!input.responsePayload || typeof input.responsePayload !== "object" || Array.isArray(input.responsePayload)) {
+    throw new Error("Interaction response payload must be an object.");
+  }
+  assertNoCredentialMaterial(JSON.stringify(input.responsePayload), "Interaction response");
+  let linkedApprovalId: string | null = null;
+  const initialDb = openProjectDb(project.path);
+  try {
+    const row = initialDb.prepare("SELECT * FROM interactions WHERE id = ?").get(interactionId);
+    if (!row) throw new Error("Interaction not found.");
+    const interaction = mapInteraction(row);
+    if (interaction.responseKey === responseKey) {
+      const resume = interaction.resumeState === "pending"
+        ? await resumeInteractionMutation(project, interaction.id)
+        : { queued: false, interactionId: interaction.id, runId: interaction.resumedRunId };
+      return { interaction, resume, deduplicated: true };
+    }
+    if (interaction.status !== "pending") throw new Error(`Interaction is already ${interaction.status}.`);
+    linkedApprovalId = interaction.approvalId;
+  } finally {
+    initialDb.close();
+  }
+
+  if (linkedApprovalId) {
+    await decideApprovalMutation(project, linkedApprovalId, input.action === "resolve" ? "approved" : "rejected");
+    const db = openProjectDb(project.path);
+    try {
+      db.prepare(`
+        UPDATE interactions SET response_payload = ?, response_key = ? WHERE id = ?
+      `).run(JSON.stringify(input.responsePayload), responseKey, interactionId);
+      const interaction = mapInteraction(db.prepare("SELECT * FROM interactions WHERE id = ?").get(interactionId));
+      insertEvent(db, {
+        taskId: interaction.taskId,
+        agentId: interaction.agentId,
+        type: `interaction.${interaction.status}`,
+        message: `Approval interaction was ${interaction.status}.`,
+        metadata: { interactionId, approvalId: linkedApprovalId, correlationId: interaction.correlationId }
+      });
+      return { interaction, resume: { queued: false, interactionId, runId: null }, deduplicated: false };
+    } finally {
+      db.close();
+    }
+  }
+
+  const db = openProjectDb(project.path);
+  let response: ReturnType<typeof respondInteractionInDb>;
+  try {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      response = respondInteractionInDb(db, interactionId, input);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  } finally {
+    db.close();
+  }
+  const resume = response.shouldResume
+    ? await resumeInteractionMutation(project, response.interaction.id)
+    : { queued: false, interactionId: response.interaction.id, runId: response.interaction.resumedRunId };
+  return { ...response, resume };
+}
+
+async function resumeInteractionMutation(project: ProjectRecord, interactionId: string) {
+  if (resumingInteractions.has(interactionId)) return { queued: true, interactionId, runId: null };
+  let resume: ResumeRunContext;
+  const db = openProjectDb(project.path);
+  try {
+    const row = db.prepare("SELECT * FROM interactions WHERE id = ?").get(interactionId);
+    if (!row) throw new Error("Interaction not found.");
+    const interaction = mapInteraction(row);
+    const existingRunRow = db.prepare("SELECT * FROM runs WHERE resumed_from_interaction_id = ?").get(interaction.id);
+    if (existingRunRow) {
+      const existingRun = mapRun(existingRunRow);
+      const resumeState = existingRun.status === "running"
+        ? "started"
+        : existingRun.status === "completed" || existingRun.status === "suspended"
+          ? "completed"
+          : "failed";
+      db.prepare("UPDATE interactions SET resumed_run_id = ?, resume_state = ? WHERE id = ?").run(
+        existingRun.id,
+        resumeState,
+        interaction.id
+      );
+      return { queued: false, interactionId, runId: existingRun.id };
+    }
+    if (interaction.status !== "resolved" || interaction.resumeState !== "pending" || !interaction.runId ||
+        !interaction.agentId || !interaction.responsePayload) {
+      return { queued: false, interactionId, runId: interaction.resumedRunId };
+    }
+    const parentRow = db.prepare("SELECT * FROM runs WHERE id = ?").get(interaction.runId);
+    if (!parentRow) throw new Error("Suspended parent run not found.");
+    const parentRun = mapRun(parentRow);
+    if (parentRun.status !== "suspended") throw new Error(`Parent run is ${parentRun.status} and cannot resume.`);
+    const task = getTask(db, parentRun.taskId);
+    const agent = getAgent(db, interaction.agentId);
+    if (!task || !agent) throw new Error("Interaction resume context is unavailable.");
+    const settings = getProjectSettingsFromDb(db);
+    if (runningTasks.has(task.id) || !hasProjectCapacity(db, project.path, settings) || !hasAgentCapacity(db, agent)) {
+      return { queued: false, interactionId, runId: null };
+    }
+    reserveAgent(agent.id);
+    reserveProject(project.path);
+    resume = {
+      interactionId: interaction.id,
+      parentRunId: parentRun.id,
+      correlationId: interaction.correlationId,
+      responsePayload: interaction.responsePayload,
+      checkpoint: interaction.checkpoint,
+      agentId: agent.id
+    };
+    runningTasks.add(task.id);
+    resumingInteractions.add(interaction.id);
+    withoutProjectWriterLock(() => {
+      void executeTask(project, task.id, agent.id, resume).finally(() => {
+        runningTasks.delete(task.id);
+        resumingInteractions.delete(interaction.id);
+        releaseAgent(agent.id);
+        releaseProject(project.path);
+      });
+    });
+    return { queued: true, interactionId, runId: null };
+  } finally {
+    db.close();
+  }
+}
+
 function runtimeMutation<TArgs extends unknown[], TResult>(
   operation: (project: ProjectRecord, ...args: TArgs) => TResult
 ) {
@@ -772,12 +925,16 @@ function asyncRuntimeMutation<TArgs extends unknown[], TResult>(
 export const recoverInterruptedRuns = runtimeMutation((project: ProjectRecord) => {
   const runtime = recoverInterruptedRunsMutation(project);
   const interactions = recoverInteractions(project);
-  return {
+  const result = {
     ...runtime,
     pendingInteractions: interactions.pendingInteractionIds,
     suspendedRuns: interactions.suspendedRunIds,
     expiredInteractions: interactions.expiredInteractionIds
   };
+  for (const interactionId of interactions.pendingResumeInteractionIds) {
+    queueMicrotask(() => { void resumeInteraction(project, interactionId); });
+  }
+  return result;
 });
 export const initializeProjectWorkspace = asyncRuntimeMutation(initializeProjectWorkspaceMutation);
 export const startTask = asyncRuntimeMutation(startTaskMutation);
@@ -789,8 +946,15 @@ export const resolveMerge = asyncRuntimeMutation(resolveMergeMutation);
 export const requestMergeChanges = asyncRuntimeMutation(requestMergeChangesMutation);
 export const unblockReadyDependents = runtimeMutation(unblockReadyDependentsMutation);
 export const decideApproval = asyncRuntimeMutation(decideApprovalMutation);
+export const respondInteraction = asyncRuntimeMutation(respondInteractionMutation);
+export const resumeInteraction = asyncRuntimeMutation(resumeInteractionMutation);
 
-async function executeTask(project: ProjectRecord, taskId: string, reservedAgentId?: string) {
+async function executeTask(
+  project: ProjectRecord,
+  taskId: string,
+  reservedAgentId?: string,
+  resumeContext?: ResumeRunContext
+) {
   const db = openProjectDb(project.path);
   let runId = "";
   let providerEventContext: { taskId: string; providerId: string; correlationId: string } | null = null;
@@ -800,6 +964,12 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const task = getTask(db, taskId);
     if (!task) {
       return;
+    }
+    if (resumeContext) {
+      const existingResume = db.prepare("SELECT id FROM runs WHERE resumed_from_interaction_id = ?").get(
+        resumeContext.interactionId
+      ) as { id: string } | undefined;
+      if (existingResume) return;
     }
 
     const agent = reservedAgentId ? getAgent(db, reservedAgentId) : chooseAgentWithCapacity(db, task);
@@ -838,15 +1008,15 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     providerEventContext = {
       taskId: task.id,
       providerId: selectedProvider.definition.id,
-      correlationId: randomUUID()
+      correlationId: resumeContext?.correlationId || randomUUID()
     };
     db.prepare(`
       INSERT INTO runs (
         id, task_id, agent_id, status, branch_name, worktree_path, snapshot_ref,
         model_backend, provider_id, command_preview, output, error, changed_files,
         started_at, completed_at, agent_definition_hash, agent_definition_schema_version,
-        agent_definition_snapshot
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        agent_definition_snapshot, correlation_id, parent_run_id, resumed_from_interaction_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       runId,
       task.id,
@@ -865,8 +1035,16 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       null,
       agentSnapshot.hash,
       agentSnapshot.schemaVersion,
-      agentSnapshot.content
+      agentSnapshot.content,
+      providerEventContext.correlationId,
+      resumeContext?.parentRunId || null,
+      resumeContext?.interactionId || null
     );
+    if (resumeContext) {
+      db.prepare(`
+        UPDATE interactions SET resumed_run_id = ?, resume_state = 'started' WHERE id = ? AND resume_state = 'pending'
+      `).run(runId, resumeContext.interactionId);
+    }
 
     db.prepare("UPDATE tasks SET branch_name = ?, worktree_path = ?, updated_at = ? WHERE id = ?").run(
       workspace.branchName,
@@ -878,8 +1056,10 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     insertEvent(db, {
       taskId: task.id,
       agentId: agent.id,
-      type: "run.started",
-      message: `${agent.name} started work in ${workspace.worktreePath}.`,
+      type: resumeContext ? "run.resumed" : "run.started",
+      message: resumeContext
+        ? `${agent.name} resumed work from interaction ${resumeContext.interactionId.slice(0, 8)}.`
+        : `${agent.name} started work in ${workspace.worktreePath}.`,
       metadata: {
         runId,
         branchName: workspace.branchName,
@@ -888,6 +1068,9 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
         modelBackend: executionAgent.modelBackend,
         providerId: selectedProvider.definition.id,
         commandPreview,
+        correlationId: providerEventContext.correlationId,
+        parentRunId: resumeContext?.parentRunId || null,
+        interactionId: resumeContext?.interactionId || null,
         ...providerCommandMetadata(execution.commandResolution)
       }
     });
@@ -899,8 +1082,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       .all(task.id)
       .map(mapComment);
     const taskRuns = db
-      .prepare("SELECT * FROM runs WHERE task_id = ? AND id != ? AND status IN (?, ?) ORDER BY started_at DESC LIMIT 5")
-      .all(task.id, runId, "completed", "failed")
+      .prepare("SELECT * FROM runs WHERE task_id = ? AND id != ? AND status IN (?, ?, ?) ORDER BY started_at DESC LIMIT 5")
+      .all(task.id, runId, "completed", "failed", "suspended")
       .map(mapRun);
     const streamState: {
       terminal?: { payload: Record<string, unknown>; metadata?: { originalEventType?: string } };
@@ -912,6 +1095,13 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       taskRuns,
       agentDefinitionSnapshot: agentSnapshot.content,
       timeoutMs: settings.maxRunSeconds * 1000,
+      resume: resumeContext ? {
+        interactionId: resumeContext.interactionId,
+        parentRunId: resumeContext.parentRunId,
+        correlationId: resumeContext.correlationId,
+        responsePayload: resumeContext.responsePayload,
+        checkpoint: resumeContext.checkpoint
+      } : undefined,
       onEvent: (event) => {
         if (event.type === "result" || event.type === "error") {
           streamState.terminal = { payload: event.payload, metadata: event.metadata };
@@ -989,6 +1179,9 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
           },
           expiresAt: result.interaction.expiresAt
         });
+        if (resumeContext) {
+          db.prepare("UPDATE interactions SET resume_state = 'completed' WHERE id = ?").run(resumeContext.interactionId);
+        }
         db.exec("COMMIT");
       } catch (error) {
         db.exec("ROLLBACK");
@@ -1012,6 +1205,12 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       completedAt,
       runId
     );
+    if (resumeContext) {
+      db.prepare("UPDATE interactions SET resume_state = ? WHERE id = ?").run(
+        result.status === "completed" ? "completed" : "failed",
+        resumeContext.interactionId
+      );
+    }
 
     refreshAgentStatus(db, agent.id);
 
@@ -1059,6 +1258,9 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
         now(),
         runId
       );
+    }
+    if (resumeContext) {
+      db.prepare("UPDATE interactions SET resume_state = 'failed' WHERE id = ?").run(resumeContext.interactionId);
     }
 
     const task = getTask(db, taskId);

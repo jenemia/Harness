@@ -29,6 +29,12 @@ test("desktop window and IPC contract keep renderer privileges narrow", () => {
   assert.equal(isHarnessCommandPayload("interactions:list", {
     projectId: "p", status: "waiting"
   }), false);
+  assert.equal(isHarnessCommandPayload("interactions:respond", {
+    projectId: "p", interactionId: "i", action: "resolve", responsePayload: { text: "CSV" }, idempotencyKey: "key-1"
+  }), true);
+  assert.equal(isHarnessCommandPayload("interactions:respond", {
+    projectId: "p", interactionId: "i", action: "resume", responsePayload: {}, idempotencyKey: "key-2"
+  }), false);
   assert.equal(isHarnessCommandPayload("drafts:submit-review", {
     projectId: "p", requestId: "r", payload: { comments: [{ kind: "unknown", body: "bad" }] }
   }), false);
