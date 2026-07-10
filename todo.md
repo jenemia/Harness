@@ -352,6 +352,35 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 - 필수 설치와 첫 카드 실행 절차를 짧은 흐름으로 재현할 수 있다.
 - 각 provider와 MCP 연결 안내가 실제 smoke test command로 검증된다.
 
+## 9. 추가 기능: Agent Dog Overlay
+
+> 구현 계획 문서: [Agent Dog Overlay Feature Plan](Document/agent-dog-overlay-plan.md)
+
+이 기능은 local desktop shell과 구조화된 provider event가 안정화된 뒤 진행한다. 실제 구현 전 위 계획 문서를 읽고 activity state, privacy, asset license, macOS window와 Windows platform 경계를 따른다.
+
+- [ ] 독자적으로 제작·라이선스가 확인된 5종 강아지 sprite asset을 준비한다.
+- [ ] agent별 run과 provider event를 `sleeping`, `walking`, `running`, `sprinting`, `waiting`, `celebrating`, `error` 상태로 변환한다.
+- [ ] 작업 활동량에 따라 sprite fps와 제한된 overlay lane 이동 속도를 조정한다.
+- [ ] 실제 total work를 알 수 없는 task에는 임의 progress percentage를 표시하지 않는다.
+- [ ] tooltip에 agent, task, phase, 경과 시간, 변경 파일 수와 pending interaction을 안전하게 표시한다.
+- [ ] 중요 phase, 질문·승인·권한 요청, 완료와 실패만 toast로 표시하고 개별 tool event toast는 만들지 않는다.
+- [ ] macOS에서 transparent, always-on-top, 기본 click-through overlay window를 구현한다.
+- [ ] overlay는 별도 HTTP server, Accessibility와 Screen Recording 권한 없이 동작하게 한다.
+- [ ] reduced motion, privacy mode, 빠른 숨김, display와 위치 설정을 제공한다.
+- [ ] 공통 renderer와 activity engine에서 platform 조건을 제거하고 `MacOverlayPlatformAdapter` 뒤로 window 동작을 격리한다.
+- [ ] macOS MVP에서 `WindowsOverlayPlatformAdapter` interface, contract test와 compile-time stub을 함께 만든다.
+- [ ] prompt, transcript, source code, absolute path, credential과 raw tool result가 overlay IPC에 포함되지 않게 한다.
+- [ ] Agent Cat Connectors와 첨부 이미지의 코드·asset을 복사하지 않고 동작 아이디어만 참고한다.
+
+### 완료 조건
+
+- macOS에서 최대 5개의 active agent를 강아지 캐릭터로 구분할 수 있다.
+- 작업 활동 변화와 명시적 대기·완료·실패 상태가 안정적인 animation으로 표시된다.
+- sticky decision toast를 선택하면 main Harness window의 해당 card와 interaction이 열린다.
+- overlay를 완전히 끄거나 정적 reduced-motion 표시로 전환할 수 있다.
+- overlay 오류가 provider run, scheduler와 main board를 중단시키지 않는다.
+- Windows 구현이 공통 sprite, state, tooltip과 toast code를 다시 작성하지 않고 platform adapter 추가로 가능하다.
+
 ## 진행하면 좋은 것들 (자동 진행 대상 아님)
 
 이 section은 일반적인 `todo 진행해줘` 요청의 선택·구현 대상에서 제외한다. 사용자가 아래 항목을 이름으로 명시해 요청한 경우에만 별도 작업으로 진행한다.
@@ -385,6 +414,7 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 15. Harness MCP server, local socket bridge와 Cursor 연결
 16. 주요 실행 구간 OpenTelemetry 계측
 17. 완성된 실제 흐름과 검증된 설치 방법을 기준으로 README 개편
+18. [Agent Dog Overlay Feature Plan](Document/agent-dog-overlay-plan.md)에 따른 macOS overlay와 Windows-ready platform 경계
 
 `진행하면 좋은 것들`의 Worktree 개발 서버 Preview는 위 순서에 포함하지 않는다.
 
