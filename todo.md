@@ -364,7 +364,8 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 - [ ] 실제 total work를 알 수 없는 task에는 임의 progress percentage를 표시하지 않는다.
 - [ ] tooltip에 agent, task, phase, 경과 시간, 변경 파일 수와 pending interaction을 안전하게 표시한다.
 - [ ] 중요 phase, 질문·승인·권한 요청, 완료와 실패만 toast로 표시하고 개별 tool event toast는 만들지 않는다.
-- [ ] macOS에서 transparent, always-on-top, 기본 click-through overlay window를 구현한다.
+- [ ] 캐릭터와 toast는 업무·카드 상태만 읽기 전용으로 표시하고 click, drag, button, retry와 card open action을 제공하지 않는다.
+- [ ] macOS에서 transparent, always-on-top, 항상 click-through인 overlay window를 구현한다.
 - [ ] overlay는 별도 HTTP server, Accessibility와 Screen Recording 권한 없이 동작하게 한다.
 - [ ] reduced motion, privacy mode, 빠른 숨김, display와 위치 설정을 제공한다.
 - [ ] 공통 renderer와 activity engine에서 platform 조건을 제거하고 `MacOverlayPlatformAdapter` 뒤로 window 동작을 격리한다.
@@ -376,7 +377,8 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 - macOS에서 최대 5개의 active agent를 강아지 캐릭터로 구분할 수 있다.
 - 작업 활동 변화와 명시적 대기·완료·실패 상태가 안정적인 animation으로 표시된다.
-- sticky decision toast를 선택하면 main Harness window의 해당 card와 interaction이 열린다.
+- decision toast는 interaction 대기 상태만 알리고 사용자는 main Harness window에서 직접 확인하고 응답한다.
+- 캐릭터와 toast를 클릭해도 반응하지 않고 입력이 뒤 application으로 통과한다.
 - overlay를 완전히 끄거나 정적 reduced-motion 표시로 전환할 수 있다.
 - overlay 오류가 provider run, scheduler와 main board를 중단시키지 않는다.
 - Windows 구현이 공통 sprite, state, tooltip과 toast code를 다시 작성하지 않고 platform adapter 추가로 가능하다.
