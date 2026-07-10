@@ -209,6 +209,7 @@ function updateSettingsCommand(args: string[]) {
     defaultModelBackend: options.defaultModelBackend,
     defaultAgentMaxParallel: options.defaultAgentMaxParallel ? Number(options.defaultAgentMaxParallel) : undefined,
     autoStartPlans: parseOptionalBoolean(options.autoStartPlans, "autoStartPlans"),
+    largePlanTaskThreshold: options.largePlanTaskThreshold ? Number(options.largePlanTaskThreshold) : undefined,
     maxRunSeconds: options.maxRunSeconds ? Number(options.maxRunSeconds) : undefined,
     providerCommands: readOptionalJsonMap(options, "providerCommands", "providerCommandsFile")
   });
@@ -229,6 +230,7 @@ function updateProjectSettingsCommand(args: string[]) {
     autoStartPlans: parseOptionalBoolean(options.autoStartPlans, "autoStartPlans"),
     requireCommandApproval: parseOptionalBoolean(options.requireCommandApproval, "requireCommandApproval"),
     maxProjectParallel: options.maxProjectParallel ? Number(options.maxProjectParallel) : undefined,
+    largePlanTaskThreshold: options.largePlanTaskThreshold ? Number(options.largePlanTaskThreshold) : undefined,
     maxRunSeconds: options.maxRunSeconds ? Number(options.maxRunSeconds) : undefined,
     handoffRules: readOptionalJsonMap(options, "handoffRules", "handoffRulesFile"),
     providerCommands: readOptionalJsonMap(options, "providerCommands", "providerCommandsFile")
@@ -342,11 +344,13 @@ async function createPlanCommand(args: string[]) {
   const project = getRequiredProject(args);
   const goal = readGoal(options);
   const mode = normalizeMode(options.mode);
+  const settings = getProjectSettings(project.path);
   const plan = createPlan(project, {
     goal,
     mode,
     workflowTemplateId: options.workflowTemplate,
-    allowLargePlan: options.allowLargePlan === "true"
+    allowLargePlan: options.allowLargePlan === "true",
+    largePlanTaskThreshold: settings.largePlanTaskThreshold
   });
   const shouldAutoStart = options.autoStart === "true";
   const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
@@ -358,10 +362,12 @@ function previewPlanCommand(args: string[]) {
   const project = getRequiredProject(args);
   const goal = readGoal(options);
   const mode = normalizeMode(options.mode);
+  const settings = getProjectSettings(project.path);
   const preview = previewPlan({
     goal,
     mode,
-    workflowTemplateId: options.workflowTemplate
+    workflowTemplateId: options.workflowTemplate,
+    largePlanTaskThreshold: settings.largePlanTaskThreshold
   });
   return { preview, overview: getProjectOverview(project) };
 }
@@ -398,11 +404,13 @@ async function planDocumentCommand(args: string[]) {
   const project = getRequiredProject(args);
   const document = getCliDocument(project, getRequiredOption(options, "document"));
   const mode = normalizeMode(options.mode);
+  const settings = getProjectSettings(project.path);
   const plan = createPlan(project, {
     goal: `Document: ${document.title}\n\n${document.content}`,
     mode,
     workflowTemplateId: options.workflowTemplate,
     allowLargePlan: options.allowLargePlan === "true",
+    largePlanTaskThreshold: settings.largePlanTaskThreshold,
     sourceDocumentId: document.id
   });
   const shouldAutoStart = options.autoStart === "true";
@@ -415,10 +423,12 @@ function previewDocumentPlanCommand(args: string[]) {
   const project = getRequiredProject(args);
   const document = getCliDocument(project, getRequiredOption(options, "document"));
   const mode = normalizeMode(options.mode);
+  const settings = getProjectSettings(project.path);
   const preview = previewPlan({
     goal: `Document: ${document.title}\n\n${document.content}`,
     mode,
     workflowTemplateId: options.workflowTemplate,
+    largePlanTaskThreshold: settings.largePlanTaskThreshold,
     sourceDocumentId: document.id
   });
   return { document, preview, overview: getProjectOverview(project) };
@@ -1601,9 +1611,9 @@ Usage:
   pnpm --filter @harness/server cli projects:init-git --project <projectId>
   pnpm --filter @harness/server cli projects:report --project <projectId>
   pnpm --filter @harness/server cli settings:get
-  pnpm --filter @harness/server cli settings:update [--defaultProjectRoot <folder>] [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--maxRunSeconds 1800] [--providerCommands <json>|--providerCommandsFile <file>]
+  pnpm --filter @harness/server cli settings:update [--defaultProjectRoot <folder>] [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--largePlanTaskThreshold 10] [--maxRunSeconds 1800] [--providerCommands <json>|--providerCommandsFile <file>]
   pnpm --filter @harness/server cli project-settings:get --project <projectId>
-  pnpm --filter @harness/server cli project-settings:update --project <projectId> [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--requireCommandApproval true|false] [--maxProjectParallel 4] [--maxRunSeconds 1800] [--handoffRules <json>|--handoffRulesFile <file>] [--providerCommands <json>|--providerCommandsFile <file>]
+  pnpm --filter @harness/server cli project-settings:update --project <projectId> [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--requireCommandApproval true|false] [--maxProjectParallel 4] [--largePlanTaskThreshold 10] [--maxRunSeconds 1800] [--handoffRules <json>|--handoffRulesFile <file>] [--providerCommands <json>|--providerCommandsFile <file>]
   pnpm --filter @harness/server cli templates:agents
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects

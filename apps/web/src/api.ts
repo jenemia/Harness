@@ -69,6 +69,7 @@ export type GlobalSettings = {
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;
   autoStartPlans: boolean;
+  largePlanTaskThreshold: number;
   maxRunSeconds: number;
   providerCommands: Record<string, string>;
   updatedAt: string | null;
@@ -80,6 +81,7 @@ export type ProjectSettings = {
   autoStartPlans: boolean;
   requireCommandApproval: boolean;
   maxProjectParallel: number;
+  largePlanTaskThreshold: number;
   maxRunSeconds: number;
   handoffRules: Record<string, string>;
   providerCommands: Record<string, string>;

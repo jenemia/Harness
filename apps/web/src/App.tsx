@@ -2473,6 +2473,7 @@ function SettingsPanel(props: {
   const [defaultModelBackend, setDefaultModelBackend] = useState("mock");
   const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
   const [autoStartPlans, setAutoStartPlans] = useState(false);
+  const [largePlanTaskThreshold, setLargePlanTaskThreshold] = useState(10);
   const [maxRunSeconds, setMaxRunSeconds] = useState(1800);
   const [globalProviderCommandsText, setGlobalProviderCommandsText] = useState("{}");
   const [projectSettings, setProjectSettings] = useState<ProjectSettings>(props.overview.settings);
@@ -2487,6 +2488,7 @@ function SettingsPanel(props: {
     setDefaultModelBackend(props.settings.defaultModelBackend);
     setDefaultAgentMaxParallel(props.settings.defaultAgentMaxParallel);
     setAutoStartPlans(props.settings.autoStartPlans);
+    setLargePlanTaskThreshold(props.settings.largePlanTaskThreshold);
     setMaxRunSeconds(props.settings.maxRunSeconds);
     setGlobalProviderCommandsText(JSON.stringify(props.settings.providerCommands, null, 2));
   }, [props.settings]);
@@ -2508,6 +2510,7 @@ function SettingsPanel(props: {
           defaultModelBackend,
           defaultAgentMaxParallel,
           autoStartPlans,
+          largePlanTaskThreshold,
           maxRunSeconds,
           providerCommands
         })
@@ -2623,6 +2626,14 @@ function SettingsPanel(props: {
           onChange={(event) => setMaxRunSeconds(Math.max(5, Number(event.target.value || 5)))}
           placeholder="Run timeout seconds"
         />
+        <input
+          min={1}
+          max={100}
+          type="number"
+          value={largePlanTaskThreshold}
+          onChange={(event) => setLargePlanTaskThreshold(Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Large plan task threshold"
+        />
         <textarea
           value={globalProviderCommandsText}
           onChange={(event) => setGlobalProviderCommandsText(event.target.value)}
@@ -2668,6 +2679,14 @@ function SettingsPanel(props: {
           value={projectSettings.maxRunSeconds}
           onChange={(event) => updateProjectSetting("maxRunSeconds", Math.max(5, Number(event.target.value || 5)))}
           placeholder="Run timeout seconds"
+        />
+        <input
+          min={1}
+          max={100}
+          type="number"
+          value={projectSettings.largePlanTaskThreshold}
+          onChange={(event) => updateProjectSetting("largePlanTaskThreshold", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Large plan task threshold"
         />
         <label className="check-row">
           <input

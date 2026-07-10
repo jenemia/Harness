@@ -217,7 +217,7 @@ Initial implementation: command-backed LLM providers still honor project-level c
 
 Initial implementation: the Approvals panel and headless `approvals:list` command can filter pending and recent decisions by approval kind, status, task, or agent, making command, merge, and risky handoff gates easier to review as projects accumulate requests.
 
-Initial implementation: PM planning and document planning expose web preview actions, preview endpoints, and CLI commands that return the same task breakdown, dependency indexes, initial statuses, and large-plan warnings without creating tasks. Plans with 10 or more tasks require preview confirmation through the web UI or an explicit `allowLargePlan` flag in API/CLI calls. A later approval gate can reuse this preview before allowing very large task creation.
+Initial implementation: PM planning and document planning expose web preview actions, preview endpoints, and CLI commands that return the same task breakdown, dependency indexes, initial statuses, and large-plan warnings without creating tasks. Plans at or above the project's configurable large-plan threshold require preview confirmation through the web UI or an explicit `allowLargePlan` flag in API/CLI calls. A later approval gate can reuse this preview before allowing very large task creation.
 
 ### Review Agent
 
@@ -469,7 +469,7 @@ Global storage:
 - Global model/router settings
 - App update and telemetry preferences, if any
 
-Initial implementation: Harness stores global settings for app-wide defaults, global memory for cross-project user preferences, and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy. Harness also stores project-local memory entries for conventions and preferences that should travel with agent execution.
+Initial implementation: Harness stores global settings for app-wide defaults, global memory for cross-project user preferences, and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, large-plan confirmation threshold, and command approval policy. Harness also stores project-local memory entries for conventions and preferences that should travel with agent execution.
 
 Initial implementation: command-backed LLM providers respect a project-configurable run timeout inherited from global defaults. Timed-out commands fail the run, unblock the runner, and leave an audit error on the task.
 

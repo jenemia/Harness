@@ -269,8 +269,9 @@ const server = http.createServer(async (req, res) => {
           workflowTemplateId?: string;
           allowLargePlan?: boolean;
         }>(req);
-        const plan = createPlan(project, body);
-        const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
+        const settings = getProjectSettings(project.path);
+        const plan = createPlan(project, { ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold });
+        const shouldAutoStart = body.autoStart ?? settings.autoStartPlans;
         const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
         sendJson(res, { plan, schedule, overview: getProjectOverview(project) }, 201);
         return;
@@ -282,7 +283,8 @@ const server = http.createServer(async (req, res) => {
           mode?: "sequential" | "parallel";
           workflowTemplateId?: string;
         }>(req);
-        const preview = previewPlan(body);
+        const settings = getProjectSettings(project.path);
+        const preview = previewPlan({ ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold });
         sendJson(res, { preview, overview: getProjectOverview(project) });
         return;
       }
@@ -435,15 +437,17 @@ const server = http.createServer(async (req, res) => {
             allowLargePlan?: boolean;
           }>(req);
           const document = getDocument(project, documentId);
+          const settings = getProjectSettings(project.path);
           const plan = createPlan(project, {
             goal: `Document: ${document.title}\n\n${document.content}`,
             mode: body.mode,
             autoStart: body.autoStart,
             workflowTemplateId: body.workflowTemplateId,
             allowLargePlan: body.allowLargePlan,
+            largePlanTaskThreshold: settings.largePlanTaskThreshold,
             sourceDocumentId: document.id
           });
-          const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
+          const shouldAutoStart = body.autoStart ?? settings.autoStartPlans;
           const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
           sendJson(res, { document, plan, schedule, overview: getProjectOverview(project) }, 201);
           return;
@@ -455,10 +459,12 @@ const server = http.createServer(async (req, res) => {
             workflowTemplateId?: string;
           }>(req);
           const document = getDocument(project, documentId);
+          const settings = getProjectSettings(project.path);
           const preview = previewPlan({
             goal: `Document: ${document.title}\n\n${document.content}`,
             mode: body.mode,
             workflowTemplateId: body.workflowTemplateId,
+            largePlanTaskThreshold: settings.largePlanTaskThreshold,
             sourceDocumentId: document.id
           });
           sendJson(res, { document, preview, overview: getProjectOverview(project) });

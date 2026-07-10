@@ -32,7 +32,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Provider-based platform, workspace, approval, policy, and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Task-level model backend overrides for routing specific work to a different provider.
-- Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
+- Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, large plan confirmation threshold, and command approval policy.
 
 LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, `HARNESS_TASK_COMMENTS`, `HARNESS_TASK_RUN_SUMMARY`, `HARNESS_WORKSPACE_KIND`, `HARNESS_WORKSPACE_PATH`, and the backward-compatible `HARNESS_WORKTREE_PATH`.
 
@@ -71,8 +71,8 @@ pnpm cli projects:init-git --project <projectId>
 pnpm cli projects:update --project <projectId> --path ./moved-project --name "Moved Project"
 pnpm cli projects:unregister --project <projectId>
 pnpm cli projects:report --project <projectId>
-pnpm cli settings:update --defaultModelBackend codex --providerCommands '{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
-pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --requireCommandApproval true
+pnpm cli settings:update --defaultModelBackend codex --largePlanTaskThreshold 12 --providerCommands '{"codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
+pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --largePlanTaskThreshold 8 --requireCommandApproval true
 pnpm cli providers:list
 pnpm cli templates:projects
 pnpm cli templates:workflows
@@ -119,7 +119,7 @@ The CLI uses the same global/project-local storage as the web app and honors `HA
 
 Use the Settings panel, `/api/settings`, or `settings:get` and `settings:update` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.
 
-Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel, `PATCH /api/projects/:projectId/settings`, or `project-settings:get` and `project-settings:update` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, run timeout, PM plan auto-start behavior, command approval policy, and PM handoff rules.
+Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel, `PATCH /api/projects/:projectId/settings`, or `project-settings:get` and `project-settings:update` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, run timeout, PM plan auto-start behavior, large plan confirmation threshold, command approval policy, and PM handoff rules.
 
 Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
@@ -149,7 +149,7 @@ Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` 
 
 ## PM Planning
 
-Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition before any tasks are written. Plans with 10 or more tasks require preview confirmation before creation; API and CLI callers pass `allowLargePlan` after reviewing the preview. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
+Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition before any tasks are written. Plans at or above the project's large plan threshold require preview confirmation before creation; API and CLI callers pass `allowLargePlan` after reviewing the preview. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
 
 Select a workflow template to make PM planning follow a reusable role chain. Harness seeds `Plan, Build, Review` and `Build and Review` templates, and exposes `/api/workflow-templates` for custom templates.
 

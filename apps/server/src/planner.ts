@@ -12,6 +12,7 @@ export type PlanRequest = {
   sourceDocumentId?: string;
   workflowTemplateId?: string;
   allowLargePlan?: boolean;
+  largePlanTaskThreshold?: number;
 };
 
 export type PlannedTaskSummary = {
@@ -38,8 +39,6 @@ export type PlanPreviewResult = {
   warnings: string[];
 };
 
-const largePlanTaskThreshold = 10;
-
 export function previewPlan(input: PlanRequest): PlanPreviewResult {
   const goal = input.goal?.trim();
   if (!goal) {
@@ -52,7 +51,8 @@ export function previewPlan(input: PlanRequest): PlanPreviewResult {
     throw new Error("Workflow template not found.");
   }
   const planItems = buildPlanItems(goal, mode, workflowTemplate);
-  const warnings = buildPlanWarnings(planItems.length);
+  const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
+  const warnings = buildPlanWarnings(planItems.length, largePlanTaskThreshold);
 
   return {
     goal,
@@ -72,6 +72,7 @@ export function previewPlan(input: PlanRequest): PlanPreviewResult {
 
 export function createPlan(project: ProjectRecord, input: PlanRequest) {
   const preview = previewPlan(input);
+  const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
   if (preview.tasks.length >= largePlanTaskThreshold && !input.allowLargePlan) {
     throw new Error("Large plans require preview confirmation. Preview the plan first, then set allowLargePlan to true.");
   }
@@ -291,7 +292,11 @@ function parseExplicitItems(goal: string) {
     .slice(0, 20);
 }
 
-function buildPlanWarnings(taskCount: number) {
+function normalizeLargePlanTaskThreshold(value: number | undefined) {
+  return Math.max(1, Number(value || 10));
+}
+
+function buildPlanWarnings(taskCount: number, largePlanTaskThreshold: number) {
   const warnings: string[] = [];
   if (taskCount >= largePlanTaskThreshold) {
     warnings.push(
