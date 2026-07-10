@@ -77,6 +77,7 @@ button {
 .project-list,
 .column-list,
 .agent-list,
+.approval-list,
 .compact-list,
 .event-list {
   display: flex;
@@ -549,6 +550,61 @@ textarea {
   color: #626f86;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.approval-row {
+  border-top: 1px solid #f1f2f4;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 0;
+}
+
+.approval-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.approval-row strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.approval-row span,
+.approval-row p {
+  color: #626f86;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.approval-row p {
+  margin: 0;
+}
+
+.approval-row code {
+  background: #f1f2f4;
+  border-radius: 6px;
+  color: #172b4d;
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  padding: 8px;
+}
+
+.approval-row.approved strong {
+  color: #216e4e;
+}
+
+.approval-row.rejected strong {
+  color: #ae2a19;
+}
+
+.approval-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
 }
 
 .plan-result {

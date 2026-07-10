@@ -19,7 +19,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, DocumentRecord, Event, Overview, PlanResult, Project, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, Approval, DocumentRecord, Event, Overview, PlanResult, Project, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -213,6 +213,7 @@ export function App() {
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
+              <ApprovalsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <DocumentsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <AgentPanel
                 overview={overview}
@@ -251,6 +252,67 @@ export function App() {
         )}
       </main>
     </div>
+  );
+}
+
+function ApprovalsPanel(props: {
+  overview: Overview;
+  runAction: (action: () => Promise<void>) => Promise<void>;
+  onChanged: () => Promise<void>;
+}) {
+  const pending = props.overview.approvals.filter((approval) => approval.status === "pending");
+  const recent = props.overview.approvals.filter((approval) => approval.status !== "pending").slice(0, 3);
+
+  async function decide(approval: Approval, action: "approve" | "reject") {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/approvals/${approval.id}/${action}`, {
+        method: "POST"
+      });
+      await props.onChanged();
+    });
+  }
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <AlertTriangle size={17} />
+        <h2>Approvals</h2>
+      </div>
+      <div className="approval-list">
+        {pending.length === 0 && <p className="provider-help">No pending approval requests.</p>}
+        {pending.map((approval) => {
+          const task = props.overview.tasks.find((item) => item.id === approval.taskId);
+          const agent = props.overview.agents.find((item) => item.id === approval.agentId);
+          return (
+            <div className="approval-row pending" key={approval.id}>
+              <div>
+                <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
+                <span>{agent?.name || "Unknown agent"} · {approval.kind.replace("_", " ")}</span>
+              </div>
+              <p>{approval.reason}</p>
+              {approval.commandPreview && <code>{approval.commandPreview}</code>}
+              <div className="approval-actions">
+                <button className="secondary-button" type="button" onClick={() => void decide(approval, "reject")}>
+                  Reject
+                </button>
+                <button className="primary-button" type="button" onClick={() => void decide(approval, "approve")}>
+                  Approve
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {recent.map((approval) => {
+          const task = props.overview.tasks.find((item) => item.id === approval.taskId);
+          return (
+            <div className={`approval-row ${approval.status}`} key={approval.id}>
+              <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
+              <span>{approval.status} · {formatDate(approval.decidedAt || approval.createdAt)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

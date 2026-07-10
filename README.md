@@ -13,12 +13,14 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
 - Ready-task scheduler with agent `maxParallel` capacity checks.
 - Git worktree per executable task.
-- Automatic PM-driven handoff with risk gates reserved for merge/destructive actions.
+- Automatic PM-driven handoff with approval gates for LLM CLI command execution and merge.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Global settings for default project root, default LLM backend, default agent concurrency, and PM plan auto-start.
 
 LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
+
+Non-mock providers require human approval before their configured shell command runs. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
 
 ## Development
 
@@ -43,6 +45,10 @@ Set `autoStart` on the planning request or use `POST /api/projects/:projectId/sc
 ## Task Tracking
 
 Open a task from the board to inspect its status, assignee, worktree branch/path, dependencies, merge state, run output, errors, and task-scoped activity timeline.
+
+## Approvals
+
+Harness blocks task execution before running shell-backed LLM providers until the user approves the request. Approved tasks resume automatically. Rejected tasks remain blocked with the decision recorded in the task timeline.
 
 ## Documents
 

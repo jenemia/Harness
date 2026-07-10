@@ -17,7 +17,7 @@ import {
   updateGlobalSettings
 } from "./db.js";
 import { createPlan } from "./planner.js";
-import { approveMerge, listRuntimeProviders, startReadyTasks, startTask } from "./runtime.js";
+import { approveMerge, decideApproval, listRuntimeProviders, startReadyTasks, startTask } from "./runtime.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
@@ -150,6 +150,17 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
           return;
         }
+      }
+
+      const approvalActionMatch = childPath.match(/^approvals\/([^/]+)\/(approve|reject)$/);
+      if (approvalActionMatch && req.method === "POST") {
+        const result = await decideApproval(
+          project,
+          approvalActionMatch[1],
+          approvalActionMatch[2] === "approve" ? "approved" : "rejected"
+        );
+        sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+        return;
       }
 
       const documentActionMatch = childPath.match(/^documents\/([^/]+)(?:\/([^/]+))?$/);

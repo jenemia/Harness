@@ -3,17 +3,19 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   insertEvent,
   mapAgent,
+  mapApproval,
   mapTask,
   now,
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
 import { createDefaultProviders } from "./providers.js";
-import type { AgentRecord, ProjectRecord, TaskRecord } from "./types.js";
+import type { AgentRecord, ApprovalRecord, ProjectRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
 const reservedAgentRuns = new Map<string, number>();
 const providers = createDefaultProviders(projectHarnessDir);
+const commandApprovalKind = "command_execution";
 
 export function listRuntimeProviders() {
   return {
@@ -66,6 +68,12 @@ export async function startTask(project: ProjectRecord, taskId: string) {
       return { accepted: false, reason };
     }
 
+    assignTask(db, task.id, agent.id);
+    const approvalBlocker = ensureCommandApproval(db, task, agent);
+    if (approvalBlocker) {
+      return { accepted: false, reason: approvalBlocker };
+    }
+
     reservedAgentId = agent.id;
     reserveAgent(agent.id);
   } finally {
@@ -115,6 +123,12 @@ export async function startReadyTasks(project: ProjectRecord) {
       }
 
       assignTask(db, task.id, agent.id);
+      const approvalBlocker = ensureCommandApproval(db, task, agent);
+      if (approvalBlocker) {
+        skipped.push({ taskId: task.id, reason: approvalBlocker });
+        continue;
+      }
+
       reservedAgentRuns.set(agent.id, (reservedAgentRuns.get(agent.id) || 0) + 1);
       runningTasks.add(task.id);
       started.push(task.id);
@@ -200,6 +214,68 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
   } finally {
     db.close();
   }
+}
+
+export async function decideApproval(
+  project: ProjectRecord,
+  approvalId: string,
+  decision: "approved" | "rejected"
+) {
+  const db = openProjectDb(project.path);
+  let shouldStartTaskId: string | null = null;
+
+  try {
+    const approval = getApproval(db, approvalId);
+    if (!approval) {
+      return { ok: false, reason: "Approval request not found." };
+    }
+
+    if (approval.status !== "pending") {
+      return { ok: false, reason: `Approval request is already ${approval.status}.` };
+    }
+
+    db.prepare("UPDATE approvals SET status = ?, decided_at = ? WHERE id = ?").run(decision, now(), approval.id);
+
+    const task = getTask(db, approval.taskId);
+    const agent = getAgent(db, approval.agentId);
+    insertEvent(db, {
+      taskId: approval.taskId,
+      agentId: approval.agentId,
+      type: decision === "approved" ? "approval.approved" : "approval.rejected",
+      message:
+        decision === "approved"
+          ? "Human approved command execution for this task."
+          : "Human rejected command execution for this task.",
+      metadata: { approvalId: approval.id, kind: approval.kind }
+    });
+
+    if (task && decision === "approved") {
+      db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+        "Selected",
+        null,
+        now(),
+        task.id
+      );
+      shouldStartTaskId = task.id;
+    }
+
+    if (task && decision === "rejected") {
+      setTaskBlocked(db, task.id, "Command execution approval was rejected.");
+      if (agent) {
+        refreshAgentStatus(db, agent.id);
+      }
+    }
+  } finally {
+    db.close();
+  }
+
+  if (shouldStartTaskId) {
+    setTimeout(() => {
+      void startTask(project, shouldStartTaskId);
+    }, 0);
+  }
+
+  return { ok: true };
 }
 
 async function executeTask(project: ProjectRecord, taskId: string, reservedAgentId?: string) {
@@ -402,6 +478,11 @@ function getAgent(db: DatabaseSync, agentId: string): AgentRecord | null {
   return row ? mapAgent(row) : null;
 }
 
+function getApproval(db: DatabaseSync, approvalId: string): ApprovalRecord | null {
+  const row = db.prepare("SELECT * FROM approvals WHERE id = ?").get(approvalId);
+  return row ? mapApproval(row) : null;
+}
+
 function findAgentByRole(db: DatabaseSync, role: string): AgentRecord | null {
   const row = db.prepare("SELECT * FROM agents WHERE role = ? ORDER BY created_at ASC LIMIT 1").get(role);
   return row ? mapAgent(row) : null;
@@ -452,6 +533,62 @@ function setTaskBlocked(db: DatabaseSync, taskId: string, reason: string) {
     now(),
     taskId
   );
+}
+
+function ensureCommandApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRecord) {
+  const provider = providers.llm(agent.modelBackend);
+  if (!provider.definition.requiresCommand) {
+    return null;
+  }
+
+  const existingRows = db
+    .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
+    .all(task.id, agent.id, commandApprovalKind)
+    .map(mapApproval);
+  const approved = existingRows.find((approval) => approval.status === "approved");
+  if (approved) {
+    return null;
+  }
+
+  const rejected = existingRows.find((approval) => approval.status === "rejected");
+  if (rejected) {
+    const reason = "Command execution approval was rejected.";
+    setTaskBlocked(db, task.id, reason);
+    return reason;
+  }
+
+  const pending = existingRows.find((approval) => approval.status === "pending");
+  const reason = `${agent.name} needs approval before running ${provider.definition.label}.`;
+  setTaskBlocked(db, task.id, reason);
+
+  if (pending) {
+    return reason;
+  }
+
+  const approvalId = randomUUID();
+  db.prepare("INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+    approvalId,
+    task.id,
+    agent.id,
+    commandApprovalKind,
+    "pending",
+    reason,
+    agent.cliCommand || provider.definition.commandExample,
+    now(),
+    null
+  );
+  insertEvent(db, {
+    taskId: task.id,
+    agentId: agent.id,
+    type: "approval.requested",
+    message: reason,
+    metadata: {
+      approvalId,
+      provider: provider.definition.id,
+      commandPreview: agent.cliCommand || provider.definition.commandExample
+    }
+  });
+  return reason;
 }
 
 function setAgentBusy(db: DatabaseSync, agentId: string, taskId: string) {

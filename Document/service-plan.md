@@ -104,9 +104,12 @@ Default handoff policy:
 - The PM agent records the reason for each handoff.
 - Human approval is only required when a handoff crosses a configured risk boundary.
 
+Initial implementation: shell-backed LLM providers create a command execution approval request before any configured CLI command runs. The task is blocked until the user approves or rejects the request from the Approvals panel. Approved tasks resume automatically; rejected tasks remain blocked and the decision is recorded in the timeline.
+
 Risk boundaries can include:
 
 - Merging code back to the main project branch.
+- Running shell-backed LLM CLI commands.
 - Running destructive commands.
 - Installing or upgrading dependencies.
 - Editing files outside the task worktree.
@@ -172,6 +175,7 @@ The timeline should show both individual agent actions and PM orchestration deci
 
 Certain actions should require user approval:
 
+- Running shell-backed LLM CLI commands
 - Running destructive shell commands
 - Editing files outside the project folder
 - Installing packages
@@ -402,6 +406,7 @@ Candidate paths:
 - Parallel execution with dependency-aware scheduling
 - PM-driven handoff decisions after task completion
 - Automatic handoff by default with approval gates for risky actions
+- Approval queue for command execution requests
 - Configurable concurrency limits
 - Persistent run state so interrupted work can be resumed or audited
 

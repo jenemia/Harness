@@ -66,6 +66,18 @@ export type DocumentRecord = {
   updatedAt: string;
 };
 
+export type ApprovalRecord = {
+  id: string;
+  taskId: string;
+  agentId: string;
+  kind: "command_execution";
+  status: "pending" | "approved" | "rejected";
+  reason: string;
+  commandPreview: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+};
+
 export type EventRecord = {
   id: string;
   taskId: string | null;
@@ -94,6 +106,7 @@ export type ProjectOverview = {
   agents: AgentRecord[];
   tasks: TaskRecord[];
   documents: DocumentRecord[];
+  approvals: ApprovalRecord[];
   events: EventRecord[];
   runs: RunRecord[];
 };

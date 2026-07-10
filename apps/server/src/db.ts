@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   AgentRecord,
+  ApprovalRecord,
   DocumentRecord,
   EventRecord,
   GlobalSettings,
@@ -208,6 +209,18 @@ export function openProjectDb(projectPath: string) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS approvals (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      command_preview TEXT,
+      created_at TEXT NOT NULL,
+      decided_at TEXT
+    );
   `);
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
@@ -290,6 +303,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       agents: db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent),
       tasks: db.prepare("SELECT * FROM tasks ORDER BY created_at ASC").all().map(mapTask),
       documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
+      approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
       runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
     };
@@ -458,6 +472,21 @@ export function mapDocument(row: unknown): DocumentRecord {
     content: r.content,
     createdAt: r.created_at,
     updatedAt: r.updated_at
+  };
+}
+
+export function mapApproval(row: unknown): ApprovalRecord {
+  const r = row as Record<string, string | null>;
+  return {
+    id: String(r.id),
+    taskId: String(r.task_id),
+    agentId: String(r.agent_id),
+    kind: String(r.kind) as ApprovalRecord["kind"],
+    status: String(r.status) as ApprovalRecord["status"],
+    reason: String(r.reason),
+    commandPreview: r.command_preview ? String(r.command_preview) : null,
+    createdAt: String(r.created_at),
+    decidedAt: r.decided_at ? String(r.decided_at) : null
   };
 }
 
