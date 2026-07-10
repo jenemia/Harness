@@ -42,6 +42,7 @@ import {
 import { selectFolder } from "./folder-picker.js";
 import { createDraftReply, createDraftSession, decideDraftApply, getDraftSnapshot, recordDraftApplyAttempt, recoverDraftReviewRequests, replayDraftEvents, restoreDraftRevision, undoDraftApply, updateDraftCommentStatus, updateDraftRevision } from "./drafts.js";
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
+import { listInteractions } from "./interactions.js";
 import {
   createAgentService,
   createDocumentService,
@@ -357,6 +358,18 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && childPath === "schedule") {
         const schedule = await startReadyTasks(project);
         sendJson(res, { schedule, overview: getProjectOverview(project) }, 202);
+        return;
+      }
+
+      if (req.method === "GET" && childPath === "interactions") {
+        const status = requestUrl.searchParams.get("status") || undefined;
+        const kind = requestUrl.searchParams.get("kind") || undefined;
+        sendJson(res, { interactions: listInteractions(project, {
+          status: status as NonNullable<Parameters<typeof listInteractions>[1]>["status"],
+          kind: kind as NonNullable<Parameters<typeof listInteractions>[1]>["kind"],
+          taskId: requestUrl.searchParams.get("taskId") || undefined,
+          runId: requestUrl.searchParams.get("runId") || undefined
+        }) });
         return;
       }
 

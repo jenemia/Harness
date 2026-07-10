@@ -36,6 +36,23 @@ export type LlmRunContext = {
   onEvent?: (event: { type: ProviderEventType; payload: Record<string, unknown>; metadata?: { originalEventType?: string } }) => void;
 };
 
+export type ProviderRunStatus = "completed" | "failed" | "suspended";
+
+export type ProviderInteractionRequest = {
+  kind: "question" | "approval" | "permission" | "review";
+  requestPayload: Record<string, unknown>;
+  checkpoint?: Record<string, unknown> | null;
+  expiresAt?: string | null;
+};
+
+export type LlmRunResult = {
+  status: ProviderRunStatus;
+  ok: boolean;
+  output: string;
+  error: string | null;
+  interaction?: ProviderInteractionRequest;
+};
+
 export type PlatformProvider = {
   id: string;
   label: string;
@@ -89,7 +106,7 @@ export type LlmProvider = {
     task: TaskRecord,
     workspace: TaskWorkspace,
     context?: LlmRunContext
-  ): Promise<{ ok: boolean; output: string; error: string | null }>;
+  ): Promise<LlmRunResult>;
 };
 
 export type LlmProviderDefinition = {
@@ -966,9 +983,12 @@ function createMockLlmProvider(): LlmProvider {
       description: "Deterministic local provider for testing Harness without calling an LLM.",
       requiresCommand: false,
       commandExample: null,
-      capabilities: nonStreamingCapabilities
+      capabilities: { ...nonStreamingCapabilities, structuredDecision: true }
     },
     async run(agent, task, workspace, context) {
+      const interactionKind = (["question", "approval", "permission", "review"] as const).find((kind) =>
+        task.labels.includes(`mock-interaction-${kind}`)
+      );
       const output = [
         `Agent: ${agent.name}`,
         `Role: ${agent.role}`,
@@ -982,12 +1002,28 @@ function createMockLlmProvider(): LlmProvider {
         "Mock adapter completed this task. Configure a shell CLI command on the agent to execute a real LLM CLI."
       ].join("\n");
       const files = writePromptFiles("mock", agent, task, workspace, context);
+      if (interactionKind) {
+        return {
+          status: "suspended",
+          ok: true,
+          output: `Mock provider is waiting for a ${interactionKind} interaction.`,
+          error: null,
+          interaction: {
+            kind: interactionKind,
+            requestPayload: {
+              prompt: task.description || `Respond to the mock ${interactionKind} request.`,
+              source: "mock-provider"
+            },
+            checkpoint: { providerId: "mock", promptFile: files.promptFile, phase: "waiting-for-interaction" }
+          }
+        };
+      }
       writeFileSync(
         path.join(workspace.worktreePath, "HARNESS_AGENT_RESULT.md"),
         `# Harness Agent Result\n\n${output}\n\nPrompt: ${files.promptFile}\n`,
         "utf8"
       );
-      return { ok: true, output, error: null };
+      return { status: "completed", ok: true, output, error: null };
     }
   };
 }
@@ -1006,15 +1042,16 @@ function createShellLlmProvider(platformProvider: PlatformProvider): LlmProvider
     },
     async run(agent, task, workspace, context) {
       if (!agent.cliCommand) {
-        return { ok: false, output: "", error: "Shell provider requires an agent CLI command." };
+        return { status: "failed", ok: false, output: "", error: "Shell provider requires an agent CLI command." };
       }
 
-      return platformProvider.runShell(
+      const result = await platformProvider.runShell(
         agent.cliCommand,
         workspace.worktreePath,
         buildLlmEnvironment("shell", agent, task, workspace, context),
         context?.timeoutMs
       );
+      return { ...result, status: result.ok ? "completed" : "failed" };
     }
   };
 }
@@ -1051,7 +1088,7 @@ function createCursorCliProvider(platformProvider: PlatformProvider): LlmProvide
     },
     async run(agent, task, workspace, context) {
       if (!agent.cliCommand) {
-        return { ok: false, output: "", error: "Cursor CLI command is unavailable." };
+        return { status: "failed", ok: false, output: "", error: "Cursor CLI command is unavailable." };
       }
       let assistantOutput = "";
       let terminalSummary = "";
@@ -1081,6 +1118,7 @@ function createCursorCliProvider(platformProvider: PlatformProvider): LlmProvide
       );
       const ok = processResult.ok && terminalSeen && !terminalError && !eventError;
       return {
+        status: ok ? "completed" : "failed",
         ok,
         output: terminalSummary || assistantOutput,
         error: ok ? null : eventError || processResult.error || terminalSummary || "Cursor CLI stream ended without a successful result."
@@ -1104,18 +1142,20 @@ function createCliLlmProvider(
     async run(agent, task, workspace, context) {
       if (!agent.cliCommand) {
         return {
+          status: "failed",
           ok: false,
           output: "",
           error: `${input.label} provider requires a CLI command. Example: ${input.commandExample}`
         };
       }
 
-      return platformProvider.runShell(
+      const result = await platformProvider.runShell(
         agent.cliCommand,
         workspace.worktreePath,
         buildLlmEnvironment(input.id, agent, task, workspace, context),
         context?.timeoutMs
       );
+      return { ...result, status: result.ok ? "completed" : "failed" };
     }
   };
 }

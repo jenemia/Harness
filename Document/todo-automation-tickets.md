@@ -170,11 +170,15 @@ Status: 완료
 
 Depends on: A01, A02, A07
 
+Status: 완료
+
 - question, approval, permission, review와 상태 전이를 영속화한다.
 - run의 `suspended` 상태와 provider completed/failed/suspended 결과를 정의한다.
 - 기존 approval API·데이터 호환 migration을 제공한다.
 
 완료 조건: 대기 interaction과 suspended run이 restart 후에도 유실되지 않는다.
+
+검증: 네 interaction kind와 pending/resolved/rejected/expired 전이, correlation idempotency, expiry recovery, credential rejection, mock provider의 structured suspended 결과와 checkpoint, restart 보존, legacy/new approval 양방향 link와 상태 trigger를 통합 테스트로 검증했다.
 
 ### A13: Interaction 응답과 실행 재개
 

@@ -28,6 +28,13 @@ export type HarnessCommandInputs = {
   "memories:update": { projectId: string; memoryId: string; payload: object };
   "approvals:decide": { projectId: string; approvalId: string; action: "approve" | "reject" };
   "runs:followups": { projectId: string; runId: string };
+  "interactions:list": {
+    projectId: string;
+    status?: "pending" | "resolved" | "rejected" | "expired";
+    kind?: "question" | "approval" | "permission" | "review";
+    taskId?: string;
+    runId?: string;
+  };
   "drafts:create": {
     projectId: string;
     payload: { content?: string; reviewers?: Array<{ role: "planning-reviewer" | "edge-case-reviewer" | "planner"; agentId?: string | null }> };
@@ -167,6 +174,12 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "memories:update") return isText(payload.memoryId) && isRecord(payload.payload);
   if (command === "approvals:decide") return isText(payload.approvalId) && (payload.action === "approve" || payload.action === "reject");
   if (command === "runs:followups") return isText(payload.runId);
+  if (command === "interactions:list") return (
+    (payload.status === undefined || ["pending", "resolved", "rejected", "expired"].includes(String(payload.status))) &&
+    (payload.kind === undefined || ["question", "approval", "permission", "review"].includes(String(payload.kind))) &&
+    (payload.taskId === undefined || isText(payload.taskId)) &&
+    (payload.runId === undefined || isText(payload.runId))
+  );
   if (command === "drafts:create") return isDraftCreatePayload(payload.payload);
   if (command === "drafts:get") return isText(payload.draftId);
   if (command === "drafts:update") return isText(payload.draftId) && isNonNegativeInteger(payload.expectedRevision) && typeof payload.content === "string";
@@ -196,7 +209,7 @@ const commandNames = new Set<HarnessCommand>([
   "projects:report", "projects:init-git", "projects:schedule", "providers:list", "templates:agents", "templates:workflows",
   "templates:projects", "templates:agent-create", "settings:get", "settings:update", "project-settings:update",
   "system:select-folder", "agents:save", "documents:create", "documents:update", "global-memories:create",
-  "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
+  "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups", "interactions:list",
   "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",

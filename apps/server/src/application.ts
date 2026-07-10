@@ -69,6 +69,7 @@ import {
   updateDraftRevision
 } from "./drafts.js";
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
+import { listInteractions } from "./interactions.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -203,6 +204,10 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["runs:followups"];
       const project = requiredProject(value.projectId);
       return { tasks: createFollowUpTasksService(project, value.runId), overview: getProjectOverview(project) };
+    }
+    case "interactions:list": {
+      const value = input(payload) as HarnessCommandInputs["interactions:list"];
+      return { interactions: listInteractions(requiredProject(value.projectId), value) };
     }
     case "drafts:create": {
       const value = input(payload) as HarnessCommandInputs["drafts:create"];

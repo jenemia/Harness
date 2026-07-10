@@ -436,6 +436,11 @@ textarea {
   color: #ae2a19;
 }
 
+.run-state.suspended {
+  background: #fff7d6;
+  color: #7f5f01;
+}
+
 .event-row {
   border-top: 1px solid #f1f2f4;
   padding: 9px 0;

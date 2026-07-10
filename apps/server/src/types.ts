@@ -241,6 +241,28 @@ export type ApprovalRecord = {
   commandPreview: string | null;
   createdAt: string;
   decidedAt: string | null;
+  interactionId: string | null;
+};
+
+export type InteractionKind = "question" | "approval" | "permission" | "review";
+export type InteractionStatus = "pending" | "resolved" | "rejected" | "expired";
+
+export type InteractionRecord = {
+  id: string;
+  projectId: string;
+  taskId: string | null;
+  runId: string | null;
+  agentId: string | null;
+  approvalId: string | null;
+  correlationId: string;
+  kind: InteractionKind;
+  status: InteractionStatus;
+  requestPayload: Record<string, unknown>;
+  responsePayload: Record<string, unknown> | null;
+  checkpoint: Record<string, unknown> | null;
+  expiresAt: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
 };
 
 export type HandoffRecord = {
@@ -370,7 +392,7 @@ export type RunRecord = {
   id: string;
   taskId: string;
   agentId: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "suspended";
   branchName: string | null;
   worktreePath: string | null;
   snapshotRef: string | null;
@@ -396,6 +418,7 @@ export type ProjectOverview = {
   memories: MemoryRecord[];
   globalMemories: MemoryRecord[];
   approvals: ApprovalRecord[];
+  interactions: InteractionRecord[];
   handoffs: HandoffRecord[];
   comments: CommentRecord[];
   events: EventRecord[];

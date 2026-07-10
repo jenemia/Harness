@@ -21,6 +21,7 @@ import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriter
 import { createAgentRunSnapshot } from "./agent-store.js";
 import { redactCredentialMaterial } from "./credential-security.js";
 import { appendProviderEvent, nextProviderEventSequence } from "./provider-events.js";
+import { createApprovalRecordInDb, recoverInteractions, suspendRunForInteractionInDb } from "./interactions.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -76,6 +77,9 @@ export type RecoveryResult = {
   interruptedRuns: string[];
   resetTasks: string[];
   resetAgents: string[];
+  pendingInteractions: string[];
+  suspendedRuns: string[];
+  expiredInteractions: string[];
 };
 
 function recoverInterruptedRunsMutation(project: ProjectRecord): RecoveryResult {
@@ -164,7 +168,10 @@ function recoverInterruptedRunsMutation(project: ProjectRecord): RecoveryResult 
       projectId: project.id,
       interruptedRuns: runningRuns.map((run) => run.id),
       resetTasks,
-      resetAgents: busyAgents.map((agent) => agent.id)
+      resetAgents: busyAgents.map((agent) => agent.id),
+      pendingInteractions: [],
+      suspendedRuns: [],
+      expiredInteractions: []
     };
   } finally {
     db.close();
@@ -762,7 +769,16 @@ function asyncRuntimeMutation<TArgs extends unknown[], TResult>(
     withProjectWriterLockAsync(project.path, () => operation(project, ...args));
 }
 
-export const recoverInterruptedRuns = runtimeMutation(recoverInterruptedRunsMutation);
+export const recoverInterruptedRuns = runtimeMutation((project: ProjectRecord) => {
+  const runtime = recoverInterruptedRunsMutation(project);
+  const interactions = recoverInteractions(project);
+  return {
+    ...runtime,
+    pendingInteractions: interactions.pendingInteractionIds,
+    suspendedRuns: interactions.suspendedRunIds,
+    expiredInteractions: interactions.expiredInteractionIds
+  };
+});
 export const initializeProjectWorkspace = asyncRuntimeMutation(initializeProjectWorkspaceMutation);
 export const startTask = asyncRuntimeMutation(startTaskMutation);
 export const pauseTask = runtimeMutation(pauseTaskMutation);
@@ -938,11 +954,11 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       runId,
       providerId: selectedProvider.definition.id,
       correlationId: providerEventContext.correlationId,
-      type: result.ok ? "result" : "error",
+      type: result.status === "failed" ? "error" : "result",
       payload: {
         ...(streamState.terminal?.payload || {}),
-        status: result.ok ? "completed" : "failed",
-        summary: result.ok ? safeOutput : safeError || "Agent run failed.",
+        status: result.status,
+        summary: result.status === "failed" ? safeError || "Agent run failed." : safeOutput,
         changedFiles
       },
       metadata: streamState.terminal?.metadata
@@ -950,7 +966,38 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     if (!terminalEvent.inserted) return;
     terminalClaimed = true;
 
-    const commitResult = result.ok && workspace.kind === "git-worktree"
+    if (result.status === "suspended") {
+      if (!result.interaction) throw new Error("Suspended provider result is missing an interaction request.");
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        db.prepare("UPDATE runs SET output = ?, error = NULL, changed_files = ? WHERE id = ?").run(
+          safeOutput, JSON.stringify(changedFiles), runId
+        );
+        suspendRunForInteractionInDb(db, project.id, {
+          runId,
+          taskId: task.id,
+          agentId: agent.id,
+          correlationId: providerEventContext.correlationId,
+          kind: result.interaction.kind,
+          requestPayload: result.interaction.requestPayload,
+          checkpoint: {
+            snapshotRef,
+            worktreePath: workspace.worktreePath,
+            branchName: workspace.branchName,
+            providerId: selectedProvider.definition.id,
+            ...(result.interaction.checkpoint || {})
+          },
+          expiresAt: result.interaction.expiresAt
+        });
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+      return;
+    }
+
+    const commitResult = result.status === "completed" && workspace.kind === "git-worktree"
       ? await providers.workspace().commitAll(
           workspace.worktreePath,
           `Harness task ${task.id.slice(0, 8)}: ${task.title}`
@@ -958,7 +1005,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       : { committed: false, output: "", error: null };
 
     db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, changed_files = ?, completed_at = ? WHERE id = ?").run(
-      result.ok ? "completed" : "failed",
+      result.status,
       [safeOutput, redactCredentialMaterial(commitResult.output)].filter(Boolean).join("\n\n"),
       safeError,
       JSON.stringify(changedFiles),
@@ -968,7 +1015,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
 
     refreshAgentStatus(db, agent.id);
 
-    if (!result.ok) {
+    if (result.status === "failed") {
       updateTaskStatus(db, task.id, "Blocked");
       insertEvent(db, {
         taskId: task.id,
@@ -1183,17 +1230,11 @@ function requestHandoffApproval(
   }
 
   const approvalId = randomUUID();
-  db.prepare("INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
-    approvalId,
-    task.id,
-    completedBy.id,
-    handoffApprovalKind,
-    "pending",
-    reason,
-    nextAgent.id,
-    now(),
-    null
-  );
+  const createdAt = now();
+  const interactionId = createApprovalRecordInDb(db, {
+    approvalId, taskId: task.id, agentId: completedBy.id, approvalKind: handoffApprovalKind,
+    reason, commandPreview: nextAgent.id, createdAt
+  });
   insertEvent(db, {
     taskId: task.id,
     agentId: completedBy.id,
@@ -1201,6 +1242,7 @@ function requestHandoffApproval(
     message: reason,
     metadata: {
       approvalId,
+      interactionId,
       kind: handoffApprovalKind,
       targetAgentId: nextAgent.id,
       targetRole: handoffDecision.role,
@@ -1680,17 +1722,11 @@ function ensureCommandApproval(
   }
 
   const approvalId = randomUUID();
-  db.prepare("INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
-    approvalId,
-    task.id,
-    agent.id,
-    commandApprovalKind,
-    "pending",
-    evaluation.reason,
-    evaluation.commandPreview,
-    now(),
-    null
-  );
+  const createdAt = now();
+  const interactionId = createApprovalRecordInDb(db, {
+    approvalId, taskId: task.id, agentId: agent.id, approvalKind: commandApprovalKind,
+    reason: evaluation.reason, commandPreview: evaluation.commandPreview, createdAt
+  });
   insertEvent(db, {
     taskId: task.id,
     agentId: agent.id,
@@ -1698,6 +1734,7 @@ function ensureCommandApproval(
     message: evaluation.reason,
     metadata: {
       approvalId,
+      interactionId,
       ...evaluation.metadata,
       ...commandMetadata
     }
@@ -1721,17 +1758,11 @@ function ensureMergeApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRec
   }
 
   const approvalId = randomUUID();
-  db.prepare("INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
-    approvalId,
-    task.id,
-    agent.id,
-    mergeApprovalKind,
-    "pending",
-    evaluation.reason,
-    null,
-    now(),
-    null
-  );
+  const createdAt = now();
+  const interactionId = createApprovalRecordInDb(db, {
+    approvalId, taskId: task.id, agentId: agent.id, approvalKind: mergeApprovalKind,
+    reason: evaluation.reason, commandPreview: null, createdAt
+  });
   insertEvent(db, {
     taskId: task.id,
     agentId: agent.id,
@@ -1739,6 +1770,7 @@ function ensureMergeApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRec
     message: evaluation.reason,
     metadata: {
       approvalId,
+      interactionId,
       kind: mergeApprovalKind,
       ...evaluation.metadata
     }

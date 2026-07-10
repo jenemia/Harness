@@ -978,7 +978,7 @@ function normalizePriority(value: string): TaskRecord["priority"] {
 }
 
 function normalizeRunStatus(value: string) {
-  const statuses = ["running", "completed", "failed"] as const;
+  const statuses = ["running", "completed", "failed", "suspended"] as const;
   const status = statuses.find((item) => item.toLowerCase() === value.toLowerCase());
   if (!status) {
     throw new Error(`--status must be one of: ${statuses.join(", ")}`);
@@ -1072,7 +1072,7 @@ Usage:
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli board:show --project <projectId>
-  pnpm --filter @harness/server cli runs:list --project <projectId> [--status running,completed,failed] [--task <taskId>] [--agent <agentId>] [--provider <providerId>] [--modelBackend <id>]
+  pnpm --filter @harness/server cli runs:list --project <projectId> [--status running,completed,failed,suspended] [--task <taskId>] [--agent <agentId>] [--provider <providerId>] [--modelBackend <id>]
   pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>
   pnpm --filter @harness/server cli runs:followups --project <projectId> --run <runId>
   pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]

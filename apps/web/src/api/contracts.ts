@@ -235,6 +235,25 @@ export type Approval = {
   commandPreview: string | null;
   createdAt: string;
   decidedAt: string | null;
+  interactionId: string | null;
+};
+
+export type Interaction = {
+  id: string;
+  projectId: string;
+  taskId: string | null;
+  runId: string | null;
+  agentId: string | null;
+  approvalId: string | null;
+  correlationId: string;
+  kind: "question" | "approval" | "permission" | "review";
+  status: "pending" | "resolved" | "rejected" | "expired";
+  requestPayload: Record<string, unknown>;
+  responsePayload: Record<string, unknown> | null;
+  checkpoint: Record<string, unknown> | null;
+  expiresAt: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
 };
 
 export type Handoff = {
@@ -323,7 +342,7 @@ export type Run = {
   id: string;
   taskId: string;
   agentId: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "suspended";
   branchName: string | null;
   worktreePath: string | null;
   snapshotRef: string | null;
@@ -363,6 +382,7 @@ export type Overview = {
   memories: MemoryRecord[];
   globalMemories: MemoryRecord[];
   approvals: Approval[];
+  interactions: Interaction[];
   handoffs: Handoff[];
   comments: CommentRecord[];
   events: Event[];

@@ -161,17 +161,17 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### 상호작용 모델
 
-- [ ] 기존 command, handoff, merge 승인보다 상위 개념인 `Interaction` 모델을 정의한다.
-- [ ] 상호작용 종류로 `question`, `approval`, `permission`, `review`를 지원한다.
-- [ ] 상호작용 상태로 `pending`, `resolved`, `rejected`, `expired`를 지원한다.
-- [ ] interaction에 project, task, run, agent, correlation id, 요청 payload, 응답 payload와 만료 시각을 기록한다.
-- [ ] 기존 approval 기록을 interaction과 연결하되 이전 API 및 데이터와의 호환성을 유지한다.
+- [x] 기존 command, handoff, merge 승인보다 상위 개념인 `Interaction` 모델을 정의한다.
+- [x] 상호작용 종류로 `question`, `approval`, `permission`, `review`를 지원한다.
+- [x] 상호작용 상태로 `pending`, `resolved`, `rejected`, `expired`를 지원한다.
+- [x] interaction에 project, task, run, agent, correlation id, 요청 payload, 응답 payload와 만료 시각을 기록한다.
+- [x] 기존 approval 기록을 interaction과 연결하되 이전 API 및 데이터와의 호환성을 유지한다.
 
 ### 실행 상태와 재개
 
-- [ ] run 상태에 `suspended`를 추가한다.
-- [ ] provider 실행 결과를 `completed`, `failed`, `suspended`로 구조화한다.
-- [ ] 에이전트가 질문이나 권한 요청을 생성하면 현재 실행 checkpoint를 저장하고 run을 중단 상태로 전환한다.
+- [x] run 상태에 `suspended`를 추가한다.
+- [x] provider 실행 결과를 `completed`, `failed`, `suspended`로 구조화한다.
+- [x] 에이전트가 질문이나 권한 요청을 생성하면 현재 실행 checkpoint를 저장하고 run을 중단 상태로 전환한다.
 - [ ] 사용자가 코멘트 또는 승인 UI로 응답하면 동일 run의 맥락을 복구해 재개한다.
 - [ ] 중복 응답, 만료된 요청, 취소된 run과 서버 재시작을 안전하게 처리한다.
 - [ ] 대기 중인 interaction을 Attention 패널, 카드, CLI에서 동일하게 조회할 수 있게 한다.

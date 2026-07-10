@@ -23,6 +23,7 @@ import type {
   EventRecord,
   GlobalSettings,
   HandoffRecord,
+  InteractionRecord,
   MemoryRecord,
   ProjectListItem,
   ProjectImportCandidate,
@@ -899,6 +900,11 @@ export function openProjectDb(projectPath: string) {
       completed_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS project_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS handoffs (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
@@ -1034,8 +1040,33 @@ export function openProjectDb(projectPath: string) {
       reason TEXT NOT NULL,
       command_preview TEXT,
       created_at TEXT NOT NULL,
-      decided_at TEXT
+      decided_at TEXT,
+      interaction_id TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS interactions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      task_id TEXT,
+      run_id TEXT,
+      agent_id TEXT,
+      approval_id TEXT UNIQUE,
+      correlation_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      request_payload TEXT NOT NULL,
+      response_payload TEXT,
+      checkpoint TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      resolved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS interactions_status_created
+      ON interactions(status, created_at);
+    CREATE INDEX IF NOT EXISTS interactions_task_created
+      ON interactions(task_id, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS interactions_correlation_kind
+      ON interactions(project_id, correlation_id, kind);
 
     CREATE TABLE IF NOT EXISTS project_settings (
       key TEXT PRIMARY KEY,
@@ -1044,6 +1075,13 @@ export function openProjectDb(projectPath: string) {
     );
   `);
   migrateDraftReviewRequestsForConversationTurns(db);
+  ensureColumn(db, "approvals", "interaction_id", "TEXT");
+  db.prepare(`
+    INSERT INTO project_metadata (key, value) VALUES ('project_id', ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value WHERE value != excluded.value
+  `).run(layout.manifest.projectId);
+  migrateApprovalsToInteractions(db, layout.manifest.projectId);
+  installApprovalInteractionTriggers(db);
   ensureColumn(db, "agents", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "agents", "boundaries", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "agents", "definition_path", "TEXT");
@@ -1255,6 +1293,77 @@ function migrateDraftReviewRequestsForConversationTurns(db: DatabaseSync) {
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+function migrateApprovalsToInteractions(db: DatabaseSync, projectId: string) {
+  const approvals = db.prepare("SELECT * FROM approvals WHERE interaction_id IS NULL ORDER BY created_at ASC").all() as Array<
+    Record<string, string | null>
+  >;
+  if (!approvals.length) return;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const approval of approvals) {
+      const interactionId = randomUUID();
+      const approvalStatus = String(approval.status);
+      const interactionStatus = approvalStatus === "approved" ? "resolved" : approvalStatus === "rejected" ? "rejected" : "pending";
+      const responsePayload = approvalStatus === "pending" ? null : JSON.stringify({ decision: approvalStatus });
+      db.prepare(`
+        INSERT INTO interactions (
+          id, project_id, task_id, run_id, agent_id, approval_id, correlation_id,
+          kind, status, request_payload, response_payload, checkpoint, expires_at,
+          created_at, resolved_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        interactionId,
+        projectId,
+        approval.task_id,
+        null,
+        approval.agent_id,
+        approval.id,
+        `approval:${approval.id}`,
+        "approval",
+        interactionStatus,
+        JSON.stringify({
+          approvalKind: approval.kind,
+          reason: approval.reason,
+          commandPreview: approval.command_preview
+        }),
+        responsePayload,
+        null,
+        null,
+        approval.created_at,
+        approval.decided_at
+      );
+      db.prepare("UPDATE approvals SET interaction_id = ? WHERE id = ?").run(interactionId, approval.id);
+    }
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function installApprovalInteractionTriggers(db: DatabaseSync) {
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS approval_interaction_status_update
+    AFTER UPDATE OF status, decided_at ON approvals
+    WHEN NEW.interaction_id IS NOT NULL
+    BEGIN
+      UPDATE interactions
+      SET status = CASE
+            WHEN NEW.status = 'approved' THEN 'resolved'
+            WHEN NEW.status = 'rejected' THEN 'rejected'
+            ELSE 'pending'
+          END,
+          response_payload = CASE
+            WHEN NEW.status = 'approved' THEN '{"decision":"approved"}'
+            WHEN NEW.status = 'rejected' THEN '{"decision":"rejected"}'
+            ELSE NULL
+          END,
+          resolved_at = CASE WHEN NEW.status = 'pending' THEN NULL ELSE NEW.decided_at END
+      WHERE id = NEW.interaction_id;
+    END;
+  `);
 }
 
 function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {
@@ -1622,6 +1731,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       memories: db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory),
       globalMemories: listGlobalMemories(),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
+      interactions: db.prepare("SELECT * FROM interactions ORDER BY created_at DESC LIMIT 500").all().map(mapInteraction),
       handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
       comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
@@ -1984,7 +2094,29 @@ export function mapApproval(row: unknown): ApprovalRecord {
     reason: String(r.reason),
     commandPreview: r.command_preview ? String(r.command_preview) : null,
     createdAt: String(r.created_at),
-    decidedAt: r.decided_at ? String(r.decided_at) : null
+    decidedAt: r.decided_at ? String(r.decided_at) : null,
+    interactionId: r.interaction_id ? String(r.interaction_id) : null
+  };
+}
+
+export function mapInteraction(row: unknown): InteractionRecord {
+  const r = row as Record<string, string | null>;
+  return {
+    id: String(r.id),
+    projectId: String(r.project_id),
+    taskId: r.task_id ? String(r.task_id) : null,
+    runId: r.run_id ? String(r.run_id) : null,
+    agentId: r.agent_id ? String(r.agent_id) : null,
+    approvalId: r.approval_id ? String(r.approval_id) : null,
+    correlationId: String(r.correlation_id),
+    kind: String(r.kind) as InteractionRecord["kind"],
+    status: String(r.status) as InteractionRecord["status"],
+    requestPayload: JSON.parse(String(r.request_payload || "{}")) as Record<string, unknown>,
+    responsePayload: r.response_payload ? JSON.parse(String(r.response_payload)) as Record<string, unknown> : null,
+    checkpoint: r.checkpoint ? JSON.parse(String(r.checkpoint)) as Record<string, unknown> : null,
+    expiresAt: r.expires_at ? String(r.expires_at) : null,
+    createdAt: String(r.created_at),
+    resolvedAt: r.resolved_at ? String(r.resolved_at) : null
   };
 }
 

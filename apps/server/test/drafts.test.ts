@@ -27,7 +27,7 @@ test("draft collaboration persists revisions, debounce, stale reviews, replies, 
   const root = mkdtempSync(path.join(tmpdir(), "harness-drafts-"));
   const previousHome = process.env.HARNESS_HOME;
   process.env.HARNESS_HOME = path.join(root, "home");
-  const scheduling = { debounceMs: 25, rateLimitMs: 80, autoReview: false };
+  const scheduling = { debounceMs: 25, rateLimitMs: 500, autoReview: false };
   let projectPath = "";
   let draftId = "";
   try {
