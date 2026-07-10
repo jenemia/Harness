@@ -120,7 +120,7 @@ Initial implementation: project settings include role-to-role handoff rules. By 
 
 Initial implementation: after each successful run, the PM runtime inspects the latest completion output and changed files before choosing the role-to-role handoff or Done transition. It records a `pm.evaluated` timeline event with output excerpt, changed files, detected follow-up/risk/verification signals, and includes the evaluation summary in automatic handoff metadata.
 
-Initial implementation: when no configured handoff rule matches the completed agent role, the PM runtime can choose a dynamic fallback handoff from the completed role, task text, completion signals, changed files, and available agent capabilities. The first fallback routes support research chains such as `researcher -> analyst -> writer`, writing to editor/reviewer, and risky or changed work to reviewer/QA-style agents. Handoff events record whether the decision came from a configured rule or dynamic fallback.
+Initial implementation: when no configured handoff rule matches the completed agent role, the PM runtime can choose a dynamic fallback handoff from the completed role, task text, completion signals, changed files, and available agent capabilities. The first fallback routes support research chains such as `researcher -> analyst -> writer`, writing to editor/reviewer, and risky or changed work to reviewer/QA-style agents. Handoff events record whether the decision came from a configured rule or dynamic fallback, and the task drawer shows handoff decision badges for source, target role, changed-file count, and detected PM signals.
 
 Initial implementation: shell-backed LLM providers create a command execution approval request before any configured CLI command runs. The task is blocked until the user approves or rejects the request from the Approvals panel. Approved tasks resume automatically; rejected tasks remain blocked and the decision is recorded in the timeline.
 
@@ -540,7 +540,7 @@ The task detail view should include:
 - Comments
 - Human approval prompts
 
-Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, parent/subtask links, dependencies, workspace mode, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, follow-up task creation, handoff history, and an activity timeline.
+Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, parent/subtask links, dependencies, workspace mode, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, follow-up task creation, PM handoff decision history, and an activity timeline.
 
 Initial implementation: the headless CLI can show the Kanban board grouped by status, list tasks with status/assignee/label filters, show task-scoped comments, runs, approvals, handoffs, and events, and inspect run records with filters for status, task, agent, provider, and model backend.
 

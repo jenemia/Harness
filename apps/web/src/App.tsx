@@ -1664,7 +1664,7 @@ function TaskDetailDrawer(props: {
           runAction={props.runAction}
           onChanged={props.onChanged}
         />
-        <TaskHandoffs handoffs={handoffs} agents={props.overview.agents} />
+        <TaskHandoffs handoffs={handoffs} agents={props.overview.agents} events={events} />
         <TaskTimeline events={events} runs={runs} />
       </aside>
     </div>
@@ -1805,8 +1805,9 @@ function TaskRuns(props: {
   );
 }
 
-function TaskHandoffs({ handoffs, agents }: { handoffs: Handoff[]; agents: Agent[] }) {
+function TaskHandoffs({ handoffs, agents, events }: { handoffs: Handoff[]; agents: Agent[]; events: Event[] }) {
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+  const handoffEvents = events.filter((event) => event.type === "handoff.automatic");
 
   return (
     <section className="drawer-section">
@@ -1816,10 +1817,21 @@ function TaskHandoffs({ handoffs, agents }: { handoffs: Handoff[]; agents: Agent
         {handoffs.map((handoff) => {
           const from = handoff.fromAgentId ? agentsById.get(handoff.fromAgentId) : null;
           const to = handoff.toAgentId ? agentsById.get(handoff.toAgentId) : null;
+          const decision = getHandoffDecision(handoff, handoffEvents);
           return (
             <div className="handoff-row" key={handoff.id}>
               <div>
                 <strong>{from?.name || "PM Agent"} to {to?.name || "Unassigned"}</strong>
+                {decision && (
+                  <div className="handoff-meta">
+                    <b>{decision.source}</b>
+                    {decision.toRole && <b>{decision.toRole}</b>}
+                    <b>{decision.changedFiles} files</b>
+                    {decision.signals.map((signal) => (
+                      <b key={signal}>{signal}</b>
+                    ))}
+                  </div>
+                )}
                 <span>{handoff.reason}</span>
               </div>
               <small>{formatDate(handoff.createdAt)}</small>
@@ -1829,6 +1841,28 @@ function TaskHandoffs({ handoffs, agents }: { handoffs: Handoff[]; agents: Agent
       </div>
     </section>
   );
+}
+
+function getHandoffDecision(handoff: Handoff, events: Event[]) {
+  const event = events.find((item) => {
+    const metadata = item.metadata;
+    return metadata.fromAgentId === handoff.fromAgentId && metadata.toAgentId === handoff.toAgentId;
+  });
+  if (!event) {
+    return null;
+  }
+
+  const evaluation = asRecord(event.metadata.evaluation);
+  return {
+    source: typeof event.metadata.decisionSource === "string" ? event.metadata.decisionSource : "automatic",
+    toRole: typeof event.metadata.toRole === "string" ? event.metadata.toRole : "",
+    changedFiles: Array.isArray(evaluation.changedFiles) ? evaluation.changedFiles.length : 0,
+    signals: Array.isArray(evaluation.signals) ? evaluation.signals.filter((signal): signal is string => typeof signal === "string") : []
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {

@@ -11,7 +11,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Project health report for blockers, approvals, merges, failed runs, and next recommended action.
 - Project templates for seeding new folders with a useful starter agent team.
 - Jira-like Kanban board.
-- Jira-like task detail drawer with editable metadata, labels, parent/subtask links, dependencies, runs, changed files, timeline, worktree, and merge state.
+- Jira-like task detail drawer with editable metadata, labels, parent/subtask links, dependencies, runs, changed files, handoff decision badges, timeline, workspace, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.
 - Project-local and global Memory panel for conventions and preferences injected into agent prompts.
 - Agent persona, backend, capability, allowed tool, boundary, template, current work, run metrics, and concurrency management.
@@ -152,7 +152,7 @@ Set `autoStart` on the planning request or use `POST /api/projects/:projectId/sc
 
 When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
 
-After a successful run, the PM runtime inspects the latest output and changed files before deciding the configured handoff, dynamic fallback handoff, or Done transition. The resulting `pm.evaluated` event appears in the task timeline and is included in handoff metadata.
+After a successful run, the PM runtime inspects the latest output and changed files before deciding the configured handoff, dynamic fallback handoff, or Done transition. The resulting `pm.evaluated` event appears in the task timeline, and handoff rows show decision source, target role, changed-file count, and detected signals.
 
 Tasks can be paused from the board, task detail drawer, API, or CLI. Paused tasks stay out of scheduler runs until they are resumed back to `Selected`, and pause/resume events are recorded in the task timeline.
 
@@ -166,7 +166,7 @@ When the server starts, Harness scans registered projects for runs that were lef
 
 ## Task Tracking
 
-Open a task from the board to inspect its status, assignee, labels, parent/subtask links, workspace mode, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline. New tasks can use automatic workspace selection, while existing tasks keep an explicit `worktree` or `harness` mode.
+Open a task from the board to inspect its status, assignee, labels, parent/subtask links, workspace mode, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, PM handoff decision history, follow-up task creation, and task-scoped activity timeline. New tasks can use automatic workspace selection, while existing tasks keep an explicit `worktree` or `harness` mode.
 
 Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files.
 

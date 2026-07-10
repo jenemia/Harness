@@ -1103,6 +1103,24 @@ textarea {
   color: #626f86;
 }
 
+.handoff-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.handoff-meta b {
+  background: #e9f2ff;
+  border: 1px solid #cce0ff;
+  border-radius: 999px;
+  color: #0c66e4;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 6px;
+}
+
 .run-detail {
   border: 1px solid #dfe1e6;
   border-radius: 8px;
