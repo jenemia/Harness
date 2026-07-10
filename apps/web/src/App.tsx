@@ -341,6 +341,7 @@ export function App() {
 
             <aside className="right-rail">
               <ProjectHealthPanel overview={overview} healthReport={healthReport} providerCatalog={providerCatalog} />
+              <AttentionPanel overview={overview} onOpenTask={setSelectedTaskId} />
               <BacklogPanel
                 overview={overview}
                 runAction={runAction}
@@ -703,6 +704,94 @@ function getDependencyBlocker(task: Task, tasksById: Map<string, Task>) {
   const blockedTitles = blocked.map((dependency) => `${dependency.title} (${dependency.status})`);
   const missing = missingIds.map((id) => `${id.slice(0, 8)} (missing)`);
   return `Waiting on dependencies: ${[...blockedTitles, ...missing].join(", ")}`;
+}
+
+function AttentionPanel(props: { overview: Overview; onOpenTask: (taskId: string) => void }) {
+  const tasksById = useMemo(() => new Map(props.overview.tasks.map((task) => [task.id, task])), [props.overview.tasks]);
+  const items = useMemo(() => {
+    const pendingApprovals = props.overview.approvals
+      .filter((approval) => approval.status === "pending")
+      .map((approval) => {
+        const task = tasksById.get(approval.taskId);
+        return {
+          key: `approval-${approval.id}`,
+          tone: "approval",
+          kind: approval.kind.replace("_", " "),
+          title: task?.title || approval.taskId.slice(0, 8),
+          meta: approval.reason,
+          taskId: approval.taskId
+        };
+      });
+    const mergeTasks = props.overview.tasks
+      .filter((task) => task.mergeStatus === "pending" || task.mergeStatus === "conflict")
+      .map((task) => ({
+        key: `merge-${task.id}`,
+        tone: task.mergeStatus === "conflict" ? "danger" : "approval",
+        kind: `merge ${task.mergeStatus}`,
+        title: task.title,
+        meta: task.mergeError || "Merge decision is waiting.",
+        taskId: task.id
+      }));
+    const failedRuns = props.overview.runs
+      .filter((run) => run.status === "failed")
+      .sort((left, right) => (right.completedAt || right.startedAt).localeCompare(left.completedAt || left.startedAt))
+      .map((run) => {
+        const task = tasksById.get(run.taskId);
+        return {
+          key: `failed-${run.id}`,
+          tone: "danger",
+          kind: "failed run",
+          title: task?.title || run.taskId.slice(0, 8),
+          meta: run.error || "Run failed without an error message.",
+          taskId: run.taskId
+        };
+      });
+    const blockedTasks = props.overview.tasks
+      .filter((task) => task.status === "Blocked")
+      .map((task) => ({
+        key: `blocked-${task.id}`,
+        tone: "danger",
+        kind: "blocked",
+        title: task.title,
+        meta: task.blockedReason || "No blocker reason recorded.",
+        taskId: task.id
+      }));
+    const followUps = props.overview.tasks
+      .filter((task) => task.status === "Backlog" && task.labels.includes("follow-up"))
+      .map((task) => ({
+        key: `followup-${task.id}`,
+        tone: "neutral",
+        kind: "follow-up",
+        title: task.title,
+        meta: "Backlog follow-up is waiting for selection.",
+        taskId: task.id
+      }));
+    return [...pendingApprovals, ...mergeTasks, ...failedRuns, ...blockedTasks, ...followUps].slice(0, 6);
+  }, [props.overview.approvals, props.overview.runs, props.overview.tasks, tasksById]);
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <AlertTriangle size={17} />
+        <h2>Attention</h2>
+      </div>
+      <div className="attention-list">
+        {items.length === 0 && <p className="provider-help">No attention items.</p>}
+        {items.map((item) => (
+          <div className={`attention-item ${item.tone}`} key={item.key}>
+            <div>
+              <span className="attention-kind">{item.kind}</span>
+              <strong>{item.title}</strong>
+              <p>{item.meta}</p>
+            </div>
+            <button className="icon-button" title="Open task" type="button" onClick={() => props.onOpenTask(item.taskId)}>
+              <FileText size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function BacklogPanel(props: {

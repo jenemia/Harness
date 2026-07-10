@@ -46,6 +46,8 @@ Initial implementation: the project sidebar shows per-project summary counts for
 
 Initial implementation: each project also exposes a health report through the UI, API, and CLI. The report summarizes status counts, Selected ready work, blockers, pending approvals, pending merges, failed/running runs, unassigned work, busy/idle agents, scheduler readiness gaps, provider command setup gaps for command-backed LLM backends, and recommended next actions.
 
+Initial implementation: the project workspace includes an Attention panel that collects pending approvals, pending/conflicted merges, failed runs, blocked tasks, and follow-up backlog items so the user can jump directly to the task that needs action.
+
 Initial implementation: projects can be unregistered from the global Harness project list through the UI, API, or CLI without deleting the project folder or project-local `.harness` data.
 
 Initial implementation: project lists include local folder and project database availability so moved or missing folders are visible without recreating missing `.harness` data during a read-only list operation.

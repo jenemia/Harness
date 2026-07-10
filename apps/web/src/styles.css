@@ -653,6 +653,66 @@ button:disabled {
   white-space: nowrap;
 }
 
+.attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attention-item {
+  align-items: flex-start;
+  border-left: 3px solid #dfe1e6;
+  border-top: 1px solid #f1f2f4;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  padding: 9px 0 9px 9px;
+}
+
+.attention-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.attention-item.approval {
+  border-left-color: #f5cd47;
+}
+
+.attention-item.danger {
+  border-left-color: #f15b50;
+}
+
+.attention-item.neutral {
+  border-left-color: #8590a2;
+}
+
+.attention-item strong,
+.attention-item p {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.attention-item strong {
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.attention-item p {
+  color: #626f86;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.attention-kind {
+  color: #626f86;
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
 .backlog-summary {
   align-items: center;
   display: grid;
