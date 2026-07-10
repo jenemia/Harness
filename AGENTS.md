@@ -9,3 +9,8 @@
 - Use a concise, imperative commit message that describes the completed task.
 - Do not create empty commits for read-only tasks or tasks that produce no repository changes.
 - Do not amend, rewrite, squash, or otherwise alter existing commits unless the user explicitly requests it.
+
+## Worktree cleanup
+
+- After successfully merging a temporary worktree branch into `main`, stop processes running from that worktree, remove the worktree, and delete the merged local branch.
+- Only perform this cleanup after the merge and relevant verification checks succeed.
