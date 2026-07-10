@@ -22,7 +22,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -33,19 +33,22 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
+  const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
 
   async function loadProjects() {
-    const [data, providers, settingsResponse] = await Promise.all([
+    const [data, providers, templatesResponse, settingsResponse] = await Promise.all([
       api<{ projects: ProjectListItem[] }>("/api/projects"),
       api<ProviderCatalog>("/api/providers"),
+      api<{ templates: AgentTemplate[] }>("/api/agent-templates"),
       api<{ settings: GlobalSettings }>("/api/settings")
     ]);
     setProjects(data.projects);
     setProviderCatalog(providers);
+    setAgentTemplates(templatesResponse.templates);
     setSettings(settingsResponse.settings);
     if (!selectedProjectId && data.projects[0]) {
       setSelectedProjectId(data.projects[0].id);
@@ -222,7 +225,9 @@ export function App() {
               <AgentPanel
                 overview={overview}
                 providerCatalog={providerCatalog}
+                templates={agentTemplates}
                 runAction={runAction}
+                onTemplatesChanged={setAgentTemplates}
                 onChanged={() => loadOverview()}
               />
               <SettingsPanel
@@ -1339,7 +1344,9 @@ function formatDate(value: string) {
 function AgentPanel(props: {
   overview: Overview;
   providerCatalog: ProviderCatalog | null;
+  templates: AgentTemplate[];
   runAction: (action: () => Promise<void>) => Promise<void>;
+  onTemplatesChanged: (templates: AgentTemplate[]) => void;
   onChanged: () => Promise<void>;
 }) {
   const [editingAgentId, setEditingAgentId] = useState("");
@@ -1352,6 +1359,16 @@ function AgentPanel(props: {
   const [maxParallel, setMaxParallel] = useState(1);
   const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
 
+  const formPayload = {
+    name,
+    role,
+    persona,
+    cliCommand: cliCommand || null,
+    modelBackend,
+    maxParallel,
+    capabilities: parseCapabilities(capabilitiesText)
+  };
+
   useEffect(() => {
     if (!editingAgentId) {
       setModelBackend(props.overview.settings.defaultModelBackend);
@@ -1362,27 +1379,44 @@ function AgentPanel(props: {
   async function submit(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
-      const payload = {
-        name,
-        role,
-        persona,
-        cliCommand: cliCommand || null,
-        modelBackend,
-        maxParallel,
-        capabilities: parseCapabilities(capabilitiesText)
-      };
       await api(
         editingAgentId
           ? `/api/projects/${props.overview.project.id}/agents/${editingAgentId}`
           : `/api/projects/${props.overview.project.id}/agents`,
         {
           method: editingAgentId ? "PATCH" : "POST",
-          body: JSON.stringify(payload)
+          body: JSON.stringify(formPayload)
         }
       );
       resetForm();
       await props.onChanged();
     });
+  }
+
+  async function saveTemplate() {
+    await props.runAction(async () => {
+      const response = await api<{ template: AgentTemplate; templates: AgentTemplate[] }>("/api/agent-templates", {
+        method: "POST",
+        body: JSON.stringify(formPayload)
+      });
+      props.onTemplatesChanged(response.templates);
+    });
+  }
+
+  function applyTemplate(templateId: string) {
+    const template = props.templates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    setEditingAgentId("");
+    setName(template.name);
+    setRole(template.role);
+    setPersona(template.persona);
+    setCliCommand(template.cliCommand || "");
+    setCapabilitiesText(template.capabilities.join(", "));
+    setModelBackend(template.modelBackend);
+    setMaxParallel(template.maxParallel);
   }
 
   function editAgent(agent: Agent) {
@@ -1430,6 +1464,14 @@ function AgentPanel(props: {
       </div>
       <form className="stack-form" onSubmit={submit}>
         {editingAgentId && <div className="form-group-title">Editing agent</div>}
+        <select value="" onChange={(event) => applyTemplate(event.target.value)}>
+          <option value="">Apply agent template</option>
+          {props.templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name} · {template.role}
+            </option>
+          ))}
+        </select>
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Agent name" />
         <select value={role} onChange={(event) => setRole(event.target.value)}>
           <option value="worker">worker</option>
@@ -1474,6 +1516,10 @@ function AgentPanel(props: {
             <span>Cancel</span>
           </button>
         )}
+        <button className="secondary-button" type="button" onClick={() => void saveTemplate()} disabled={!name.trim()}>
+          <FileText size={16} />
+          <span>Save template</span>
+        </button>
         <button className="secondary-button" type="submit">
           <Plus size={16} />
           <span>{editingAgentId ? "Save agent" : "Agent"}</span>

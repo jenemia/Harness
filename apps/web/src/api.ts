@@ -60,6 +60,19 @@ export type Agent = {
   currentTaskId: string | null;
 };
 
+export type AgentTemplate = {
+  id: string;
+  name: string;
+  role: string;
+  persona: string;
+  modelBackend: string;
+  cliCommand: string | null;
+  capabilities: string[];
+  maxParallel: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Task = {
   id: string;
   title: string;

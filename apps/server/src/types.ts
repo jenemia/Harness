@@ -62,6 +62,19 @@ export type AgentRecord = {
   updatedAt: string;
 };
 
+export type AgentTemplateRecord = {
+  id: string;
+  name: string;
+  role: string;
+  persona: string;
+  modelBackend: string;
+  cliCommand: string | null;
+  capabilities: string[];
+  maxParallel: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TaskRecord = {
   id: string;
   title: string;

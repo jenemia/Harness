@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   AgentRecord,
+  AgentTemplateRecord,
   ApprovalRecord,
   CommentRecord,
   DocumentRecord,
@@ -57,8 +58,81 @@ export function openGlobalDb() {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS agent_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      persona TEXT NOT NULL,
+      model_backend TEXT NOT NULL,
+      cli_command TEXT,
+      capabilities TEXT NOT NULL,
+      max_parallel INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+  seedDefaultAgentTemplates(db);
   return db;
+}
+
+function seedDefaultAgentTemplates(db: DatabaseSync) {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM agent_templates").get() as { count: number };
+  if (count.count > 0) {
+    return;
+  }
+
+  const timestamp = now();
+  const templates = [
+    {
+      name: "PM Agent",
+      role: "project-manager",
+      persona: "Decompose work, choose the next best agent, track blockers, and keep the Kanban board honest.",
+      modelBackend: "mock",
+      cliCommand: null,
+      capabilities: ["planning", "assignment", "handoff"],
+      maxParallel: 1
+    },
+    {
+      name: "Programmer Agent",
+      role: "programmer",
+      persona: "Implement scoped engineering tasks inside the task worktree and report the result clearly.",
+      modelBackend: "mock",
+      cliCommand: null,
+      capabilities: ["implementation", "debugging"],
+      maxParallel: 2
+    },
+    {
+      name: "Review Agent",
+      role: "reviewer",
+      persona: "Review completed work for correctness, risk, and missing verification before the task is done.",
+      modelBackend: "mock",
+      cliCommand: null,
+      capabilities: ["review", "quality"],
+      maxParallel: 1
+    }
+  ];
+  const stmt = db.prepare(`
+    INSERT INTO agent_templates (
+      id, name, role, persona, model_backend, cli_command,
+      capabilities, max_parallel, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const template of templates) {
+    stmt.run(
+      randomUUID(),
+      template.name,
+      template.role,
+      template.persona,
+      template.modelBackend,
+      template.cliCommand,
+      JSON.stringify(template.capabilities),
+      template.maxParallel,
+      timestamp,
+      timestamp
+    );
+  }
 }
 
 export function defaultGlobalSettings(): GlobalSettings {
@@ -130,6 +204,61 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
     stmt.run("autoStartPlans", String(next.autoStartPlans), next.updatedAt);
     stmt.run("providerCommands", JSON.stringify(next.providerCommands), next.updatedAt);
     return next;
+  } finally {
+    db.close();
+  }
+}
+
+export function listAgentTemplates(): AgentTemplateRecord[] {
+  const db = openGlobalDb();
+  try {
+    return db.prepare("SELECT * FROM agent_templates ORDER BY updated_at DESC").all().map(mapAgentTemplate);
+  } finally {
+    db.close();
+  }
+}
+
+export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentTemplateRecord {
+  if (!input.name?.trim()) {
+    throw new Error("Template name is required.");
+  }
+
+  const settings = getGlobalSettings();
+  const timestamp = now();
+  const template: AgentTemplateRecord = {
+    id: randomUUID(),
+    name: input.name.trim(),
+    role: input.role?.trim() || "worker",
+    persona: input.persona?.trim() || "Perform assigned work carefully and report the result.",
+    modelBackend: input.modelBackend?.trim() || settings.defaultModelBackend,
+    cliCommand: input.cliCommand?.trim() || null,
+    capabilities: Array.isArray(input.capabilities) ? input.capabilities : [],
+    maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  const db = openGlobalDb();
+  try {
+    db.prepare(`
+      INSERT INTO agent_templates (
+        id, name, role, persona, model_backend, cli_command,
+        capabilities, max_parallel, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      template.id,
+      template.name,
+      template.role,
+      template.persona,
+      template.modelBackend,
+      template.cliCommand,
+      JSON.stringify(template.capabilities),
+      template.maxParallel,
+      template.createdAt,
+      template.updatedAt
+    );
+
+    return template;
   } finally {
     db.close();
   }
@@ -621,6 +750,22 @@ export function mapAgent(row: unknown): AgentRecord {
     maxParallel: Number(r.max_parallel),
     status: String(r.status) as AgentRecord["status"],
     currentTaskId: r.current_task_id ? String(r.current_task_id) : null,
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapAgentTemplate(row: unknown): AgentTemplateRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    role: String(r.role),
+    persona: String(r.persona),
+    modelBackend: String(r.model_backend),
+    cliCommand: r.cli_command ? String(r.cli_command) : null,
+    capabilities: JSON.parse(String(r.capabilities)) as string[],
+    maxParallel: Number(r.max_parallel),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };

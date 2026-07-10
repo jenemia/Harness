@@ -3,12 +3,14 @@ import { randomUUID } from "node:crypto";
 import http from "node:http";
 import path from "node:path";
 import {
+  createAgentTemplate,
   getProject,
   getProjectOverview,
   getGlobalSettings,
   getProjectSettings,
   globalHarnessDir,
   insertEvent,
+  listAgentTemplates,
   listProjectsWithSummaries,
   mapAgent,
   mapComment,
@@ -24,7 +26,7 @@ import {
 } from "./db.js";
 import { createPlan } from "./planner.js";
 import { approveMerge, decideApproval, listRuntimeProviders, startReadyTasks, startTask } from "./runtime.js";
-import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import type { AgentRecord, AgentTemplateRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
 
@@ -56,6 +58,17 @@ const server = http.createServer(async (req, res) => {
 
     if (route === "GET /api/providers") {
       sendJson(res, listRuntimeProviders());
+      return;
+    }
+
+    if (route === "GET /api/agent-templates") {
+      sendJson(res, { templates: listAgentTemplates() });
+      return;
+    }
+
+    if (route === "POST /api/agent-templates") {
+      const template = createAgentTemplate(await readBody<Partial<AgentTemplateRecord>>(req));
+      sendJson(res, { template, templates: listAgentTemplates() }, 201);
       return;
     }
 

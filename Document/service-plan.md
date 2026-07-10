@@ -236,6 +236,8 @@ Examples:
 - Research assistant team
 - Content production team
 
+Initial implementation: global agent templates are stored in the app-wide Harness database. The agent panel can apply templates to the create form and save the current form as a reusable template; PM, programmer, and review templates are seeded by default.
+
 ### Parallel Agent Scheduling
 
 Harness should include a scheduler that can run multiple agent tasks at once while respecting dependencies, project limits, and human approval gates.
@@ -487,7 +489,7 @@ The agent directory should include:
 - Recent activity
 - Performance metrics
 
-Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, and per-agent parallelism.
+Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, templates, and per-agent parallelism.
 
 ## 9. MVP Scope Proposal
 
