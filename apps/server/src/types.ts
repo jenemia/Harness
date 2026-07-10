@@ -50,6 +50,23 @@ export type ProjectListItem = ProjectRecord & {
   summary: ProjectSummary;
 };
 
+export type ProjectImportCandidate = {
+  name: string;
+  path: string;
+  source: "harness" | "git" | "plain";
+};
+
+export type ProjectImportSkipped = ProjectImportCandidate & {
+  reason: "already-registered" | "not-project-folder";
+};
+
+export type ProjectImportResult = {
+  root: string;
+  imported: ProjectRecord[];
+  skipped: ProjectImportSkipped[];
+  projects: ProjectListItem[];
+};
+
 export type GlobalSettings = {
   defaultProjectRoot: string;
   defaultModelBackend: string;

@@ -22,7 +22,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -174,6 +174,18 @@ export function App() {
             setProjects(response.projects);
             setSelectedProjectId(response.project.id);
             await loadOverview(response.project.id);
+          }}
+          onImportedRoot={async (payload) => {
+            const response = await api<ProjectImportResult>("/api/projects/import-root", {
+              method: "POST",
+              body: JSON.stringify(payload)
+            });
+            setProjects(response.projects);
+            const selected = response.imported[0] || response.projects[0] || null;
+            if (selected) {
+              setSelectedProjectId(selected.id);
+              await loadOverview(selected.id);
+            }
           }}
           runAction={runAction}
         />
@@ -502,11 +514,13 @@ function ProjectPanel(props: {
   onCreated: (project: Project) => Promise<void>;
   onRemoved: (id: string) => Promise<void>;
   onUpdated: (id: string, payload: { name?: string; path?: string }) => Promise<void>;
+  onImportedRoot: (payload: { root?: string; includePlainFolders?: boolean; seedDefaults?: boolean; projectTemplateId?: string }) => Promise<void>;
   runAction: (action: () => Promise<void>) => Promise<void>;
 }) {
   const [projectPath, setProjectPath] = useState("");
   const [projectTemplateId, setProjectTemplateId] = useState("");
   const [relinkPath, setRelinkPath] = useState("");
+  const [includePlainFolders, setIncludePlainFolders] = useState(false);
   const selectedProject = props.projects.find((project) => project.id === props.selectedProjectId) || null;
 
   async function submit(event: FormEvent) {
@@ -534,6 +548,18 @@ function ProjectPanel(props: {
     await props.runAction(async () => {
       await props.onUpdated(selectedProject.id, { path: relinkPath });
       setRelinkPath("");
+    });
+  }
+
+  async function importRoot(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      await props.onImportedRoot({
+        root: props.settings?.defaultProjectRoot,
+        includePlainFolders,
+        seedDefaults: true,
+        projectTemplateId: projectTemplateId || undefined
+      });
     });
   }
 
@@ -580,6 +606,20 @@ function ProjectPanel(props: {
         <button className="primary-button" type="submit">
           <Plus size={16} />
           <span>Add</span>
+        </button>
+      </form>
+      <form className="stack-form import-root-form" onSubmit={importRoot}>
+        <label className="checkbox-row">
+          <input
+            checked={includePlainFolders}
+            onChange={(event) => setIncludePlainFolders(event.target.checked)}
+            type="checkbox"
+          />
+          <span>Plain folders</span>
+        </label>
+        <button className="secondary-button" type="submit">
+          <RefreshCcw size={16} />
+          <span>Scan root</span>
         </button>
       </form>
       {selectedProject && (

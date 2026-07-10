@@ -5,6 +5,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 ## MVP
 
 - Local project registry with project-local `.harness/` storage.
+- Project root scanning for importing existing Harness folders and Git repositories.
 - Project sidebar summaries for task, blocker, approval, running, and merge counts across local folders.
 - Project health report for blockers, approvals, merges, failed runs, and next recommended action.
 - Project templates for seeding new folders with a useful starter agent team.
@@ -50,6 +51,7 @@ The server package also exposes a local JSON CLI for headless automation:
 ```bash
 pnpm cli projects:list
 pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
+pnpm cli projects:import-root --root ~/Documents --includePlainFolders false
 pnpm cli projects:update --project <projectId> --path ./moved-project --name "Moved Project"
 pnpm cli projects:unregister --project <projectId>
 pnpm cli projects:report --project <projectId>
@@ -107,6 +109,8 @@ Projects can be removed from the Harness registry with the sidebar remove button
 Project lists include folder and `.harness/harness.db` availability so moved or deleted folders can be spotted without recreating missing project data.
 
 Moved folders can be re-linked with the sidebar relink form, `PATCH /api/projects/:projectId`, or `projects:update`. Updating a registry path does not create a new folder.
+
+The project sidebar can scan the global default project root and import existing Harness folders or Git repositories. The same flow is available through `POST /api/projects/import-root` and `projects:import-root`; plain folders are included only when explicitly requested.
 
 ## Agents
 

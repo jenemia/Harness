@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -14,6 +14,9 @@ import type {
   HandoffRecord,
   MemoryRecord,
   ProjectListItem,
+  ProjectImportCandidate,
+  ProjectImportResult,
+  ProjectImportSkipped,
   ProjectOverview,
   ProjectRecord,
   ProjectSettings,
@@ -1102,6 +1105,76 @@ export function registerProject(projectPath: string, name: string): ProjectRecor
   db.close();
   openProjectDb(project.path).close();
   return project;
+}
+
+export function importProjectsFromRoot(input: {
+  root?: string;
+  includePlainFolders?: boolean;
+  seedDefaults?: boolean;
+  projectTemplateId?: string | null;
+} = {}): ProjectImportResult {
+  const root = path.resolve(input.root?.trim() || getGlobalSettings().defaultProjectRoot);
+  if (!existsSync(root)) {
+    throw new Error(`Project root does not exist: ${root}`);
+  }
+
+  const registeredPaths = new Set(listProjects().map((project) => path.resolve(project.path)));
+  const candidates = discoverProjectCandidates(root, Boolean(input.includePlainFolders));
+  const imported: ProjectRecord[] = [];
+  const skipped: ProjectImportSkipped[] = [];
+
+  for (const candidate of candidates) {
+    if (registeredPaths.has(candidate.path)) {
+      skipped.push({ ...candidate, reason: "already-registered" });
+      continue;
+    }
+
+    if (candidate.source === "plain" && !input.includePlainFolders) {
+      skipped.push({ ...candidate, reason: "not-project-folder" });
+      continue;
+    }
+
+    const project = registerProject(candidate.path, candidate.name);
+    if (input.projectTemplateId) {
+      seedProjectFromTemplate(project.path, input.projectTemplateId);
+    } else if (input.seedDefaults !== false) {
+      seedDefaultAgents(project.path);
+    }
+    imported.push(project);
+    registeredPaths.add(candidate.path);
+  }
+
+  return {
+    root,
+    imported,
+    skipped,
+    projects: listProjectsWithSummaries()
+  };
+}
+
+function discoverProjectCandidates(root: string, includePlainFolders: boolean): ProjectImportCandidate[] {
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => {
+      const projectPath = path.join(root, entry.name);
+      const harnessDbExists = existsSync(path.join(projectHarnessDir(projectPath), "harness.db"));
+      const gitExists = existsSync(path.join(projectPath, ".git"));
+      const source: ProjectImportCandidate["source"] | null = harnessDbExists
+        ? "harness"
+        : gitExists
+          ? "git"
+          : includePlainFolders
+            ? "plain"
+            : null;
+      return source
+        ? {
+            name: entry.name,
+            path: projectPath,
+            source
+          }
+        : null;
+    })
+    .filter((candidate): candidate is ProjectImportCandidate => Boolean(candidate));
 }
 
 export function unregisterProject(projectId: string): ProjectRecord {

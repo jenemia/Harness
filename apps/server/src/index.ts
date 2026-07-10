@@ -11,6 +11,7 @@ import {
   getGlobalSettings,
   getProjectSettings,
   globalHarnessDir,
+  importProjectsFromRoot,
   insertEvent,
   listAgentTemplates,
   listProjectTemplates,
@@ -153,6 +154,23 @@ const server = http.createServer(async (req, res) => {
         seedDefaultAgents(project.path);
       }
       sendJson(res, { project, overview: getProjectOverview(project) }, 201);
+      return;
+    }
+
+    if (route === "POST /api/projects/import-root") {
+      const body = await readBody<{
+        root?: string;
+        includePlainFolders?: boolean;
+        seedDefaults?: boolean;
+        projectTemplateId?: string;
+      }>(req);
+      const result = importProjectsFromRoot({
+        root: body.root,
+        includePlainFolders: body.includePlainFolders,
+        seedDefaults: body.seedDefaults,
+        projectTemplateId: body.projectTemplateId || null
+      });
+      sendJson(res, result, 201);
       return;
     }
 

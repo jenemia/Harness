@@ -151,10 +151,25 @@ button {
   color: #ffffff;
 }
 
+.import-root-form,
 .relink-form {
   border-top: 1px solid rgb(255 255 255 / 12%);
   margin-top: 10px;
   padding-top: 10px;
+}
+
+.checkbox-row {
+  align-items: center;
+  color: #b6c2cf;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.checkbox-row input {
+  height: 14px;
+  margin: 0;
+  width: 14px;
 }
 
 .project-summary-row {

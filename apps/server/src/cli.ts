@@ -10,6 +10,7 @@ import {
   getProject,
   getProjectOverview,
   getProjectSettings,
+  importProjectsFromRoot,
   insertEvent,
   listAgentTemplates,
   listProjectTemplates,
@@ -50,6 +51,7 @@ const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Re
 const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
   "projects:register": registerProjectCommand,
+  "projects:import-root": importProjectsFromRootCommand,
   "projects:update": updateProjectCommand,
   "projects:unregister": unregisterProjectCommand,
   "projects:overview": overviewCommand,
@@ -127,6 +129,16 @@ function registerProjectCommand(args: string[]) {
     seedDefaultAgents(project.path);
   }
   return { project, overview: getProjectOverview(project) };
+}
+
+function importProjectsFromRootCommand(args: string[]) {
+  const options = parseOptions(args);
+  return importProjectsFromRoot({
+    root: options.root ? path.resolve(options.root) : undefined,
+    includePlainFolders: parseOptionalBoolean(options.includePlainFolders, "includePlainFolders"),
+    seedDefaults: parseOptionalBoolean(options.seedDefaults, "seedDefaults"),
+    projectTemplateId: options.projectTemplate || null
+  });
 }
 
 function unregisterProjectCommand(args: string[]) {
@@ -1162,6 +1174,7 @@ function printHelp() {
 Usage:
   pnpm --filter @harness/server cli projects:list
   pnpm --filter @harness/server cli projects:register --path <folder> [--name <name>] [--seedDefaults false] [--projectTemplate <id>]
+  pnpm --filter @harness/server cli projects:import-root [--root <folder>] [--includePlainFolders true] [--seedDefaults false] [--projectTemplate <id>]
   pnpm --filter @harness/server cli projects:update --project <projectId> [--name <name>] [--path <folder>]
   pnpm --filter @harness/server cli projects:unregister --project <projectId>
   pnpm --filter @harness/server cli projects:overview --project <projectId>

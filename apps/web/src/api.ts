@@ -50,6 +50,18 @@ export type ProjectListItem = Project & {
   summary: ProjectSummary;
 };
 
+export type ProjectImportResult = {
+  root: string;
+  imported: Project[];
+  skipped: Array<{
+    name: string;
+    path: string;
+    source: "harness" | "git" | "plain";
+    reason: "already-registered" | "not-project-folder";
+  }>;
+  projects: ProjectListItem[];
+};
+
 export type GlobalSettings = {
   defaultProjectRoot: string;
   defaultModelBackend: string;
