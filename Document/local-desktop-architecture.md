@@ -244,6 +244,12 @@ provider 출력은 `version`, run별 `sequence`, project/task/run/provider id, t
 
 main process는 정규화된 payload에서 credential, 전체 prompt와 파일 원문을 제거한 뒤 project-local SQLite의 `provider_events`에 append한다. `(run_id, sequence)`와 run별 terminal unique constraint가 중복 저장과 완료 후처리 재실행을 막는다. renderer 구독은 project/run filter와 마지막 sequence를 전달하고, application service가 저장 event replay와 live subscription을 결합한다. renderer unsubscribe나 reload는 provider 실행 수명에 영향을 주지 않는다.
 
+## Draft collaboration 저장과 복구
+
+저장 전 카드 초안은 project DB의 `draft_sessions`와 불변 `draft_revisions`로 관리한다. session은 현재 revision만 가리키고 reviewer, debounced review request, revision-bound comment/reply, apply attempt와 append-only `draft_events`는 별도 record로 보존한다. 동일 revision/request와 idempotency key에는 unique constraint를 적용하며 전체 draft/prompt 내용은 event payload에 복제하지 않는다.
+
+초안 변경만 automatic review scheduling을 trigger한다. 새 revision이 생기면 이전 debounced/pending/running request를 취소하고, reviewer별 debounce와 rate-limit 이후 최신 revision request만 pending으로 만든다. 이미 실행 중이던 reviewer 결과가 늦게 도착하면 해당 comment는 원래 revision에 `stale`로 저장하되 자동 반영 대상에서 제외한다. desktop/server 시작 시 running request를 최신 revision의 pending 상태로 복구하고 debounced timer를 다시 구성하며, client는 마지막 draft event sequence 이후를 replay한다.
+
 ## CLI와 desktop 동시 실행
 
 CLI와 desktop이 동시에 같은 project를 수정할 때 business rule이 분리되지 않도록 다음 순서를 사용한다.

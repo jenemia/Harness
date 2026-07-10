@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { harnessIpcVersion, isHarnessCommand, isHarnessCommandPayload, isHarnessEventFilter, type HarnessInvokeRequest, type ProviderEventEnvelope } from "@harness/core";
-import { invokeApplicationCommand, subscribeApplicationProviderEvents } from "@harness/server/application";
+import { invokeApplicationCommand, recoverApplicationState, subscribeApplicationProviderEvents } from "@harness/server/application";
 import { secureWindowOptions } from "./security.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -81,6 +81,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  recoverApplicationState();
   await createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) void createWindow();

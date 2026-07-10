@@ -128,11 +128,15 @@ Status: 완료
 
 Depends on: A01, A02, A07
 
+Status: 완료
+
 - draft session, revision, reviewer, comment thread, reply와 apply history를 영속화한다.
 - debounce, cancellation, dedupe, rate limit과 stale revision 제외 규칙을 구현한다.
 - reconnect event replay와 restart recovery를 테스트한다.
 
 완료 조건: popup/server 재시작 뒤에도 작성 중인 협업 기록과 revision 연결이 보존된다.
+
+검증: project-local schema migration, optimistic revision conflict, unchanged-content/request/comment/reply/apply dedupe, debounce cancellation, reviewer rate limit, stale response exclusion, sequence reconnect replay, running request restart recovery, application command round-trip과 전체 typecheck/test/build.
 
 ### A10: Realtime draft review UI와 agents
 

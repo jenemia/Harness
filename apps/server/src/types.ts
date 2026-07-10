@@ -270,6 +270,89 @@ export type EventRecord = {
   createdAt: string;
 };
 
+export type DraftSessionRecord = {
+  id: string;
+  projectId: string;
+  status: "open" | "applied" | "closed";
+  currentRevision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DraftRevisionRecord = {
+  id: string;
+  draftId: string;
+  revision: number;
+  content: string;
+  createdAt: string;
+};
+
+export type DraftReviewerRecord = {
+  id: string;
+  draftId: string;
+  role: "planning-reviewer" | "edge-case-reviewer" | "planner";
+  agentId: string | null;
+  status: "idle" | "debounced" | "reviewing" | "rate-limited";
+  lastRequestedRevision: number | null;
+  lastReviewedRevision: number | null;
+  lastRequestAt: string | null;
+  rateLimitUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DraftReviewRequestRecord = {
+  id: string;
+  draftId: string;
+  reviewerId: string;
+  revision: number;
+  status: "debounced" | "pending" | "running" | "completed" | "cancelled" | "stale" | "failed";
+  availableAt: string;
+  dedupeKey: string;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+};
+
+export type DraftCommentRecord = {
+  id: string;
+  draftId: string;
+  revision: number;
+  reviewerId: string | null;
+  parentCommentId: string | null;
+  author: string;
+  kind: "reviewing" | "suggestion" | "question" | "risk" | "reply" | "resolved" | "applied";
+  status: "open" | "resolved" | "applied" | "stale";
+  body: string;
+  dedupeKey: string;
+  stale: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DraftApplyHistoryRecord = {
+  id: string;
+  draftId: string;
+  sourceRevision: number;
+  targetRevision: number | null;
+  selectedCommentIds: string[];
+  result: Record<string, unknown> | null;
+  status: "pending" | "applied" | "rejected" | "undone";
+  idempotencyKey: string;
+  createdAt: string;
+  appliedAt: string | null;
+};
+
+export type DraftEventRecord = {
+  id: string;
+  draftId: string;
+  sequence: number;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type RunRecord = {
   id: string;
   taskId: string;
@@ -304,5 +387,12 @@ export type ProjectOverview = {
   comments: CommentRecord[];
   events: EventRecord[];
   providerEvents: ProviderEventEnvelope[];
+  draftSessions: DraftSessionRecord[];
+  draftRevisions: DraftRevisionRecord[];
+  draftReviewers: DraftReviewerRecord[];
+  draftReviewRequests: DraftReviewRequestRecord[];
+  draftComments: DraftCommentRecord[];
+  draftApplyHistory: DraftApplyHistoryRecord[];
+  draftEvents: DraftEventRecord[];
   runs: RunRecord[];
 };

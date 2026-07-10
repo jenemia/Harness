@@ -13,6 +13,13 @@ import type {
   ApprovalRecord,
   CommentRecord,
   DocumentRecord,
+  DraftApplyHistoryRecord,
+  DraftCommentRecord,
+  DraftEventRecord,
+  DraftReviewerRecord,
+  DraftReviewRequestRecord,
+  DraftRevisionRecord,
+  DraftSessionRecord,
   EventRecord,
   GlobalSettings,
   HandoffRecord,
@@ -925,6 +932,100 @@ export function openProjectDb(projectPath: string) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS draft_sessions (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      current_revision INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS draft_revisions (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(draft_id, revision)
+    );
+
+    CREATE TABLE IF NOT EXISTS draft_reviewers (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      agent_id TEXT,
+      status TEXT NOT NULL,
+      last_requested_revision INTEGER,
+      last_reviewed_revision INTEGER,
+      last_request_at TEXT,
+      rate_limit_until TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(draft_id, role)
+    );
+
+    CREATE TABLE IF NOT EXISTS draft_review_requests (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT NOT NULL,
+      reviewer_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      available_at TEXT NOT NULL,
+      dedupe_key TEXT NOT NULL,
+      requested_at TEXT NOT NULL,
+      started_at TEXT,
+      completed_at TEXT,
+      error TEXT,
+      UNIQUE(draft_id, reviewer_id, revision),
+      UNIQUE(draft_id, dedupe_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS draft_comments (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      reviewer_id TEXT,
+      parent_comment_id TEXT,
+      author TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      body TEXT NOT NULL,
+      dedupe_key TEXT NOT NULL,
+      stale INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(draft_id, dedupe_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS draft_apply_history (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT NOT NULL,
+      source_revision INTEGER NOT NULL,
+      target_revision INTEGER,
+      selected_comment_ids TEXT NOT NULL,
+      result TEXT,
+      status TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      applied_at TEXT,
+      UNIQUE(draft_id, idempotency_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS draft_events (
+      id TEXT PRIMARY KEY,
+      draft_id TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(draft_id, sequence)
+    );
+    CREATE INDEX IF NOT EXISTS draft_review_requests_status_available
+      ON draft_review_requests(status, available_at);
+    CREATE INDEX IF NOT EXISTS draft_comments_session_revision
+      ON draft_comments(draft_id, revision, created_at);
+
     CREATE TABLE IF NOT EXISTS approvals (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
@@ -1487,6 +1588,13 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
       providerEvents: db.prepare("SELECT * FROM provider_events ORDER BY timestamp DESC, sequence DESC LIMIT 500").all().map(mapProviderEvent),
+      draftSessions: db.prepare("SELECT * FROM draft_sessions ORDER BY updated_at DESC LIMIT 100").all().map(mapDraftSession),
+      draftRevisions: db.prepare("SELECT * FROM draft_revisions ORDER BY created_at DESC LIMIT 500").all().map(mapDraftRevision),
+      draftReviewers: db.prepare("SELECT * FROM draft_reviewers ORDER BY created_at ASC LIMIT 300").all().map(mapDraftReviewer),
+      draftReviewRequests: db.prepare("SELECT * FROM draft_review_requests ORDER BY requested_at DESC LIMIT 500").all().map(mapDraftReviewRequest),
+      draftComments: db.prepare("SELECT * FROM draft_comments ORDER BY created_at ASC LIMIT 1000").all().map(mapDraftComment),
+      draftApplyHistory: db.prepare("SELECT * FROM draft_apply_history ORDER BY created_at DESC LIMIT 500").all().map(mapDraftApplyHistory),
+      draftEvents: db.prepare("SELECT * FROM draft_events ORDER BY created_at DESC, sequence DESC LIMIT 1000").all().map(mapDraftEvent),
       runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
     };
   } finally {
@@ -1902,5 +2010,80 @@ export function mapRun(row: unknown): RunRecord {
     agentDefinitionSnapshot: r.agent_definition_snapshot ? String(r.agent_definition_snapshot) : null,
     startedAt: String(r.started_at),
     completedAt: r.completed_at ? String(r.completed_at) : null
+  };
+}
+
+export function mapDraftSession(row: unknown): DraftSessionRecord {
+  const r = row as Record<string, string | number>;
+  return {
+    id: String(r.id), projectId: String(r.project_id), status: String(r.status) as DraftSessionRecord["status"],
+    currentRevision: Number(r.current_revision), createdAt: String(r.created_at), updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapDraftRevision(row: unknown): DraftRevisionRecord {
+  const r = row as Record<string, string | number>;
+  return {
+    id: String(r.id), draftId: String(r.draft_id), revision: Number(r.revision),
+    content: String(r.content), createdAt: String(r.created_at)
+  };
+}
+
+export function mapDraftReviewer(row: unknown): DraftReviewerRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id), draftId: String(r.draft_id), role: String(r.role) as DraftReviewerRecord["role"],
+    agentId: r.agent_id ? String(r.agent_id) : null,
+    status: String(r.status) as DraftReviewerRecord["status"],
+    lastRequestedRevision: r.last_requested_revision === null ? null : Number(r.last_requested_revision),
+    lastReviewedRevision: r.last_reviewed_revision === null ? null : Number(r.last_reviewed_revision),
+    lastRequestAt: r.last_request_at ? String(r.last_request_at) : null,
+    rateLimitUntil: r.rate_limit_until ? String(r.rate_limit_until) : null,
+    createdAt: String(r.created_at), updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapDraftReviewRequest(row: unknown): DraftReviewRequestRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id), draftId: String(r.draft_id), reviewerId: String(r.reviewer_id), revision: Number(r.revision),
+    status: String(r.status) as DraftReviewRequestRecord["status"], availableAt: String(r.available_at),
+    dedupeKey: String(r.dedupe_key), requestedAt: String(r.requested_at),
+    startedAt: r.started_at ? String(r.started_at) : null,
+    completedAt: r.completed_at ? String(r.completed_at) : null,
+    error: r.error ? String(r.error) : null
+  };
+}
+
+export function mapDraftComment(row: unknown): DraftCommentRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id), draftId: String(r.draft_id), revision: Number(r.revision),
+    reviewerId: r.reviewer_id ? String(r.reviewer_id) : null,
+    parentCommentId: r.parent_comment_id ? String(r.parent_comment_id) : null,
+    author: String(r.author), kind: String(r.kind) as DraftCommentRecord["kind"],
+    status: String(r.status) as DraftCommentRecord["status"], body: String(r.body),
+    dedupeKey: String(r.dedupe_key), stale: Number(r.stale) !== 0,
+    createdAt: String(r.created_at), updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapDraftApplyHistory(row: unknown): DraftApplyHistoryRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id), draftId: String(r.draft_id), sourceRevision: Number(r.source_revision),
+    targetRevision: r.target_revision === null ? null : Number(r.target_revision),
+    selectedCommentIds: JSON.parse(String(r.selected_comment_ids || "[]")) as string[],
+    result: r.result ? JSON.parse(String(r.result)) as Record<string, unknown> : null,
+    status: String(r.status) as DraftApplyHistoryRecord["status"], idempotencyKey: String(r.idempotency_key),
+    createdAt: String(r.created_at), appliedAt: r.applied_at ? String(r.applied_at) : null
+  };
+}
+
+export function mapDraftEvent(row: unknown): DraftEventRecord {
+  const r = row as Record<string, string | number>;
+  return {
+    id: String(r.id), draftId: String(r.draft_id), sequence: Number(r.sequence), type: String(r.type),
+    payload: JSON.parse(String(r.payload || "{}")) as Record<string, unknown>, createdAt: String(r.created_at)
   };
 }

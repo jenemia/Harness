@@ -28,6 +28,30 @@ export type HarnessCommandInputs = {
   "memories:update": { projectId: string; memoryId: string; payload: object };
   "approvals:decide": { projectId: string; approvalId: string; action: "approve" | "reject" };
   "runs:followups": { projectId: string; runId: string };
+  "drafts:create": {
+    projectId: string;
+    payload: { content?: string; reviewers?: Array<{ role: "planning-reviewer" | "edge-case-reviewer" | "planner"; agentId?: string | null }> };
+  };
+  "drafts:get": { projectId: string; draftId: string };
+  "drafts:update": { projectId: string; draftId: string; expectedRevision: number; content: string };
+  "drafts:claim-review": { projectId: string; requestId: string };
+  "drafts:submit-review": {
+    projectId: string;
+    requestId: string;
+    payload: { comments: Array<{ kind: "suggestion" | "question" | "risk"; body: string; idempotencyKey?: string }> };
+  };
+  "drafts:reply": {
+    projectId: string;
+    draftId: string;
+    payload: { parentCommentId: string; body: string; author?: string; idempotencyKey?: string };
+  };
+  "drafts:apply-request": {
+    projectId: string;
+    draftId: string;
+    payload: { expectedRevision: number; selectedCommentIds: string[]; idempotencyKey: string };
+  };
+  "drafts:events": { projectId: string; draftId: string; afterSequence?: number };
+  "drafts:recover": { projectId: string };
   "tasks:create-from-prompt": { projectId: string; prompt: string };
   "tasks:create": { projectId: string; payload: object };
   "tasks:update": { projectId: string; taskId: string; payload: object };
@@ -119,6 +143,15 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "memories:update") return isText(payload.memoryId) && isRecord(payload.payload);
   if (command === "approvals:decide") return isText(payload.approvalId) && (payload.action === "approve" || payload.action === "reject");
   if (command === "runs:followups") return isText(payload.runId);
+  if (command === "drafts:create") return isDraftCreatePayload(payload.payload);
+  if (command === "drafts:get") return isText(payload.draftId);
+  if (command === "drafts:update") return isText(payload.draftId) && isNonNegativeInteger(payload.expectedRevision) && typeof payload.content === "string";
+  if (command === "drafts:claim-review") return isText(payload.requestId);
+  if (command === "drafts:submit-review") return isText(payload.requestId) && isDraftReviewPayload(payload.payload);
+  if (command === "drafts:reply") return isText(payload.draftId) && isDraftReplyPayload(payload.payload);
+  if (command === "drafts:apply-request") return isText(payload.draftId) && isDraftApplyPayload(payload.payload);
+  if (command === "drafts:events") return isText(payload.draftId) && (payload.afterSequence === undefined || isNonNegativeInteger(payload.afterSequence));
+  if (command === "drafts:recover") return true;
   if (command === "tasks:create-from-prompt") return isText(payload.prompt);
   if (command === "tasks:create") return isRecord(payload.payload);
   if (!isText(payload.taskId)) return false;
@@ -133,12 +166,45 @@ const commandNames = new Set<HarnessCommand>([
   "templates:projects", "templates:agent-create", "settings:get", "settings:update", "project-settings:update",
   "system:select-folder", "agents:save", "documents:create", "documents:update", "global-memories:create",
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
+  "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:submit-review", "drafts:reply",
+  "drafts:apply-request", "drafts:events", "drafts:recover",
   "tasks:create-from-prompt", "tasks:create", "tasks:update", "tasks:start", "tasks:pause", "tasks:resume", "tasks:move",
   "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:resolve-merge", "tasks:request-changes"
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonNegativeInteger(value: unknown) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isDraftCreatePayload(value: unknown) {
+  if (!isRecord(value) || (value.content !== undefined && typeof value.content !== "string")) return false;
+  if (value.reviewers === undefined) return true;
+  return Array.isArray(value.reviewers) && value.reviewers.every((item) =>
+    isRecord(item) && ["planning-reviewer", "edge-case-reviewer", "planner"].includes(String(item.role)) &&
+    (item.agentId === undefined || item.agentId === null || isText(item.agentId))
+  );
+}
+
+function isDraftReviewPayload(value: unknown) {
+  return isRecord(value) && Array.isArray(value.comments) && value.comments.every((item) =>
+    isRecord(item) && ["suggestion", "question", "risk"].includes(String(item.kind)) && isText(item.body) &&
+    (item.idempotencyKey === undefined || isText(item.idempotencyKey))
+  );
+}
+
+function isDraftReplyPayload(value: unknown) {
+  return isRecord(value) && isText(value.parentCommentId) && isText(value.body) &&
+    (value.author === undefined || isText(value.author)) &&
+    (value.idempotencyKey === undefined || isText(value.idempotencyKey));
+}
+
+function isDraftApplyPayload(value: unknown) {
+  return isRecord(value) && isNonNegativeInteger(value.expectedRevision) && Array.isArray(value.selectedCommentIds) &&
+    value.selectedCommentIds.every(isText) && isText(value.idempotencyKey);
 }
 
 function isText(value: unknown) {

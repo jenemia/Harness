@@ -8,6 +8,7 @@ import {
   getProjectSettings,
   listAgentTemplates,
   listProjectTemplates,
+  listProjects,
   listProjectsWithSummaries,
   listWorkflowTemplates,
   moveTaskInBoard,
@@ -24,6 +25,7 @@ import {
   initializeProjectWorkspace,
   listRuntimeProviders,
   pauseTask,
+  recoverInterruptedRuns,
   requestMergeChanges,
   resolveMerge,
   resumeTask,
@@ -50,6 +52,17 @@ import {
 } from "./services.js";
 import type { AgentRecord, TaskRecord } from "./types.js";
 import { replayProviderEvents, subscribeProviderEvents } from "./provider-events.js";
+import {
+  claimDraftReviewRequest,
+  createDraftReply,
+  createDraftSession,
+  getDraftSnapshot,
+  recordDraftApplyAttempt,
+  recoverDraftReviewRequests,
+  replayDraftEvents,
+  submitDraftReview,
+  updateDraftRevision
+} from "./drafts.js";
 
 export function subscribeApplicationProviderEvents(
   filter: HarnessEventFilters["provider:event"],
@@ -59,6 +72,26 @@ export function subscribeApplicationProviderEvents(
   const unsubscribe = subscribeProviderEvents(filter, listener);
   const replay = replayProviderEvents(project, filter);
   return { replay, unsubscribe };
+}
+
+export function recoverApplicationState() {
+  return listProjects().map((project) => {
+    try {
+      return {
+        projectId: project.id,
+        runtime: recoverInterruptedRuns(project),
+        drafts: recoverDraftReviewRequests(project),
+        error: null
+      };
+    } catch (error) {
+      return {
+        projectId: project.id,
+        runtime: null,
+        drafts: null,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  });
 }
 
 export async function invokeApplicationCommand<C extends HarnessCommand>(
@@ -153,6 +186,39 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
       const project = requiredProject(value.projectId);
       return { tasks: createFollowUpTasksService(project, value.runId), overview: getProjectOverview(project) };
     }
+    case "drafts:create": {
+      const value = input(payload) as HarnessCommandInputs["drafts:create"];
+      return { draft: createDraftSession(requiredProject(value.projectId), value.payload) };
+    }
+    case "drafts:get": {
+      const value = input(payload) as HarnessCommandInputs["drafts:get"];
+      return { draft: getDraftSnapshot(requiredProject(value.projectId), value.draftId) };
+    }
+    case "drafts:update": {
+      const value = input(payload) as HarnessCommandInputs["drafts:update"];
+      return { draft: updateDraftRevision(requiredProject(value.projectId), value.draftId, value) };
+    }
+    case "drafts:claim-review": {
+      const value = input(payload) as HarnessCommandInputs["drafts:claim-review"];
+      return { request: claimDraftReviewRequest(requiredProject(value.projectId), value.requestId) };
+    }
+    case "drafts:submit-review": {
+      const value = input(payload) as HarnessCommandInputs["drafts:submit-review"];
+      return { result: submitDraftReview(requiredProject(value.projectId), value.requestId, value.payload as Parameters<typeof submitDraftReview>[2]) };
+    }
+    case "drafts:reply": {
+      const value = input(payload) as HarnessCommandInputs["drafts:reply"];
+      return { comment: createDraftReply(requiredProject(value.projectId), value.draftId, value.payload as Parameters<typeof createDraftReply>[2]) };
+    }
+    case "drafts:apply-request": {
+      const value = input(payload) as HarnessCommandInputs["drafts:apply-request"];
+      return { apply: recordDraftApplyAttempt(requiredProject(value.projectId), value.draftId, value.payload as Parameters<typeof recordDraftApplyAttempt>[2]) };
+    }
+    case "drafts:events": {
+      const value = input(payload) as HarnessCommandInputs["drafts:events"];
+      return { events: replayDraftEvents(requiredProject(value.projectId), value.draftId, value.afterSequence) };
+    }
+    case "drafts:recover": return { result: recoverDraftReviewRequests(requiredProject(input(payload).projectId)) };
     case "tasks:create-from-prompt": {
       const value = input(payload) as HarnessCommandInputs["tasks:create-from-prompt"];
       const project = requiredProject(value.projectId);

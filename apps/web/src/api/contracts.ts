@@ -264,6 +264,40 @@ export type Event = {
   createdAt: string;
 };
 
+export type DraftSession = {
+  id: string; projectId: string; status: "open" | "applied" | "closed";
+  currentRevision: number; createdAt: string; updatedAt: string;
+};
+export type DraftRevision = { id: string; draftId: string; revision: number; content: string; createdAt: string };
+export type DraftReviewer = {
+  id: string; draftId: string; role: "planning-reviewer" | "edge-case-reviewer" | "planner";
+  agentId: string | null; status: "idle" | "debounced" | "reviewing" | "rate-limited";
+  lastRequestedRevision: number | null; lastReviewedRevision: number | null;
+  lastRequestAt: string | null; rateLimitUntil: string | null; createdAt: string; updatedAt: string;
+};
+export type DraftReviewRequest = {
+  id: string; draftId: string; reviewerId: string; revision: number;
+  status: "debounced" | "pending" | "running" | "completed" | "cancelled" | "stale" | "failed";
+  availableAt: string; dedupeKey: string; requestedAt: string; startedAt: string | null;
+  completedAt: string | null; error: string | null;
+};
+export type DraftComment = {
+  id: string; draftId: string; revision: number; reviewerId: string | null; parentCommentId: string | null;
+  author: string; kind: "reviewing" | "suggestion" | "question" | "risk" | "reply" | "resolved" | "applied";
+  status: "open" | "resolved" | "applied" | "stale"; body: string; dedupeKey: string;
+  stale: boolean; createdAt: string; updatedAt: string;
+};
+export type DraftApplyHistory = {
+  id: string; draftId: string; sourceRevision: number; targetRevision: number | null;
+  selectedCommentIds: string[]; result: Record<string, unknown> | null;
+  status: "pending" | "applied" | "rejected" | "undone"; idempotencyKey: string;
+  createdAt: string; appliedAt: string | null;
+};
+export type DraftEvent = {
+  id: string; draftId: string; sequence: number; type: string;
+  payload: Record<string, unknown>; createdAt: string;
+};
+
 export type Run = {
   id: string;
   taskId: string;
@@ -312,6 +346,13 @@ export type Overview = {
   comments: CommentRecord[];
   events: Event[];
   providerEvents: ProviderEvent[];
+  draftSessions: DraftSession[];
+  draftRevisions: DraftRevision[];
+  draftReviewers: DraftReviewer[];
+  draftReviewRequests: DraftReviewRequest[];
+  draftComments: DraftComment[];
+  draftApplyHistory: DraftApplyHistory[];
+  draftEvents: DraftEvent[];
   runs: Run[];
 };
 

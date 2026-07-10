@@ -40,6 +40,7 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { selectFolder } from "./folder-picker.js";
+import { recoverDraftReviewRequests } from "./drafts.js";
 import {
   createAgentService,
   createDocumentService,
@@ -505,7 +506,9 @@ server.listen(port, () => {
 function recoverRegisteredProjects() {
   const results = listProjects().map((project) => {
     try {
-      return recoverInterruptedRuns(project);
+      const runtime = recoverInterruptedRuns(project);
+      const drafts = recoverDraftReviewRequests(project);
+      return { ...runtime, drafts };
     } catch (error) {
       console.error(`Failed to recover project ${project.name}: ${error instanceof Error ? error.message : String(error)}`);
       return null;
@@ -514,9 +517,10 @@ function recoverRegisteredProjects() {
   const interruptedRuns = results.reduce((count, result) => count + (result?.interruptedRuns.length || 0), 0);
   const resetTasks = results.reduce((count, result) => count + (result?.resetTasks.length || 0), 0);
   const resetAgents = results.reduce((count, result) => count + (result?.resetAgents.length || 0), 0);
-  if (interruptedRuns || resetTasks || resetAgents) {
+  const recoveredDraftReviews = results.reduce((count, result) => count + (result?.drafts.recovered || 0), 0);
+  if (interruptedRuns || resetTasks || resetAgents || recoveredDraftReviews) {
     console.log(
-      `Recovered ${interruptedRuns} interrupted run(s), ${resetTasks} task(s), and ${resetAgents} agent(s).`
+      `Recovered ${interruptedRuns} interrupted run(s), ${resetTasks} task(s), ${resetAgents} agent(s), and ${recoveredDraftReviews} draft review(s).`
     );
   }
 }
