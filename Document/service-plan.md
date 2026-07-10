@@ -256,6 +256,8 @@ Initial implementation: every run stores the assigned agent, effective model bac
 
 Initial implementation: recent completed or failed runs for the same task are injected into the generated agent prompt and `HARNESS_TASK_RUN_SUMMARY`, so reviewer and handoff agents receive prior output, provider, timing, and changed-file context.
 
+Initial implementation: task comments are injected into the generated agent prompt and `HARNESS_TASK_COMMENTS`, so human notes, clarifications, and handoff context become part of the next agent execution rather than staying only in the drawer UI.
+
 Initial implementation: run audit trails can also be inspected from the headless CLI with status/task/agent/provider/model filters and run-scoped detail output.
 
 Initial implementation: the UI Runs panel supports status, agent, provider, and model backend filters so recent execution history remains scannable as projects accumulate many agent runs.
