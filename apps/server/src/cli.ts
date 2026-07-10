@@ -612,6 +612,7 @@ function createTaskCommand(args: string[]) {
     waivedDependencyTaskIds: parseCsv(options.waivedDependencies),
     labels: parseCsv(options.labels),
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile") || "",
+    workspaceMode: normalizeWorkspaceMode(options.workspaceMode),
     blockedReason: null
   });
   return { task, overview: getProjectOverview(project) };
@@ -633,6 +634,7 @@ function updateTaskCommand(args: string[]) {
     waivedDependencyTaskIds: options.waivedDependencies !== undefined ? parseCsv(options.waivedDependencies) : undefined,
     labels: options.labels !== undefined ? parseCsv(options.labels) : undefined,
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile"),
+    workspaceMode: options.workspaceMode === undefined ? undefined : normalizeWorkspaceMode(options.workspaceMode),
     blockedReason: optionPatchValue(options, "blockedReason", "clearBlockedReason")
   });
   const unblocked = task.status === "Done" ? unblockReadyDependents(project, task.id) : [];
@@ -665,6 +667,7 @@ function decomposeTaskCommand(args: string[]) {
         waivedDependencyTaskIds: [],
         labels,
         acceptanceCriteria: item.acceptanceCriteria || source.acceptanceCriteria,
+        workspaceMode: source.workspaceMode,
         blockedReason: defaultDependencyBlocker(dependencyTaskIds, dependencyTaskIds.length > 0 ? "Blocked" : "Selected")
       })
     );
@@ -801,6 +804,10 @@ function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatu
   return `Waiting on dependencies: ${dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`;
 }
 
+function normalizeWorkspaceMode(value: unknown) {
+  return value === "harness" ? "harness" : "worktree";
+}
+
 function createCliTask(
   project: ProjectRecord,
   input: Pick<
@@ -817,6 +824,7 @@ function createCliTask(
     | "waivedDependencyTaskIds"
     | "labels"
     | "acceptanceCriteria"
+    | "workspaceMode"
     | "blockedReason"
   >
 ) {
@@ -839,9 +847,9 @@ function createCliTask(
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
+        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, workspace_mode, task_order, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -856,6 +864,7 @@ function createCliTask(
       JSON.stringify(task.waivedDependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
+      task.workspaceMode,
       task.taskOrder,
       task.branchName,
       task.worktreePath,
@@ -1038,6 +1047,7 @@ function updateCliTask(project: ProjectRecord, taskId: string, input: Partial<Ta
           waived_dependency_task_ids = COALESCE(?, waived_dependency_task_ids),
           labels = COALESCE(?, labels),
           acceptance_criteria = COALESCE(?, acceptance_criteria),
+          workspace_mode = COALESCE(?, workspace_mode),
           blocked_reason = ?,
           updated_at = ?
       WHERE id = ?
@@ -1053,6 +1063,7 @@ function updateCliTask(project: ProjectRecord, taskId: string, input: Partial<Ta
       Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(input.waivedDependencyTaskIds) : null,
       Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
       input.acceptanceCriteria?.trim() || null,
+      input.workspaceMode === undefined ? null : normalizeWorkspaceMode(input.workspaceMode),
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
       now(),
       taskId
@@ -1433,8 +1444,8 @@ Usage:
   pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>
   pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]
   pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
-  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--dependencies task1,task2] [--waivedDependencies task1]
-  pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee] [--dependencies task1,task2] [--waivedDependencies task1]
+  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--workspaceMode worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
+  pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee] [--workspaceMode worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
   pnpm --filter @harness/server cli tasks:decompose --project <projectId> --task <taskId> (--items <text|json> | --itemsFile <file>) [--mode parallel|sequential]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
   pnpm --filter @harness/server cli tasks:move --project <projectId> --task <taskId> --direction up|down

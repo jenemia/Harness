@@ -783,6 +783,7 @@ export function openProjectDb(projectPath: string) {
   const dir = projectHarnessDir(projectPath);
   mkdirSync(dir, { recursive: true });
   mkdirSync(path.join(dir, "worktrees"), { recursive: true });
+  mkdirSync(path.join(dir, "workspaces"), { recursive: true });
   const db = new DatabaseSync(path.join(dir, "harness.db"));
   db.exec(`
     CREATE TABLE IF NOT EXISTS agents (
@@ -816,6 +817,7 @@ export function openProjectDb(projectPath: string) {
       waived_dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       labels TEXT NOT NULL,
       acceptance_criteria TEXT NOT NULL,
+      workspace_mode TEXT NOT NULL DEFAULT 'worktree',
       task_order INTEGER NOT NULL DEFAULT 0,
       branch_name TEXT,
       worktree_path TEXT,
@@ -910,6 +912,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "waived_dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "model_backend", "TEXT");
+  ensureColumn(db, "tasks", "workspace_mode", "TEXT NOT NULL DEFAULT 'worktree'");
   ensureColumn(db, "tasks", "task_order", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
@@ -1627,6 +1630,7 @@ export function mapTask(row: unknown): TaskRecord {
     waivedDependencyTaskIds: JSON.parse(String(r.waived_dependency_task_ids || "[]")) as string[],
     labels: JSON.parse(String(r.labels)) as string[],
     acceptanceCriteria: String(r.acceptance_criteria),
+    workspaceMode: r.workspace_mode === "harness" ? "harness" : "worktree",
     taskOrder: Number(r.task_order || 0),
     branchName: r.branch_name ? String(r.branch_name) : null,
     worktreePath: r.worktree_path ? String(r.worktree_path) : null,

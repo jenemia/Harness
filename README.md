@@ -22,6 +22,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Ready-task scheduler with agent `maxParallel` capacity checks.
 - Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
 - Git worktree per executable task.
+- Harness workspace mode for non-code tasks that do not need Git worktrees.
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
 - PM completion evaluation events before automatic handoffs or Done transitions.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
@@ -32,7 +33,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Task-level model backend overrides for routing specific work to a different provider.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
 
-LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
+LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
 
 Global memory is written to `.harness/global-memory.md` and exposed as `HARNESS_GLOBAL_MEMORY` and `HARNESS_GLOBAL_MEMORY_FILE`. Project memory is written to `.harness/project-memory.md` and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 
@@ -89,6 +90,7 @@ pnpm cli runs:show --project <projectId> --run <runId>
 pnpm cli tasks:list --project <projectId> --status Selected,Blocked
 pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
+pnpm cli tasks:create --project <projectId> --title "Draft release notes" --status Selected --workspaceMode harness
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
 pnpm cli tasks:update --project <projectId> --task <taskId> --waivedDependencies <dependencyTaskId>
 pnpm cli tasks:decompose --project <projectId> --task <taskId> --mode sequential --itemsFile ./subtasks.txt
@@ -162,9 +164,9 @@ When the server starts, Harness scans registered projects for runs that were lef
 
 ## Task Tracking
 
-Open a task from the board to inspect its status, assignee, labels, parent/subtask links, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
+Open a task from the board to inspect its status, assignee, labels, parent/subtask links, workspace mode, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
 
-Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, worktree path, and changed files.
+Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files.
 
 Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, and run-scoped `runs:show`.
 

@@ -6,6 +6,7 @@ export type TaskStatus =
   | "Paused"
   | "Blocked"
   | "Done";
+export type TaskWorkspaceMode = "worktree" | "harness";
 
 export type Project = {
   id: string;
@@ -166,6 +167,7 @@ export type Task = {
   waivedDependencyTaskIds: string[];
   labels: string[];
   acceptanceCriteria: string;
+  workspaceMode: TaskWorkspaceMode;
   taskOrder: number;
   branchName: string | null;
   worktreePath: string | null;
@@ -282,6 +284,7 @@ export type ProviderCatalog = {
     capabilities: {
       isolatedTaskWorkspace: boolean;
       gitWorktrees: boolean;
+      harnessWorkspaces: boolean;
       branchPerTask: boolean;
       mergeIntoMainCheckout: boolean;
     };

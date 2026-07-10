@@ -8,6 +8,7 @@ export type TaskStatus =
   | "Done";
 
 export type TaskMoveDirection = "up" | "down";
+export type TaskWorkspaceMode = "worktree" | "harness";
 
 export type ProjectRecord = {
   id: string;
@@ -175,6 +176,7 @@ export type TaskRecord = {
   waivedDependencyTaskIds: string[];
   labels: string[];
   acceptanceCriteria: string;
+  workspaceMode: TaskWorkspaceMode;
   taskOrder: number;
   branchName: string | null;
   worktreePath: string | null;

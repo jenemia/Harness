@@ -331,6 +331,8 @@ Initial implementation: pending merges can be approved into the main checkout or
 
 Initial implementation: projects without Git or without a first commit can be initialized from the UI, API, or CLI through the workspace provider. The flow runs `git init` when needed, excludes `.harness/` from Git, and creates a baseline Harness commit so task worktrees have a stable starting `HEAD`.
 
+Initial implementation: tasks can choose `workspaceMode` per task. `worktree` remains the default and creates a task branch plus Git worktree. `harness` creates a Harness-managed directory under `.harness/workspaces/<task-id>` for non-code or non-Git tasks, records a synthetic `harness:` snapshot, skips branch creation, and skips commit/merge approval.
+
 Benefits:
 
 - Safer parallel execution.
@@ -341,10 +343,10 @@ Benefits:
 
 Open constraints:
 
-- Non-Git fallback execution still needs a separate provider strategy.
+- Harness workspace mode covers the first non-Git execution path; future provider strategies can add patch or container isolation.
 - Large repositories may make many worktrees expensive.
 - More advanced merge conflict visualization and guided file-level resolution can be layered on top of the current resolve/request-changes flow.
-- Some non-code tasks may not need a worktree.
+- Scheduler heuristics can later recommend `harness` mode automatically for documentation, planning, or research tasks.
 
 ## 7. Recommended Development Stack
 
@@ -404,7 +406,7 @@ Initial providers:
 
 - `node-darwin` platform provider for local Mac MVP.
 - Future `node-win32` platform provider for Windows.
-- `git-worktree` workspace provider for one branch and worktree per executable task.
+- `git-worktree` workspace provider for one branch and worktree per executable code task, plus Harness-managed workspaces for non-Git tasks.
 - `local-human` approval provider for command execution and merge approval gates.
 - `local-agent-policy` provider for checking agent allowed tools before command-backed LLM execution.
 - `mock` LLM provider for deterministic local testing.
@@ -421,7 +423,7 @@ LLM providers should receive a generated prompt file and normalized environment 
 
 Initial implementation: provider command defaults can be configured globally and per project. Agent-specific CLI commands override project provider commands, and project provider commands inherit from global defaults.
 
-Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a `git-worktree` workspace provider that owns task worktree creation, snapshotting, changed-file collection, commits, and merge operations. Runtime approval behavior is selected through a `local-human` approval provider that owns command approval policy, decision messages, and rejection reasons while the project database stores the approval records. Runtime policy behavior is selected through a `local-agent-policy` provider that blocks command-backed LLM providers unless the assigned agent allows `shell`, `llm-cli`, the provider kind, or the provider id, and forces approval for risky shell command patterns even when project command approvals are disabled. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, approval provider capabilities, policy provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
+Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a workspace provider that owns task worktree/workspace creation, snapshotting, changed-file collection, commits, and merge operations. The first provider supports both Git worktrees and Harness-managed non-Git workspaces, selected by each task's `workspaceMode`. Runtime approval behavior is selected through a `local-human` approval provider that owns command approval policy, decision messages, and rejection reasons while the project database stores the approval records. Runtime policy behavior is selected through a `local-agent-policy` provider that blocks command-backed LLM providers unless the assigned agent allows `shell`, `llm-cli`, the provider kind, or the provider id, and forces approval for risky shell command patterns even when project command approvals are disabled. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, approval provider capabilities, policy provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
 
 ### Database
 
@@ -487,7 +489,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task decomposition, task updates, task reorder, task pause/resume, task comments, approval decisions, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 
@@ -534,7 +536,7 @@ The task detail view should include:
 - Comments
 - Human approval prompts
 
-Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, parent/subtask links, dependencies, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, follow-up task creation, handoff history, and an activity timeline.
+Initial implementation: board cards can open a task detail drawer showing editable metadata, labels, parent/subtask links, dependencies, workspace mode, branch/worktree, merge state, task-scoped comments, task-scoped runs, changed files, run output/errors, follow-up task creation, handoff history, and an activity timeline.
 
 Initial implementation: the headless CLI can show the Kanban board grouped by status, list tasks with status/assignee/label filters, show task-scoped comments, runs, approvals, handoffs, and events, and inspect run records with filters for status, task, agent, provider, and model backend.
 

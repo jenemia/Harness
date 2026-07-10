@@ -965,6 +965,7 @@ function TaskComposer(props: {
 }) {
   const [title, setTitle] = useState("");
   const [modelBackend, setModelBackend] = useState("");
+  const [workspaceMode, setWorkspaceMode] = useState<Task["workspaceMode"]>("worktree");
   const [assigneeAgentId, setAssigneeAgentId] = useState("");
   const [dependencyTaskId, setDependencyTaskId] = useState("");
   const [parentTaskId, setParentTaskId] = useState("");
@@ -978,6 +979,7 @@ function TaskComposer(props: {
         body: JSON.stringify({
           title,
           modelBackend: modelBackend || null,
+          workspaceMode,
           assigneeAgentId: assigneeAgentId || null,
           parentTaskId: parentTaskId || null,
           dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
@@ -988,6 +990,7 @@ function TaskComposer(props: {
       });
       setTitle("");
       setModelBackend("");
+      setWorkspaceMode("worktree");
       setDependencyTaskId("");
       setParentTaskId("");
       setLabelsText("");
@@ -1005,6 +1008,10 @@ function TaskComposer(props: {
             {provider.label}
           </option>
         ))}
+      </select>
+      <select value={workspaceMode} onChange={(event) => setWorkspaceMode(event.target.value as Task["workspaceMode"])}>
+        <option value="worktree">Git worktree</option>
+        <option value="harness">Harness workspace</option>
       </select>
       <select value={assigneeAgentId} onChange={(event) => setAssigneeAgentId(event.target.value)}>
         <option value="">Unassigned</option>
@@ -1244,6 +1251,7 @@ function TaskDetailDrawer(props: {
   const [editStatus, setEditStatus] = useState<TaskStatus>(props.task.status);
   const [editPriority, setEditPriority] = useState<Task["priority"]>(props.task.priority);
   const [editModelBackend, setEditModelBackend] = useState(props.task.modelBackend || "");
+  const [editWorkspaceMode, setEditWorkspaceMode] = useState<Task["workspaceMode"]>(props.task.workspaceMode);
   const [editAssigneeAgentId, setEditAssigneeAgentId] = useState(props.task.assigneeAgentId || "");
   const [editParentTaskId, setEditParentTaskId] = useState(props.task.parentTaskId || "");
   const [editLabelsText, setEditLabelsText] = useState(props.task.labels.join(", "));
@@ -1267,6 +1275,7 @@ function TaskDetailDrawer(props: {
     setEditStatus(props.task.status);
     setEditPriority(props.task.priority);
     setEditModelBackend(props.task.modelBackend || "");
+    setEditWorkspaceMode(props.task.workspaceMode);
     setEditAssigneeAgentId(props.task.assigneeAgentId || "");
     setEditParentTaskId(props.task.parentTaskId || "");
     setEditLabelsText(props.task.labels.join(", "));
@@ -1358,6 +1367,7 @@ function TaskDetailDrawer(props: {
           status: editStatus,
           priority: editPriority,
           modelBackend: editModelBackend || null,
+          workspaceMode: editWorkspaceMode,
           assigneeAgentId: editAssigneeAgentId || null,
           parentTaskId: editParentTaskId || null,
           labels: parseLabels(editLabelsText)
@@ -1495,6 +1505,10 @@ function TaskDetailDrawer(props: {
                 </option>
               ))}
             </select>
+            <select value={editWorkspaceMode} onChange={(event) => setEditWorkspaceMode(event.target.value as Task["workspaceMode"])}>
+              <option value="worktree">Git worktree</option>
+              <option value="harness">Harness workspace</option>
+            </select>
             <select value={editParentTaskId} onChange={(event) => setEditParentTaskId(event.target.value)}>
               <option value="">No parent</option>
               {props.overview.tasks
@@ -1534,6 +1548,7 @@ function TaskDetailDrawer(props: {
             <DetailItem label="Priority" value={props.task.priority} />
             <DetailItem label="Assignee" value={props.assignee?.name || "Unassigned"} />
             <DetailItem label="Backend" value={props.task.modelBackend || props.assignee?.modelBackend || "-"} />
+            <DetailItem label="Workspace" value={props.task.workspaceMode === "harness" ? "Harness workspace" : "Git worktree"} />
             <DetailItem label="Merge" value={props.task.mergeStatus} />
             <DetailItem label="Parent" value={parentTask?.title || "-"} />
             <DetailItem label="Reporter" value={props.task.reporter} />
@@ -2222,7 +2237,8 @@ function SettingsPanel(props: {
           <span>
             isolated workspace {props.providerCatalog.workspace.capabilities.isolatedTaskWorkspace ? "on" : "off"} | git
             worktrees {props.providerCatalog.workspace.capabilities.gitWorktrees ? "on" : "off"} | branch per task{" "}
-            {props.providerCatalog.workspace.capabilities.branchPerTask ? "on" : "off"}
+            {props.providerCatalog.workspace.capabilities.branchPerTask ? "on" : "off"} | harness workspace{" "}
+            {props.providerCatalog.workspace.capabilities.harnessWorkspaces ? "on" : "off"}
           </span>
           <strong>{props.providerCatalog.approval.label}</strong>
           <span>

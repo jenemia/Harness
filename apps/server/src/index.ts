@@ -603,6 +603,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     const timestamp = now();
     const status = input.status || "Backlog";
     const dependencyTaskIds = Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [];
+    const workspaceMode = input.workspaceMode === "harness" ? "harness" : "worktree";
     const task: TaskRecord = {
       id: randomUUID(),
       title: input.title.trim(),
@@ -617,6 +618,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       waivedDependencyTaskIds: Array.isArray(input.waivedDependencyTaskIds) ? input.waivedDependencyTaskIds : [],
       labels: Array.isArray(input.labels) ? input.labels : [],
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
+      workspaceMode,
       taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,
@@ -630,9 +632,9 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
+        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, workspace_mode, task_order, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -647,6 +649,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       JSON.stringify(task.waivedDependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
+      task.workspaceMode,
       task.taskOrder,
       task.branchName,
       task.worktreePath,
@@ -719,7 +722,8 @@ function decomposeTask(
         dependencyTaskIds,
         waivedDependencyTaskIds: [],
         labels: mergeLabels(labels, item.labels || []),
-        acceptanceCriteria: item.acceptanceCriteria || sourceTask.acceptanceCriteria
+        acceptanceCriteria: item.acceptanceCriteria || sourceTask.acceptanceCriteria,
+        workspaceMode: sourceTask.workspaceMode
       })
     );
   }
@@ -789,6 +793,10 @@ function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatu
   return `Waiting on dependencies: ${dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`;
 }
 
+function normalizeWorkspaceMode(value: unknown) {
+  return value === "harness" ? "harness" : "worktree";
+}
+
 function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskRecord>) {
   const db = openProjectDb(project.path);
   try {
@@ -814,6 +822,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
           waived_dependency_task_ids = COALESCE(?, waived_dependency_task_ids),
           labels = COALESCE(?, labels),
           acceptance_criteria = COALESCE(?, acceptance_criteria),
+          workspace_mode = COALESCE(?, workspace_mode),
           blocked_reason = ?,
           updated_at = ?
       WHERE id = ?
@@ -829,6 +838,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(input.waivedDependencyTaskIds) : null,
       Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
       input.acceptanceCriteria?.trim() || null,
+      input.workspaceMode === undefined ? null : normalizeWorkspaceMode(input.workspaceMode),
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
       now(),
       taskId

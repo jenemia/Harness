@@ -770,8 +770,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       timeoutMs: settings.maxRunSeconds * 1000
     });
     const completedAt = now();
-    const changedFiles = await collectChangedFiles(workspace.worktreePath);
-    const commitResult = result.ok
+    const changedFiles = workspace.kind === "git-worktree" ? await collectChangedFiles(workspace.worktreePath) : [];
+    const commitResult = result.ok && workspace.kind === "git-worktree"
       ? await providers.workspace().commitAll(
           workspace.worktreePath,
           `Harness task ${task.id.slice(0, 8)}: ${task.title}`

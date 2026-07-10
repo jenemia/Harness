@@ -11,7 +11,8 @@ export type CommandResult = {
 };
 
 export type TaskWorkspace = {
-  branchName: string;
+  kind: "git-worktree" | "harness";
+  branchName: string | null;
   worktreePath: string;
 };
 
@@ -48,6 +49,7 @@ export type WorkspaceProvider = {
   capabilities: {
     isolatedTaskWorkspace: boolean;
     gitWorktrees: boolean;
+    harnessWorkspaces: boolean;
     branchPerTask: boolean;
     mergeIntoMainCheckout: boolean;
   };
@@ -458,12 +460,13 @@ function createGitWorktreeWorkspaceProvider(
 ): WorkspaceProvider {
   return {
     id: "git-worktree",
-    label: "Git Worktree Workspace",
+    label: "Local Workspace",
     kind: "git-worktree",
-    description: "Creates one Git branch and worktree per executable task.",
+    description: "Creates Git worktrees for code tasks or Harness-managed workspaces for non-Git tasks.",
     capabilities: {
       isolatedTaskWorkspace: true,
       gitWorktrees: true,
+      harnessWorkspaces: true,
       branchPerTask: true,
       mergeIntoMainCheckout: true
     },
@@ -525,11 +528,26 @@ function createGitWorktreeWorkspaceProvider(
     },
 
     async ensureTaskWorkspace(projectPath, task) {
-      if (task.worktreePath && task.branchName) {
+      if (task.worktreePath && task.workspaceMode === "harness" && !task.branchName) {
         return {
+          kind: "harness",
+          branchName: null,
+          worktreePath: task.worktreePath
+        };
+      }
+
+      if (task.worktreePath && task.workspaceMode === "worktree" && task.branchName) {
+        return {
+          kind: "git-worktree",
           branchName: task.branchName,
           worktreePath: task.worktreePath
         };
+      }
+
+      if (task.workspaceMode === "harness") {
+        const worktreePath = path.join(projectHarnessDir(projectPath), "workspaces", task.id);
+        mkdirSync(worktreePath, { recursive: true });
+        return { kind: "harness", branchName: null, worktreePath };
       }
 
       await this.ensureGitReady(projectPath);
@@ -548,7 +566,7 @@ function createGitWorktreeWorkspaceProvider(
         await platformProvider.run("git", ["worktree", "add", "-B", branchName, worktreePath, "HEAD"], projectPath);
       }
 
-      return { branchName, worktreePath };
+      return { kind: "git-worktree", branchName, worktreePath };
     },
 
     async commitAll(cwd, message) {
@@ -618,10 +636,18 @@ function createGitWorktreeWorkspaceProvider(
     },
 
     async snapshotRef(cwd) {
+      const inside = await platformProvider.run("git", ["rev-parse", "--is-inside-work-tree"], cwd, true);
+      if (!inside.ok) {
+        return `harness:${new Date().toISOString()}`;
+      }
       return (await platformProvider.run("git", ["rev-parse", "HEAD"], cwd)).stdout.trim();
     },
 
     async changedFiles(cwd) {
+      const inside = await platformProvider.run("git", ["rev-parse", "--is-inside-work-tree"], cwd, true);
+      if (!inside.ok) {
+        return [];
+      }
       const status = await platformProvider.run("git", ["status", "--porcelain"], cwd);
       return status.stdout
         .split("\n")
@@ -868,7 +894,7 @@ function buildLlmEnvironment(
     HARNESS_TASK_TITLE: task.title,
     HARNESS_TASK_DESCRIPTION: task.description,
     HARNESS_ACCEPTANCE_CRITERIA: task.acceptanceCriteria,
-    HARNESS_BRANCH_NAME: workspace.branchName,
+    HARNESS_BRANCH_NAME: workspace.branchName || "",
     HARNESS_WORKTREE_PATH: workspace.worktreePath
   };
 }
@@ -921,7 +947,7 @@ function writePromptFiles(
     projectMemoryText,
     ``,
     `## Workspace`,
-    `Branch: ${workspace.branchName}`,
+    `Branch: ${workspace.branchName || "none"}`,
     `Path: ${workspace.worktreePath}`,
     ``,
     `Work only inside this task worktree. Report changed files, verification performed, and any blockers.`
