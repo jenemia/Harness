@@ -159,6 +159,7 @@ export type Task = {
   dependencyTaskIds: string[];
   labels: string[];
   acceptanceCriteria: string;
+  taskOrder: number;
   branchName: string | null;
   worktreePath: string | null;
   blockedReason: string | null;

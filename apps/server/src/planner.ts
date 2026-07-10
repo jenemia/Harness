@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, now, openProjectDb } from "./db.js";
+import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, nextTaskOrder, now, openProjectDb } from "./db.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
 
 export type PlanningMode = "sequential" | "parallel";
@@ -104,6 +104,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       dependencyTaskIds: inputTask.dependencyTaskIds,
       labels: ["pm-plan", `role:${inputTask.role}`],
       acceptanceCriteria: inputTask.acceptanceCriteria,
+      taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,
       blockedReason: inputTask.dependencyTaskIds.length
@@ -118,9 +119,9 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, labels, acceptance_criteria, branch_name,
+        parent_task_id, dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -134,6 +135,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
+      task.taskOrder,
       task.branchName,
       task.worktreePath,
       task.blockedReason,

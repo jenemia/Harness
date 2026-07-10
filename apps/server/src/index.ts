@@ -24,6 +24,8 @@ import {
   mapMemory,
   mapRun,
   mapTask,
+  moveTaskInBoard,
+  nextTaskOrder,
   now,
   openProjectDb,
   registerProject,
@@ -307,6 +309,17 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        if (req.method === "POST" && action === "move") {
+          const body = await readBody<{ direction?: string }>(req);
+          if (body.direction !== "up" && body.direction !== "down") {
+            sendError(res, 400, "Task move direction must be up or down.");
+            return;
+          }
+          const result = moveTaskInBoard(project.path, taskId, body.direction);
+          sendJson(res, { result, overview: getProjectOverview(project) });
+          return;
+        }
+
         if (req.method === "POST" && action === "merge") {
           const result = await approveMerge(project, taskId);
           sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
@@ -539,6 +552,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       dependencyTaskIds: Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [],
       labels: Array.isArray(input.labels) ? input.labels : [],
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
+      taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,
       blockedReason: null,
@@ -551,9 +565,9 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, labels, acceptance_criteria, branch_name,
+        parent_task_id, dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -567,6 +581,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
+      task.taskOrder,
       task.branchName,
       task.worktreePath,
       task.blockedReason,

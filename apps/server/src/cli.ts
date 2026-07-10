@@ -21,6 +21,8 @@ import {
   mapDocument,
   mapMemory,
   mapTask,
+  moveTaskInBoard,
+  nextTaskOrder,
   now,
   openProjectDb,
   registerProject,
@@ -93,6 +95,7 @@ const commands: Record<string, CommandHandler> = {
   "tasks:comment": commentTaskCommand,
   "tasks:merge": mergeTaskCommand,
   "tasks:request-changes": requestTaskChangesCommand,
+  "tasks:move": moveTaskCommand,
   "tasks:pause": pauseTaskCommand,
   "tasks:resume": resumeTaskCommand,
   "tasks:start": startTaskCommand,
@@ -598,6 +601,18 @@ function commentTaskCommand(args: string[]) {
   return { comment, overview: getProjectOverview(project) };
 }
 
+function moveTaskCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const direction = options.direction || "down";
+  if (direction !== "up" && direction !== "down") {
+    throw new Error("--direction must be up or down.");
+  }
+  const result = moveTaskInBoard(project.path, taskId, direction);
+  return { result, overview: getProjectOverview(project) };
+}
+
 async function mergeTaskCommand(args: string[]) {
   const options = parseOptions(args);
   const project = getRequiredProject(args);
@@ -653,6 +668,7 @@ function createCliTask(
       blockedReason: null,
       mergeStatus: "none",
       mergeError: null,
+      taskOrder: nextTaskOrder(db),
       createdAt: timestamp,
       updatedAt: timestamp
     };
@@ -660,9 +676,9 @@ function createCliTask(
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, labels, acceptance_criteria, branch_name,
+        parent_task_id, dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -676,6 +692,7 @@ function createCliTask(
       JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
+      task.taskOrder,
       task.branchName,
       task.worktreePath,
       task.blockedReason,
@@ -1233,6 +1250,7 @@ Usage:
   pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done]
   pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
+  pnpm --filter @harness/server cli tasks:move --project <projectId> --task <taskId> --direction up|down
   pnpm --filter @harness/server cli tasks:merge --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:request-changes --project <projectId> --task <taskId> [--reason <text>|--reasonFile <file>]
   pnpm --filter @harness/server cli tasks:pause --project <projectId> --task <taskId> [--reason <text>|--reasonFile <file>]

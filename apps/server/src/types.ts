@@ -7,6 +7,8 @@ export type TaskStatus =
   | "Blocked"
   | "Done";
 
+export type TaskMoveDirection = "up" | "down";
+
 export type ProjectRecord = {
   id: string;
   name: string;
@@ -166,6 +168,7 @@ export type TaskRecord = {
   dependencyTaskIds: string[];
   labels: string[];
   acceptanceCriteria: string;
+  taskOrder: number;
   branchName: string | null;
   worktreePath: string | null;
   blockedReason: string | null;

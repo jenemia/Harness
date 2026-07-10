@@ -76,6 +76,7 @@ pnpm cli tasks:list --project <projectId> --status Selected,Blocked
 pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
+pnpm cli tasks:move --project <projectId> --task <taskId> --direction up
 pnpm cli tasks:pause --project <projectId> --task <taskId> --reason "Waiting on product decision"
 pnpm cli tasks:resume --project <projectId> --task <taskId>
 pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
@@ -129,6 +130,8 @@ Set `autoStart` on the planning request or use `POST /api/projects/:projectId/sc
 When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
 
 Tasks can be paused from the board, task detail drawer, API, or CLI. Paused tasks stay out of scheduler runs until they are resumed back to `Selected`, and pause/resume events are recorded in the task timeline.
+
+Tasks can be moved up or down within their current board column from the board, task detail drawer, API, or `tasks:move`. The scheduler reads the same board order when choosing ready tasks.
 
 When the server starts, Harness scans registered projects for runs that were left `running` by a previous process. Those runs are closed as failed with an interruption event, affected tasks return to `Selected`, and busy agents are reset to idle.
 

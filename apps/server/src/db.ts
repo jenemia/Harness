@@ -24,6 +24,7 @@ import type {
   ProjectTemplateRecord,
   RunRecord,
   TaskRecord,
+  TaskMoveDirection,
   TaskStatus,
   WorkflowTemplateRecord,
   WorkflowTemplateStep
@@ -762,6 +763,7 @@ export function openProjectDb(projectPath: string) {
       dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       labels TEXT NOT NULL,
       acceptance_criteria TEXT NOT NULL,
+      task_order INTEGER NOT NULL DEFAULT 0,
       branch_name TEXT,
       worktree_path TEXT,
       blocked_reason TEXT,
@@ -852,6 +854,7 @@ export function openProjectDb(projectPath: string) {
   `);
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "model_backend", "TEXT");
+  ensureColumn(db, "tasks", "task_order", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
@@ -1227,6 +1230,65 @@ export function updateProjectRecord(projectId: string, input: { name?: string; p
   }
 }
 
+export function nextTaskOrder(db: DatabaseSync) {
+  const row = db.prepare("SELECT MAX(task_order) AS max_order FROM tasks").get() as { max_order: number | null };
+  return Number(row.max_order || 0) + 1000;
+}
+
+export function moveTaskInBoard(projectPath: string, taskId: string, direction: TaskMoveDirection) {
+  const db = openProjectDb(projectPath);
+  try {
+    const taskRow = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    if (!taskRow) {
+      throw new Error("Task not found.");
+    }
+    const task = mapTask(taskRow);
+    normalizeTaskOrderForStatus(db, task.status);
+    const rows = db
+      .prepare("SELECT * FROM tasks WHERE status = ? ORDER BY task_order ASC, created_at ASC")
+      .all(task.status)
+      .map(mapTask);
+    const index = rows.findIndex((item) => item.id === task.id);
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    const target = rows[targetIndex];
+    if (index < 0 || !target) {
+      return {
+        moved: false,
+        reason: direction === "up" ? "Task is already first in its column." : "Task is already last in its column.",
+        task
+      };
+    }
+
+    const timestamp = now();
+    db.prepare("UPDATE tasks SET task_order = ?, updated_at = ? WHERE id = ?").run(target.taskOrder, timestamp, task.id);
+    db.prepare("UPDATE tasks SET task_order = ?, updated_at = ? WHERE id = ?").run(rows[index].taskOrder, timestamp, target.id);
+    const movedTask = mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(task.id));
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: task.assigneeAgentId,
+      type: "task.reordered",
+      message: `Task moved ${direction} in ${task.status}.`,
+      metadata: { direction, status: task.status, swappedWithTaskId: target.id }
+    });
+    return { moved: true, task: movedTask, swappedWithTaskId: target.id };
+  } finally {
+    db.close();
+  }
+}
+
+function normalizeTaskOrderForStatus(db: DatabaseSync, status: TaskStatus) {
+  const rows = db.prepare("SELECT id, task_order FROM tasks WHERE status = ? ORDER BY task_order ASC, created_at ASC").all(status) as Array<{
+    id: string;
+    task_order: number;
+  }>;
+  for (const [index, row] of rows.entries()) {
+    const nextOrder = (index + 1) * 1000;
+    if (Number(row.task_order || 0) !== nextOrder) {
+      db.prepare("UPDATE tasks SET task_order = ? WHERE id = ?").run(nextOrder, row.id);
+    }
+  }
+}
+
 export function getProjectOverview(project: ProjectRecord): ProjectOverview {
   const db = openProjectDb(project.path);
   try {
@@ -1234,7 +1296,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       project,
       settings: getProjectSettingsFromDb(db),
       agents: db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent),
-      tasks: db.prepare("SELECT * FROM tasks ORDER BY created_at ASC").all().map(mapTask),
+      tasks: db.prepare("SELECT * FROM tasks ORDER BY task_order ASC, created_at ASC").all().map(mapTask),
       documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
       memories: db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
@@ -1431,6 +1493,7 @@ export function mapTask(row: unknown): TaskRecord {
     dependencyTaskIds: JSON.parse(String(r.dependency_task_ids || "[]")) as string[],
     labels: JSON.parse(String(r.labels)) as string[],
     acceptanceCriteria: String(r.acceptance_criteria),
+    taskOrder: Number(r.task_order || 0),
     branchName: r.branch_name ? String(r.branch_name) : null,
     worktreePath: r.worktree_path ? String(r.worktree_path) : null,
     blockedReason: r.blocked_reason ? String(r.blocked_reason) : null,

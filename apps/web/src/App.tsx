@@ -2,6 +2,8 @@ import { FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Activity,
+  ArrowDown,
+  ArrowUp,
   Bot,
   Brain,
   CheckCircle2,
@@ -1043,6 +1045,16 @@ function TaskCard(props: {
     });
   }
 
+  async function move(direction: "up" | "down") {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/move`, {
+        method: "POST",
+        body: JSON.stringify({ direction })
+      });
+      await props.onChanged();
+    });
+  }
+
   async function merge() {
     await props.runAction(async () => {
       await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/merge`, { method: "POST" });
@@ -1126,6 +1138,12 @@ function TaskCard(props: {
             </option>
           ))}
         </select>
+        <button className="icon-button" title="Move up" type="button" onClick={() => void move("up")}>
+          <ArrowUp size={16} />
+        </button>
+        <button className="icon-button" title="Move down" type="button" onClick={() => void move("down")}>
+          <ArrowDown size={16} />
+        </button>
         {props.task.status === "Paused" ? (
           <button className="icon-button" title="Resume task" type="button" onClick={() => void resume()}>
             <Play size={16} />
@@ -1225,6 +1243,16 @@ function TaskDetailDrawer(props: {
     });
   }
 
+  async function move(direction: "up" | "down") {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/move`, {
+        method: "POST",
+        body: JSON.stringify({ direction })
+      });
+      await props.onChanged();
+    });
+  }
+
   async function merge() {
     await props.runAction(async () => {
       await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/merge`, { method: "POST" });
@@ -1293,6 +1321,14 @@ function TaskDetailDrawer(props: {
           <button className="secondary-button" type="button" onClick={() => setIsEditing((current) => !current)}>
             <Settings size={16} />
             <span>{isEditing ? "Close edit" : "Edit"}</span>
+          </button>
+          <button className="secondary-button" type="button" onClick={() => void move("up")}>
+            <ArrowUp size={16} />
+            <span>Up</span>
+          </button>
+          <button className="secondary-button" type="button" onClick={() => void move("down")}>
+            <ArrowDown size={16} />
+            <span>Down</span>
           </button>
           {props.task.status === "Paused" ? (
             <button className="secondary-button" type="button" onClick={() => void resume()}>

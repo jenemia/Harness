@@ -304,7 +304,7 @@ export async function startReadyTasks(project: ProjectRecord) {
   const db = openProjectDb(project.path);
   try {
     const tasks = db
-      .prepare("SELECT * FROM tasks WHERE status IN (?, ?) ORDER BY created_at ASC")
+      .prepare("SELECT * FROM tasks WHERE status IN (?, ?) ORDER BY task_order ASC, created_at ASC")
       .all("Selected", "Backlog")
       .map(mapTask);
     const settings = getProjectSettingsFromDb(db);

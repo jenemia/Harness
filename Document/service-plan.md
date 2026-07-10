@@ -273,7 +273,7 @@ Scheduling rules:
 - PM handoff decisions run automatically by default.
 - Users can set concurrency limits per project and per agent.
 
-Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution or when a human manually marks the prerequisite Done. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected.
+Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution or when a human manually marks the prerequisite Done. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected. Tasks can be moved up or down within their board column, and the scheduler uses that board order when selecting ready work.
 
 ### Sequential Workflow Chains
 
@@ -467,7 +467,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task pause/resume, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task reorder, task pause/resume, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 
