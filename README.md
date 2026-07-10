@@ -97,6 +97,7 @@ pnpm cli plans:preview --project <projectId> --goalFile ./Document/service-plan.
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential --allowLargePlan true
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
+pnpm cli documents:create --project <projectId> --title "Implementation Tickets" --contentFile ./Document/implementation-tickets.md
 pnpm cli documents:plan-preview --project <projectId> --document <documentId> --workflowTemplate <templateId>
 pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId> --allowLargePlan true
 pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
@@ -210,9 +211,9 @@ Harness also queues merge approvals when a completed task has worktree changes w
 
 Use the Documents panel to create and edit project-local notes, service plans, specs, and acceptance criteria. Documents are stored in the project-local Harness database and included in project overview state.
 
-Selected documents can be previewed or sent to PM planning from the Documents panel to create detailed Kanban tickets from a spec or bullet list. The local deterministic planner treats explicit bullet and numbered lines as ticket candidates, warns when a preview contains many tasks, and caps each planning pass to keep large documents from flooding the board.
+Selected documents can be previewed or sent to PM planning from the Documents panel to create detailed Kanban tickets from a spec, bullet list, or structured ticket document. The local deterministic planner treats explicit bullet and numbered lines as ticket candidates, and can also read Markdown ticket blocks such as `### T01: Title` with Role, Scope, Acceptance criteria, and Depends on fields. It warns when a preview contains many tasks and caps each planning pass to keep large documents from flooding the board.
 
-The same document flow is available headlessly through `documents:list`, `documents:create`, `documents:update`, `documents:plan-preview`, and `documents:plan`, so a local spec file can become tracked PM tickets without opening the web UI.
+The same document flow is available headlessly through `documents:list`, `documents:create`, `documents:update`, `documents:plan-preview`, and `documents:plan`, so a local spec file can become tracked PM tickets without opening the web UI. `Document/implementation-tickets.md` is the first structured ticket backlog generated from the service plan.
 
 ## Memory
 

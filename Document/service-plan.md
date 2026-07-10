@@ -654,3 +654,5 @@ Each ticket should include:
 - UI impact
 - Test plan
 - Dependencies
+
+Initial implementation: `Document/implementation-tickets.md` now contains the first structured ticket backlog generated from this plan. The deterministic planning provider can parse Markdown ticket blocks in that file, including role, acceptance criteria, and dependency references, before creating Kanban tasks.

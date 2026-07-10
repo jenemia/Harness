@@ -65,6 +65,15 @@ type PlanningProvider = {
   preview(input: PlanRequest): PlanPreviewResult;
 };
 
+type PlanItem = {
+  key?: string;
+  title: string;
+  role: string;
+  description: string;
+  acceptanceCriteria: string;
+  dependencyIndexes?: number[];
+};
+
 const planningProvider = createDeterministicPlanningProvider();
 
 export function getPlanningProviderDefinition() {
@@ -298,8 +307,11 @@ function createDeterministicPlanningProvider(): PlanningProvider {
           assigneeAgentId: null,
           description: item.description,
           acceptanceCriteria: item.acceptanceCriteria,
-          dependencyIndexes: effectiveMode === "sequential" && index > 0 ? [index - 1] : [],
-          status: effectiveMode === "sequential" && index > 0 ? "Blocked" : "Selected"
+          dependencyIndexes: item.dependencyIndexes ?? (effectiveMode === "sequential" && index > 0 ? [index - 1] : []),
+          status:
+            (item.dependencyIndexes?.length || (effectiveMode === "sequential" && index > 0))
+              ? "Blocked"
+              : "Selected"
         })),
         warnings
       };
@@ -331,9 +343,9 @@ function buildPlanItems(
   mode: EffectivePlanningMode,
   workflowTemplate: WorkflowTemplateRecord | null,
   explicitItems = parseExplicitItems(goal)
-) {
+): PlanItem[] {
   if (workflowTemplate) {
-    return workflowTemplate.steps.map((step) => ({
+    return workflowTemplate.steps.map<PlanItem>((step) => ({
       title: renderTemplate(step.titleTemplate, goal),
       role: step.role,
       description: renderTemplate(step.descriptionTemplate, goal),
@@ -341,8 +353,13 @@ function buildPlanItems(
     }));
   }
 
+  const ticketBlocks = parseTicketBlocks(goal);
+  if (ticketBlocks.length > 0) {
+    return ticketBlocks;
+  }
+
   if (explicitItems.length >= 2) {
-    return explicitItems.map((title, index) => ({
+    return explicitItems.map<PlanItem>((title, index) => ({
       title,
       role: index === explicitItems.length - 1 ? "reviewer" : "programmer",
       description: `Planned from goal:\n\n${goal}`,
@@ -426,6 +443,117 @@ function normalizePlanningMode(value: string | undefined): PlanningMode {
 function renderTemplate(template: string, goal: string) {
   const goalSummary = summarizeGoal(goal);
   return template.replaceAll("{{goal}}", goal).replaceAll("{{goalSummary}}", goalSummary);
+}
+
+function parseTicketBlocks(goal: string): PlanItem[] {
+  const lines = goal.split(/\r?\n/);
+  const rawBlocks: Array<{ key: string; title: string; body: string[] }> = [];
+  let current: { key: string; title: string; body: string[] } | null = null;
+
+  for (const line of lines) {
+    const heading = line.match(/^#{2,4}\s+([A-Za-z]+-\d+|T\d+|\d+)\s*[:.)-]\s+(.+)$/);
+    if (heading) {
+      if (current) {
+        rawBlocks.push(current);
+      }
+      current = {
+        key: normalizeTicketKey(heading[1]),
+        title: heading[2].trim(),
+        body: []
+      };
+      continue;
+    }
+    current?.body.push(line);
+  }
+  if (current) {
+    rawBlocks.push(current);
+  }
+
+  const keyToIndex = new Map(rawBlocks.map((block, index) => [block.key, index]));
+  return rawBlocks.slice(0, 20).map((block, blockIndex) => {
+    const fields = parseTicketFields(block.body);
+    return {
+      key: block.key,
+      title: block.title,
+      role: normalizeTicketRole(fields.get("role")?.join(" ") || "programmer"),
+      description: formatTicketDescription(fields),
+      acceptanceCriteria: formatTicketAcceptanceCriteria(fields),
+      dependencyIndexes: parseTicketDependencies(fields.get("depends on") || fields.get("dependencies") || [], keyToIndex).filter(
+        (index) => index < blockIndex
+      )
+    };
+  });
+}
+
+function parseTicketFields(lines: string[]) {
+  const fields = new Map<string, string[]>();
+  let currentField = "";
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+    const field = line.match(/^(Role|User story|Scope|Acceptance criteria|Data model impact|UI impact|Test plan|Dependencies|Depends on):\s*(.*)$/i);
+    if (field) {
+      currentField = field[1].toLowerCase();
+      fields.set(currentField, field[2] ? [field[2].trim()] : []);
+      continue;
+    }
+    if (currentField) {
+      fields.get(currentField)?.push(line.replace(/^[-*]\s+/, ""));
+    }
+  }
+
+  return fields;
+}
+
+function normalizeTicketKey(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function normalizeTicketRole(value: string) {
+  const role = value.trim().toLowerCase();
+  if (role === "pm" || role === "project manager") {
+    return "project-manager";
+  }
+  if (role === "qa" || role === "review") {
+    return "reviewer";
+  }
+  return role || "programmer";
+}
+
+function formatTicketDescription(fields: Map<string, string[]>) {
+  const sections = ["user story", "scope", "data model impact", "ui impact", "test plan", "dependencies"];
+  const body = sections
+    .map((section) => {
+      const values = fields.get(section) || [];
+      return values.length ? `## ${titleCase(section)}\n${values.join("\n")}` : "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+  return body || "Planned from a structured ticket block.";
+}
+
+function formatTicketAcceptanceCriteria(fields: Map<string, string[]>) {
+  const values = fields.get("acceptance criteria") || [];
+  return values.length ? values.join("\n") : "The assigned agent reports completion, changed files, and verification notes.";
+}
+
+function parseTicketDependencies(values: string[], keyToIndex: Map<string, number>) {
+  return values
+    .join(",")
+    .split(/[, ]+/)
+    .map((value) => normalizeTicketKey(value.replace(/^#/, "")))
+    .map((key) => keyToIndex.get(key))
+    .filter((index): index is number => index !== undefined);
+}
+
+function titleCase(value: string) {
+  if (value === "ui impact") {
+    return "UI Impact";
+  }
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function parseExplicitItems(goal: string) {
