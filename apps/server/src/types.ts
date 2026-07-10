@@ -75,6 +75,22 @@ export type AgentTemplateRecord = {
   updatedAt: string;
 };
 
+export type WorkflowTemplateStep = {
+  titleTemplate: string;
+  role: string;
+  descriptionTemplate: string;
+  acceptanceCriteria: string;
+};
+
+export type WorkflowTemplateRecord = {
+  id: string;
+  name: string;
+  description: string;
+  steps: WorkflowTemplateStep[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TaskRecord = {
   id: string;
   title: string;

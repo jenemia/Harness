@@ -269,6 +269,8 @@ The system should support explicit workflow templates, but the PM agent should a
 
 Default behavior: sequential workflow chains advance automatically after each agent finishes unless a risk boundary requires approval.
 
+Initial implementation: global workflow templates are stored in the app-wide Harness database. PM planning and document-based planning can select a reusable template such as `Plan, Build, Review` or `Build and Review`, then create tasks from each step's role, title template, description template, and acceptance criteria.
+
 ### Agent Workspaces
 
 When agents execute code work in parallel, Harness should avoid file conflicts. Candidate strategies:

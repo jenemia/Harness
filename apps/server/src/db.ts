@@ -19,7 +19,9 @@ import type {
   ProjectSettings,
   RunRecord,
   TaskRecord,
-  TaskStatus
+  TaskStatus,
+  WorkflowTemplateRecord,
+  WorkflowTemplateStep
 } from "./types.js";
 
 const appName = "Harness";
@@ -71,8 +73,18 @@ export function openGlobalDb() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS workflow_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      steps TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   seedDefaultAgentTemplates(db);
+  seedDefaultWorkflowTemplates(db);
   return db;
 }
 
@@ -129,6 +141,80 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       template.cliCommand,
       JSON.stringify(template.capabilities),
       template.maxParallel,
+      timestamp,
+      timestamp
+    );
+  }
+}
+
+function seedDefaultWorkflowTemplates(db: DatabaseSync) {
+  const count = db.prepare("SELECT COUNT(*) AS count FROM workflow_templates").get() as { count: number };
+  if (count.count > 0) {
+    return;
+  }
+
+  const timestamp = now();
+  const templates: Array<{
+    name: string;
+    description: string;
+    steps: WorkflowTemplateStep[];
+  }> = [
+    {
+      name: "Plan, Build, Review",
+      description: "A careful default chain for scoped engineering work.",
+      steps: [
+        {
+          titleTemplate: "Clarify scope: {{goalSummary}}",
+          role: "project-manager",
+          descriptionTemplate: "Clarify requirements, risks, dependencies, and acceptance criteria for:\n\n{{goal}}",
+          acceptanceCriteria: "A clear implementation scope and acceptance checklist are recorded."
+        },
+        {
+          titleTemplate: "Implement: {{goalSummary}}",
+          role: "programmer",
+          descriptionTemplate: "Implement the planned work for:\n\n{{goal}}",
+          acceptanceCriteria: "The implementation is complete in the task worktree and relevant checks pass."
+        },
+        {
+          titleTemplate: "Review and verify: {{goalSummary}}",
+          role: "reviewer",
+          descriptionTemplate: "Review the implementation for:\n\n{{goal}}",
+          acceptanceCriteria: "The review records findings, test evidence, and merge readiness."
+        }
+      ]
+    },
+    {
+      name: "Build and Review",
+      description: "A faster chain for well-scoped tasks that do not need PM clarification.",
+      steps: [
+        {
+          titleTemplate: "Implement: {{goalSummary}}",
+          role: "programmer",
+          descriptionTemplate: "Implement the requested work for:\n\n{{goal}}",
+          acceptanceCriteria: "The implementation is complete and relevant checks pass."
+        },
+        {
+          titleTemplate: "Review and verify: {{goalSummary}}",
+          role: "reviewer",
+          descriptionTemplate: "Review the implementation for correctness, risk, and missing verification:\n\n{{goal}}",
+          acceptanceCriteria: "The review records findings, verification evidence, and merge readiness."
+        }
+      ]
+    }
+  ];
+
+  const stmt = db.prepare(`
+    INSERT INTO workflow_templates (
+      id, name, description, steps, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const template of templates) {
+    stmt.run(
+      randomUUID(),
+      template.name,
+      template.description,
+      JSON.stringify(template.steps),
       timestamp,
       timestamp
     );
@@ -262,6 +348,84 @@ export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentT
   } finally {
     db.close();
   }
+}
+
+export function listWorkflowTemplates(): WorkflowTemplateRecord[] {
+  const db = openGlobalDb();
+  try {
+    return db.prepare("SELECT * FROM workflow_templates ORDER BY updated_at DESC").all().map(mapWorkflowTemplate);
+  } finally {
+    db.close();
+  }
+}
+
+export function getWorkflowTemplate(templateId: string): WorkflowTemplateRecord | null {
+  const db = openGlobalDb();
+  try {
+    const row = db.prepare("SELECT * FROM workflow_templates WHERE id = ?").get(templateId);
+    return row ? mapWorkflowTemplate(row) : null;
+  } finally {
+    db.close();
+  }
+}
+
+export function createWorkflowTemplate(input: Partial<WorkflowTemplateRecord>): WorkflowTemplateRecord {
+  if (!input.name?.trim()) {
+    throw new Error("Workflow template name is required.");
+  }
+
+  const steps = normalizeWorkflowSteps(input.steps);
+  if (steps.length === 0) {
+    throw new Error("Workflow template needs at least one step.");
+  }
+
+  const timestamp = now();
+  const template: WorkflowTemplateRecord = {
+    id: randomUUID(),
+    name: input.name.trim(),
+    description: input.description?.trim() || "",
+    steps,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  const db = openGlobalDb();
+  try {
+    db.prepare(`
+      INSERT INTO workflow_templates (
+        id, name, description, steps, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      template.id,
+      template.name,
+      template.description,
+      JSON.stringify(template.steps),
+      template.createdAt,
+      template.updatedAt
+    );
+
+    return template;
+  } finally {
+    db.close();
+  }
+}
+
+function normalizeWorkflowSteps(input: unknown): WorkflowTemplateStep[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .map((step) => {
+      const value = step as Partial<WorkflowTemplateStep>;
+      return {
+        titleTemplate: value.titleTemplate?.trim() || "",
+        role: value.role?.trim() || "worker",
+        descriptionTemplate: value.descriptionTemplate?.trim() || "{{goal}}",
+        acceptanceCriteria: value.acceptanceCriteria?.trim() || "The assigned agent reports completion and verification."
+      };
+    })
+    .filter((step) => step.titleTemplate);
 }
 
 export function projectHarnessDir(projectPath: string) {
@@ -766,6 +930,18 @@ export function mapAgentTemplate(row: unknown): AgentTemplateRecord {
     cliCommand: r.cli_command ? String(r.cli_command) : null,
     capabilities: JSON.parse(String(r.capabilities)) as string[],
     maxParallel: Number(r.max_parallel),
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapWorkflowTemplate(row: unknown): WorkflowTemplateRecord {
+  const r = row as Record<string, string>;
+  return {
+    id: String(r.id),
+    name: String(r.name),
+    description: String(r.description),
+    steps: normalizeWorkflowSteps(JSON.parse(String(r.steps || "[]"))),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };

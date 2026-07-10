@@ -22,7 +22,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanResult, Project, ProjectListItem, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -34,21 +34,24 @@ export function App() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
 
   async function loadProjects() {
-    const [data, providers, templatesResponse, settingsResponse] = await Promise.all([
+    const [data, providers, templatesResponse, workflowTemplatesResponse, settingsResponse] = await Promise.all([
       api<{ projects: ProjectListItem[] }>("/api/projects"),
       api<ProviderCatalog>("/api/providers"),
       api<{ templates: AgentTemplate[] }>("/api/agent-templates"),
+      api<{ templates: WorkflowTemplate[] }>("/api/workflow-templates"),
       api<{ settings: GlobalSettings }>("/api/settings")
     ]);
     setProjects(data.projects);
     setProviderCatalog(providers);
     setAgentTemplates(templatesResponse.templates);
+    setWorkflowTemplates(workflowTemplatesResponse.templates);
     setSettings(settingsResponse.settings);
     if (!selectedProjectId && data.projects[0]) {
       setSelectedProjectId(data.projects[0].id);
@@ -216,11 +219,17 @@ export function App() {
             <aside className="right-rail">
               <PlanningPanel
                 overview={overview}
+                workflowTemplates={workflowTemplates}
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
               <ApprovalsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
-              <DocumentsPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
+              <DocumentsPanel
+                overview={overview}
+                workflowTemplates={workflowTemplates}
+                runAction={runAction}
+                onChanged={() => loadOverview()}
+              />
               <MemoryPanel overview={overview} runAction={runAction} onChanged={() => loadOverview()} />
               <AgentPanel
                 overview={overview}
@@ -329,11 +338,13 @@ function ApprovalsPanel(props: {
 
 function PlanningPanel(props: {
   overview: Overview;
+  workflowTemplates: WorkflowTemplate[];
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
   const [goal, setGoal] = useState("");
   const [mode, setMode] = useState<"sequential" | "parallel">("sequential");
+  const [workflowTemplateId, setWorkflowTemplateId] = useState("");
   const [autoStart, setAutoStart] = useState(false);
   const [lastPlan, setLastPlan] = useState<PlanResult | null>(null);
   const [lastSchedule, setLastSchedule] = useState<ScheduleResult | null>(null);
@@ -347,7 +358,7 @@ function PlanningPanel(props: {
     await props.runAction(async () => {
       const response = await api<{ plan: PlanResult; schedule: ScheduleResult | null }>(`/api/projects/${props.overview.project.id}/plan`, {
         method: "POST",
-        body: JSON.stringify({ goal, mode, autoStart })
+        body: JSON.stringify({ goal, mode, autoStart, workflowTemplateId: workflowTemplateId || undefined })
       });
       setLastPlan(response.plan);
       setLastSchedule(response.schedule);
@@ -371,6 +382,14 @@ function PlanningPanel(props: {
         <select value={mode} onChange={(event) => setMode(event.target.value as "sequential" | "parallel")}>
           <option value="sequential">Sequential handoff</option>
           <option value="parallel">Parallel where safe</option>
+        </select>
+        <select value={workflowTemplateId} onChange={(event) => setWorkflowTemplateId(event.target.value)}>
+          <option value="">Default planner</option>
+          {props.workflowTemplates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name} ({template.steps.length} steps)
+            </option>
+          ))}
         </select>
         <label className="check-row">
           <input type="checkbox" checked={autoStart} onChange={(event) => setAutoStart(event.target.checked)} />
@@ -466,6 +485,7 @@ function ProjectSummaryRow({ project }: { project: ProjectListItem }) {
 
 function DocumentsPanel(props: {
   overview: Overview;
+  workflowTemplates: WorkflowTemplate[];
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -482,6 +502,7 @@ function DocumentsPanel(props: {
         projectId={props.overview.project.id}
         document={selected}
         autoStartDefault={props.overview.settings.autoStartPlans}
+        workflowTemplates={props.workflowTemplates}
         onSelect={setSelectedDocumentId}
         documents={props.overview.documents}
         runAction={props.runAction}
@@ -582,6 +603,7 @@ function DocumentEditor(props: {
   projectId: string;
   document: DocumentRecord | null;
   autoStartDefault: boolean;
+  workflowTemplates: WorkflowTemplate[];
   documents: DocumentRecord[];
   onSelect: (id: string) => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
@@ -590,6 +612,7 @@ function DocumentEditor(props: {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [planMode, setPlanMode] = useState<"sequential" | "parallel">("sequential");
+  const [workflowTemplateId, setWorkflowTemplateId] = useState("");
   const [autoStartPlan, setAutoStartPlan] = useState(false);
   const [lastDocumentPlan, setLastDocumentPlan] = useState<PlanResult | null>(null);
 
@@ -632,7 +655,11 @@ function DocumentEditor(props: {
         `/api/projects/${props.projectId}/documents/${document.id}/plan`,
         {
           method: "POST",
-          body: JSON.stringify({ mode: planMode, autoStart: autoStartPlan })
+          body: JSON.stringify({
+            mode: planMode,
+            autoStart: autoStartPlan,
+            workflowTemplateId: workflowTemplateId || undefined
+          })
         }
       );
       setLastDocumentPlan(response.plan);
@@ -666,6 +693,14 @@ function DocumentEditor(props: {
           <select value={planMode} onChange={(event) => setPlanMode(event.target.value as "sequential" | "parallel")}>
             <option value="sequential">Sequential tickets</option>
             <option value="parallel">Parallel tickets</option>
+          </select>
+          <select value={workflowTemplateId} onChange={(event) => setWorkflowTemplateId(event.target.value)}>
+            <option value="">Default planner</option>
+            {props.workflowTemplates.map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name} ({template.steps.length} steps)
+              </option>
+            ))}
           </select>
           <label className="check-row">
             <input

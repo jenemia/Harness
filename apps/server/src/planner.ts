@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { insertEvent, mapAgent, mapTask, now, openProjectDb } from "./db.js";
-import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, now, openProjectDb } from "./db.js";
+import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
 
 export type PlanningMode = "sequential" | "parallel";
 
@@ -9,6 +9,7 @@ export type PlanRequest = {
   mode?: PlanningMode;
   autoStart?: boolean;
   sourceDocumentId?: string;
+  workflowTemplateId?: string;
 };
 
 export type PlannedTaskSummary = {
@@ -28,7 +29,11 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
   const db = openProjectDb(project.path);
   try {
     const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
-    const planItems = buildPlanItems(goal, mode);
+    const workflowTemplate = input.workflowTemplateId ? getWorkflowTemplate(input.workflowTemplateId) : null;
+    if (input.workflowTemplateId && !workflowTemplate) {
+      throw new Error("Workflow template not found.");
+    }
+    const planItems = buildPlanItems(goal, mode, workflowTemplate);
     const inserted: TaskRecord[] = [];
 
     for (const item of planItems) {
@@ -56,6 +61,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
         goal,
         mode,
         sourceDocumentId: input.sourceDocumentId || null,
+        workflowTemplateId: workflowTemplate?.id || null,
         taskIds: inserted.map((task) => task.id)
       }
     });
@@ -63,6 +69,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     return {
       goal,
       mode,
+      workflowTemplateId: workflowTemplate?.id || null,
       tasks: inserted.map<PlannedTaskSummary>((task) => ({
         id: task.id,
         title: task.title,
@@ -148,7 +155,16 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
   }
 }
 
-function buildPlanItems(goal: string, mode: PlanningMode) {
+function buildPlanItems(goal: string, mode: PlanningMode, workflowTemplate: WorkflowTemplateRecord | null) {
+  if (workflowTemplate) {
+    return workflowTemplate.steps.map((step) => ({
+      title: renderTemplate(step.titleTemplate, goal),
+      role: step.role,
+      description: renderTemplate(step.descriptionTemplate, goal),
+      acceptanceCriteria: step.acceptanceCriteria
+    }));
+  }
+
   const explicitItems = parseExplicitItems(goal);
   if (explicitItems.length >= 2) {
     return explicitItems.map((title, index) => ({
@@ -195,6 +211,11 @@ function buildPlanItems(goal: string, mode: PlanningMode) {
   }
 
   return base;
+}
+
+function renderTemplate(template: string, goal: string) {
+  const goalSummary = summarizeGoal(goal);
+  return template.replaceAll("{{goal}}", goal).replaceAll("{{goalSummary}}", goalSummary);
 }
 
 function parseExplicitItems(goal: string) {

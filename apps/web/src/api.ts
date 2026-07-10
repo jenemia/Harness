@@ -73,6 +73,22 @@ export type AgentTemplate = {
   updatedAt: string;
 };
 
+export type WorkflowTemplateStep = {
+  titleTemplate: string;
+  role: string;
+  descriptionTemplate: string;
+  acceptanceCriteria: string;
+};
+
+export type WorkflowTemplate = {
+  id: string;
+  name: string;
+  description: string;
+  steps: WorkflowTemplateStep[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -197,6 +213,7 @@ export type ProviderCatalog = {
 export type PlanResult = {
   goal: string;
   mode: "sequential" | "parallel";
+  workflowTemplateId: string | null;
   tasks: Array<{
     id: string;
     title: string;

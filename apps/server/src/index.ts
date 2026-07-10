@@ -4,6 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import {
   createAgentTemplate,
+  createWorkflowTemplate,
   getProject,
   getProjectOverview,
   getGlobalSettings,
@@ -12,6 +13,7 @@ import {
   insertEvent,
   listAgentTemplates,
   listProjectsWithSummaries,
+  listWorkflowTemplates,
   mapAgent,
   mapComment,
   mapDocument,
@@ -35,7 +37,7 @@ import {
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
-import type { AgentRecord, AgentTemplateRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import type { AgentRecord, AgentTemplateRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
 
 const port = Number(process.env.PORT || 4000);
 
@@ -78,6 +80,17 @@ const server = http.createServer(async (req, res) => {
     if (route === "POST /api/agent-templates") {
       const template = createAgentTemplate(await readBody<Partial<AgentTemplateRecord>>(req));
       sendJson(res, { template, templates: listAgentTemplates() }, 201);
+      return;
+    }
+
+    if (route === "GET /api/workflow-templates") {
+      sendJson(res, { templates: listWorkflowTemplates() });
+      return;
+    }
+
+    if (route === "POST /api/workflow-templates") {
+      const template = createWorkflowTemplate(await readBody<Partial<WorkflowTemplateRecord>>(req));
+      sendJson(res, { template, templates: listWorkflowTemplates() }, 201);
       return;
     }
 
@@ -131,7 +144,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "POST" && childPath === "plan") {
-        const body = await readBody<{ goal?: string; mode?: "sequential" | "parallel"; autoStart?: boolean }>(req);
+        const body = await readBody<{
+          goal?: string;
+          mode?: "sequential" | "parallel";
+          autoStart?: boolean;
+          workflowTemplateId?: string;
+        }>(req);
         const plan = createPlan(project, body);
         const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
         const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
@@ -244,12 +262,17 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (req.method === "POST" && action === "plan") {
-          const body = await readBody<{ mode?: "sequential" | "parallel"; autoStart?: boolean }>(req);
+          const body = await readBody<{
+            mode?: "sequential" | "parallel";
+            autoStart?: boolean;
+            workflowTemplateId?: string;
+          }>(req);
           const document = getDocument(project, documentId);
           const plan = createPlan(project, {
             goal: `Document: ${document.title}\n\n${document.content}`,
             mode: body.mode,
             autoStart: body.autoStart,
+            workflowTemplateId: body.workflowTemplateId,
             sourceDocumentId: document.id
           });
           const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
