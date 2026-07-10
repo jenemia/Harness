@@ -238,6 +238,12 @@ const unsubscribe = window.harness.subscribe(
 - renderer 종료와 reload는 provider process를 자동 종료하지 않는다.
 - terminal event 후 commit, report와 handoff 후처리는 idempotent하게 실행한다.
 
+## Provider event 흐름
+
+provider 출력은 `version`, run별 `sequence`, project/task/run/provider id, timestamp와 correlation id를 포함하는 공통 envelope로 변환한다. 공통 event 종류와 provider capability는 `@harness/core`가 정의하며, structured stream을 지원하지 않는 provider는 기존 단일 실행 결과를 `text_delta`와 terminal `result` 또는 `error`로 변환한다.
+
+main process는 정규화된 payload에서 credential, 전체 prompt와 파일 원문을 제거한 뒤 project-local SQLite의 `provider_events`에 append한다. `(run_id, sequence)`와 run별 terminal unique constraint가 중복 저장과 완료 후처리 재실행을 막는다. renderer 구독은 project/run filter와 마지막 sequence를 전달하고, application service가 저장 event replay와 live subscription을 결합한다. renderer unsubscribe나 reload는 provider 실행 수명에 영향을 주지 않는다.
+
 ## CLI와 desktop 동시 실행
 
 CLI와 desktop이 동시에 같은 project를 수정할 때 business rule이 분리되지 않도록 다음 순서를 사용한다.

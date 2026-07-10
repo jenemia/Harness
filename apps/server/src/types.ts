@@ -1,3 +1,5 @@
+import type { ProviderEventEnvelope } from "@harness/core";
+
 export type TaskStatus =
   | "Backlog"
   | "Selected"
@@ -301,5 +303,6 @@ export type ProjectOverview = {
   handoffs: HandoffRecord[];
   comments: CommentRecord[];
   events: EventRecord[];
+  providerEvents: ProviderEventEnvelope[];
   runs: RunRecord[];
 };

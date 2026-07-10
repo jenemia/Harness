@@ -44,6 +44,9 @@ export type HarnessCommandInputs = {
 
 export type HarnessCommand = keyof HarnessCommandInputs;
 export type HarnessEvent = "provider:event";
+export type HarnessEventFilters = {
+  "provider:event": { projectId: string; runId?: string; afterSequence?: number };
+};
 
 export type HarnessInvokeRequest<C extends HarnessCommand = HarnessCommand> = {
   version: typeof harnessIpcVersion;
@@ -55,6 +58,43 @@ export type HarnessEventEnvelope = {
   version: typeof harnessIpcVersion;
   event: HarnessEvent;
   payload: unknown;
+};
+
+export function isHarnessEventFilter(event: HarnessEvent, filter: unknown): filter is HarnessEventFilters[HarnessEvent] {
+  if (event !== "provider:event" || !isRecord(filter) || !isText(filter.projectId)) return false;
+  if (filter.runId !== undefined && !isText(filter.runId)) return false;
+  if (filter.afterSequence !== undefined && filter.runId === undefined) return false;
+  return filter.afterSequence === undefined ||
+    (typeof filter.afterSequence === "number" && Number.isSafeInteger(filter.afterSequence) && filter.afterSequence >= 0);
+}
+
+export const providerEventVersion = 1 as const;
+export type ProviderEventType =
+  | "text_delta" | "tool_use" | "tool_result" | "diff_hunk" | "decision"
+  | "usage" | "rate_limit" | "result" | "error";
+
+export type ProviderEventEnvelope = {
+  version: typeof providerEventVersion;
+  sequence: number;
+  projectId: string;
+  taskId: string;
+  runId: string;
+  providerId: string;
+  timestamp: string;
+  correlationId: string;
+  type: ProviderEventType;
+  payload: Record<string, unknown>;
+  metadata?: { originalEventType?: string };
+};
+
+export type ProviderCapabilities = {
+  streaming: boolean;
+  sessionResume: boolean;
+  toolEvents: boolean;
+  diffEvents: boolean;
+  usageEvents: boolean;
+  structuredDecision: boolean;
+  gracefulStop: boolean;
 };
 
 export function isHarnessCommand(value: string): value is HarnessCommand {

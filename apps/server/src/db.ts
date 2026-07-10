@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { ProviderEventEnvelope, ProviderEventType } from "@harness/core";
 import { ensureProjectLayout, projectHarnessPath, withProjectWriterLock } from "./project-store.js";
 import { syncProjectAgentDefinitions } from "./agent-store.js";
 import { assertNoCredentialMaterial, containsCredentialMaterial } from "./credential-security.js";
@@ -854,6 +855,25 @@ export function openProjectDb(projectPath: string) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS provider_events (
+      id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL,
+      sequence INTEGER NOT NULL,
+      project_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      correlation_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      UNIQUE(run_id, sequence)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS provider_events_terminal_once
+      ON provider_events(run_id) WHERE type IN ('result', 'error');
+
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
@@ -1466,11 +1486,29 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
       comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
+      providerEvents: db.prepare("SELECT * FROM provider_events ORDER BY timestamp DESC, sequence DESC LIMIT 500").all().map(mapProviderEvent),
       runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
     };
   } finally {
     db.close();
   }
+}
+
+function mapProviderEvent(row: unknown): ProviderEventEnvelope {
+  const value = row as Record<string, string | number | null>;
+  return {
+    version: Number(value.version) as 1,
+    sequence: Number(value.sequence),
+    projectId: String(value.project_id),
+    taskId: String(value.task_id),
+    runId: String(value.run_id),
+    providerId: String(value.provider_id),
+    timestamp: String(value.timestamp),
+    correlationId: String(value.correlation_id),
+    type: String(value.type) as ProviderEventType,
+    payload: JSON.parse(String(value.payload)) as Record<string, unknown>,
+    metadata: JSON.parse(String(value.metadata || "{}")) as { originalEventType?: string }
+  };
 }
 
 export function listGlobalMemories() {

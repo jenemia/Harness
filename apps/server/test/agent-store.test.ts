@@ -70,6 +70,9 @@ test("agent Markdown is the validated source of truth and run snapshot", async (
     assert.equal(completed.agentDefinitionHash, snapshot.hash);
     assert.equal(completed.agentDefinitionSchemaVersion, 1);
     assert.match(completed.agentDefinitionSnapshot || "", /instructions\/review.md/);
+    const providerEvents = getProjectOverview(project).providerEvents.filter((event) => event.runId === completed.id);
+    assert.deepEqual(providerEvents.map((event) => event.type).sort(), ["result", "text_delta"]);
+    assert.equal(providerEvents.find((event) => event.type === "text_delta")?.payload.fallback, true);
     assert.match(
       readFileSync(path.join(completed.worktreePath || "", ".harness", "agent-prompt.md"), "utf8"),
       /Agent Definition Snapshot[\s\S]*Check changed files/

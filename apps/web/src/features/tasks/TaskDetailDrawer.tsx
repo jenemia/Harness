@@ -85,6 +85,9 @@ export function TaskDetailDrawer(props: {
   const events = props.overview.events.filter(
     (event) => event.taskId === props.task.id,
   );
+  const providerEvents = props.overview.providerEvents.filter(
+    (event) => event.taskId === props.task.id,
+  );
   const handoffs = props.overview.handoffs.filter(
     (handoff) => handoff.taskId === props.task.id,
   );
@@ -641,7 +644,7 @@ export function TaskDetailDrawer(props: {
           agents={props.overview.agents}
           events={events}
         />
-        <TaskTimeline events={events} runs={runs} />
+        <TaskTimeline events={events} providerEvents={providerEvents} runs={runs} />
       </aside>
     </div>
   );

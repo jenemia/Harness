@@ -100,11 +100,15 @@ Status: 완료
 
 Depends on: A01, A02
 
+Status: 완료
+
 - 공통 envelope, event 종류, capability와 민감정보 제거 규칙을 정의한다.
 - sequence 중복 제거·순서 보정·replay·terminal idempotency를 구현한다.
 - streaming 미지원 provider의 단일 결과 fallback을 유지한다.
 
 완료 조건: event가 append-only로 저장되고 reconnect 후 누락 없이 재생된다.
+
+검증: SQLite append/restart replay, run sequence 정렬, sequence·terminal 중복 제거, payload credential redaction, 비스트리밍 mock fallback, desktop IPC replay/구독 해제 계약, run timeline 표시와 전체 typecheck/test/build.
 
 ### A08: Cursor CLI provider
 

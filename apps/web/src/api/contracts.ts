@@ -285,6 +285,20 @@ export type Run = {
   completedAt: string | null;
 };
 
+export type ProviderEvent = {
+  version: 1;
+  sequence: number;
+  projectId: string;
+  taskId: string;
+  runId: string;
+  providerId: string;
+  timestamp: string;
+  correlationId: string;
+  type: "text_delta" | "tool_use" | "tool_result" | "diff_hunk" | "decision" | "usage" | "rate_limit" | "result" | "error";
+  payload: Record<string, unknown>;
+  metadata?: { originalEventType?: string };
+};
+
 export type Overview = {
   project: Project;
   settings: ProjectSettings;
@@ -297,6 +311,7 @@ export type Overview = {
   handoffs: Handoff[];
   comments: CommentRecord[];
   events: Event[];
+  providerEvents: ProviderEvent[];
   runs: Run[];
 };
 
@@ -382,6 +397,15 @@ export type ProviderCatalog = {
     description: string;
     requiresCommand: boolean;
     commandExample: string | null;
+    capabilities: {
+      streaming: boolean;
+      sessionResume: boolean;
+      toolEvents: boolean;
+      diffEvents: boolean;
+      usageEvents: boolean;
+      structuredDecision: boolean;
+      gracefulStop: boolean;
+    };
     authenticationStatus: CliAuthenticationStatus | null;
   }>;
   cliAuthentication: { cursor: CliAuthenticationStatus };

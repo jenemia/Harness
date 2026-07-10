@@ -1,4 +1,4 @@
-import type { HarnessCommand, HarnessCommandInputs } from "@harness/core";
+import type { HarnessCommand, HarnessCommandInputs, HarnessEventFilters, ProviderEventEnvelope } from "@harness/core";
 import {
   createAgentTemplate,
   createGlobalMemory,
@@ -49,6 +49,17 @@ import {
   updateTaskService
 } from "./services.js";
 import type { AgentRecord, TaskRecord } from "./types.js";
+import { replayProviderEvents, subscribeProviderEvents } from "./provider-events.js";
+
+export function subscribeApplicationProviderEvents(
+  filter: HarnessEventFilters["provider:event"],
+  listener: (event: ProviderEventEnvelope) => void
+) {
+  const project = requiredProject(filter.projectId);
+  const unsubscribe = subscribeProviderEvents(filter, listener);
+  const replay = replayProviderEvents(project, filter);
+  return { replay, unsubscribe };
+}
 
 export async function invokeApplicationCommand<C extends HarnessCommand>(
   command: C,

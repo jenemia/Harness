@@ -178,6 +178,27 @@ export function useAppController() {
   }, [loadOverview, runAction, selectedProjectId]);
 
   useEffect(() => {
+    if (!selectedProjectId || !window.harness) return;
+    let timer = 0;
+    const unsubscribe = window.harness.subscribe(
+      "provider:event",
+      { projectId: selectedProjectId },
+      () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => {
+          void loadOverview(selectedProjectId).catch((err) =>
+            setError(err instanceof Error ? err.message : String(err)),
+          );
+        }, 50);
+      },
+    );
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [loadOverview, selectedProjectId]);
+
+  useEffect(() => {
     setBoardQuery("");
     setBoardAssigneeId("");
     setBoardLabel("");

@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { spawnSync } from "node:child_process";
+import type { ProviderCapabilities } from "@harness/core";
 import type { AgentRecord, ApprovalRecord, CommentRecord, MemoryRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 export type CommandResult = {
@@ -88,7 +89,18 @@ export type LlmProviderDefinition = {
   description: string;
   requiresCommand: boolean;
   commandExample: string | null;
+  capabilities: ProviderCapabilities;
   authentication?: CliAuthenticationDefinition;
+};
+
+const nonStreamingCapabilities: ProviderCapabilities = {
+  streaming: false,
+  sessionResume: false,
+  toolEvents: false,
+  diffEvents: false,
+  usageEvents: false,
+  structuredDecision: false,
+  gracefulStop: false
 };
 
 export type CliAuthenticationDefinition = {
@@ -885,7 +897,8 @@ function createMockLlmProvider(): LlmProvider {
       kind: "mock",
       description: "Deterministic local provider for testing Harness without calling an LLM.",
       requiresCommand: false,
-      commandExample: null
+      commandExample: null,
+      capabilities: nonStreamingCapabilities
     },
     async run(agent, task, workspace, context) {
       const output = [
@@ -920,7 +933,8 @@ function createShellLlmProvider(platformProvider: PlatformProvider): LlmProvider
       kind: "generic-shell",
       description: "Runs a custom shell command with Harness task context in environment variables.",
       requiresCommand: true,
-      commandExample: "node ./scripts/agent-runner.js"
+      commandExample: "node ./scripts/agent-runner.js",
+      capabilities: nonStreamingCapabilities
     },
     async run(agent, task, workspace, context) {
       if (!agent.cliCommand) {
@@ -939,14 +953,15 @@ function createShellLlmProvider(platformProvider: PlatformProvider): LlmProvider
 
 function createCliLlmProvider(
   platformProvider: PlatformProvider,
-  input: Omit<LlmProviderDefinition, "kind" | "requiresCommand">
+  input: Omit<LlmProviderDefinition, "kind" | "requiresCommand" | "capabilities">
 ): LlmProvider {
   return {
     id: input.id,
     definition: {
       ...input,
       kind: "llm-cli",
-      requiresCommand: true
+      requiresCommand: true,
+      capabilities: nonStreamingCapabilities
     },
     async run(agent, task, workspace, context) {
       if (!agent.cliCommand) {

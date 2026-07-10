@@ -133,22 +133,22 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### 공통 provider event 계약
 
-- [ ] 모든 streaming provider가 따르는 versioned event envelope을 정의한다.
-- [ ] event 공통 필드로 version, sequence, project id, task id, run id, provider id, timestamp와 correlation id를 기록한다.
-- [ ] event 종류로 `text_delta`, `tool_use`, `tool_result`, `diff_hunk`, `decision`, `usage`, `rate_limit`, `result`, `error`를 지원한다.
+- [x] 모든 streaming provider가 따르는 versioned event envelope을 정의한다.
+- [x] event 공통 필드로 version, sequence, project id, task id, run id, provider id, timestamp와 correlation id를 기록한다.
+- [x] event 종류로 `text_delta`, `tool_use`, `tool_result`, `diff_hunk`, `decision`, `usage`, `rate_limit`, `result`, `error`를 지원한다.
 - [ ] provider별 원본 stream 형식을 공통 event로 정규화하고 필요한 경우 원본 event type만 비민감 metadata로 보존한다.
-- [ ] sequence 기반 중복 제거, 순서 보정, reconnect replay와 마지막 수신 위치 복구를 구현한다.
-- [ ] event payload에서 API key, credential, 전체 prompt와 민감한 파일 내용을 기본적으로 제거한다.
-- [ ] provider capability로 `streaming`, `sessionResume`, `toolEvents`, `diffEvents`, `usageEvents`, `structuredDecision`, `gracefulStop`을 선언한다.
-- [ ] provider가 structured event를 지원하지 않으면 기존 단일 결과 실행 방식으로 fallback한다.
+- [x] sequence 기반 중복 제거, 순서 보정, reconnect replay와 마지막 수신 위치 복구를 구현한다.
+- [x] event payload에서 API key, credential, 전체 prompt와 민감한 파일 내용을 기본적으로 제거한다.
+- [x] provider capability로 `streaming`, `sessionResume`, `toolEvents`, `diffEvents`, `usageEvents`, `structuredDecision`, `gracefulStop`을 선언한다.
+- [x] provider가 structured event를 지원하지 않으면 기존 단일 결과 실행 방식으로 fallback한다.
 
 ### 저장 및 UI
 
-- [ ] 실시간 event를 run timeline에 append-only로 영속화하고 서버 재시작 후 replay할 수 있게 한다.
-- [ ] 카드 실행 화면에서 agent text, tool 사용, decision, 사용량, rate limit과 결과 상태를 실시간으로 표시한다.
-- [ ] event stream 구독 해제와 재연결이 실제 provider 프로세스를 중단하지 않게 한다.
+- [x] 실시간 event를 run timeline에 append-only로 영속화하고 서버 재시작 후 replay할 수 있게 한다.
+- [x] 카드 실행 화면에서 agent text, tool 사용, decision, 사용량, rate limit과 결과 상태를 실시간으로 표시한다.
+- [x] event stream 구독 해제와 재연결이 실제 provider 프로세스를 중단하지 않게 한다.
 - [ ] event 저장량 제한, 긴 tool output 요약, 보존 기간과 원본 삭제 정책을 설정할 수 있게 한다.
-- [ ] terminal event가 중복 도착해도 run 완료 후처리, commit과 handoff가 한 번만 실행되게 한다.
+- [x] terminal event가 중복 도착해도 run 완료 후처리, commit과 handoff가 한 번만 실행되게 한다.
 
 ### 완료 조건
 

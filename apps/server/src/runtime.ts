@@ -20,6 +20,7 @@ import { getPlanningProviderDefinition } from "./planner.js";
 import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriterLock } from "./project-store.js";
 import { createAgentRunSnapshot } from "./agent-store.js";
 import { redactCredentialMaterial } from "./credential-security.js";
+import { appendProviderEvent, nextProviderEventSequence } from "./provider-events.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -785,6 +786,8 @@ export const decideApproval = asyncRuntimeMutation(decideApprovalMutation);
 async function executeTask(project: ProjectRecord, taskId: string, reservedAgentId?: string) {
   const db = openProjectDb(project.path);
   let runId = "";
+  let providerEventContext: { taskId: string; providerId: string; correlationId: string } | null = null;
+  let terminalClaimed = false;
 
   try {
     const task = getTask(db, taskId);
@@ -825,6 +828,11 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const commandPreview = executionAgent.cliCommand ? redactCredentialMaterial(executionAgent.cliCommand) : null;
     const startedAt = now();
     runId = randomUUID();
+    providerEventContext = {
+      taskId: task.id,
+      providerId: selectedProvider.definition.id,
+      correlationId: randomUUID()
+    };
     db.prepare(`
       INSERT INTO runs (
         id, task_id, agent_id, status, branch_name, worktree_path, snapshot_ref,
@@ -899,6 +907,36 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const safeOutput = redactCredentialMaterial(result.output);
     const safeError = result.error ? redactCredentialMaterial(result.error) : null;
     const changedFiles = workspace.kind === "git-worktree" ? await collectChangedFiles(workspace.worktreePath) : [];
+
+    if (safeOutput) {
+      appendProviderEvent(project, {
+        sequence: nextProviderEventSequence(project, runId),
+        projectId: project.id,
+        taskId: task.id,
+        runId,
+        providerId: selectedProvider.definition.id,
+        correlationId: providerEventContext.correlationId,
+        type: "text_delta",
+        payload: { text: safeOutput, fallback: !selectedProvider.definition.capabilities.streaming }
+      });
+    }
+    const terminalEvent = appendProviderEvent(project, {
+      sequence: nextProviderEventSequence(project, runId),
+      projectId: project.id,
+      taskId: task.id,
+      runId,
+      providerId: selectedProvider.definition.id,
+      correlationId: providerEventContext.correlationId,
+      type: result.ok ? "result" : "error",
+      payload: {
+        status: result.ok ? "completed" : "failed",
+        summary: result.ok ? safeOutput : safeError || "Agent run failed.",
+        changedFiles
+      }
+    });
+    if (!terminalEvent.inserted) return;
+    terminalClaimed = true;
+
     const commitResult = result.ok && workspace.kind === "git-worktree"
       ? await providers.workspace().commitAll(
           workspace.worktreePath,
@@ -940,6 +978,20 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     await autoHandoff(project, db, task.id, agent);
   } catch (error) {
     const safeMessage = redactCredentialMaterial(error instanceof Error ? error.message : String(error));
+    let shouldProcessFailure = true;
+    if (runId && providerEventContext && !terminalClaimed) {
+      const terminalEvent = appendProviderEvent(project, {
+        sequence: nextProviderEventSequence(project, runId),
+        projectId: project.id,
+        taskId: providerEventContext.taskId,
+        runId,
+        providerId: providerEventContext.providerId,
+        correlationId: providerEventContext.correlationId,
+        type: "error",
+        payload: { status: "failed", summary: safeMessage }
+      });
+      shouldProcessFailure = terminalEvent.inserted;
+    }
     if (runId) {
       db.prepare("UPDATE runs SET status = ?, error = ?, completed_at = ? WHERE id = ?").run(
         "failed",
@@ -950,7 +1002,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     }
 
     const task = getTask(db, taskId);
-    if (task) {
+    if (task && shouldProcessFailure) {
       updateTaskStatus(db, task.id, "Blocked");
       if (task.assigneeAgentId) {
         refreshAgentStatus(db, task.assigneeAgentId);

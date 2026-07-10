@@ -1,11 +1,11 @@
-import type { HarnessCommand, HarnessCommandInputs } from "@harness/core";
+import type { HarnessCommand, HarnessCommandInputs, HarnessEventFilters } from "@harness/core";
 
 declare global {
   interface Window {
     harness?: {
       version: 1;
       invoke<C extends HarnessCommand>(command: C, payload: HarnessCommandInputs[C]): Promise<unknown>;
-      subscribe(event: "provider:event", callback: (payload: unknown) => void): () => void;
+      subscribe(event: "provider:event", filter: HarnessEventFilters["provider:event"], callback: (payload: unknown) => void): () => void;
     };
   }
 }

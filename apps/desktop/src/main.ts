@@ -1,8 +1,8 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { harnessIpcVersion, isHarnessCommand, isHarnessCommandPayload, type HarnessInvokeRequest } from "@harness/core";
-import { invokeApplicationCommand } from "@harness/server/application";
+import { harnessIpcVersion, isHarnessCommand, isHarnessCommandPayload, isHarnessEventFilter, type HarnessInvokeRequest, type ProviderEventEnvelope } from "@harness/core";
+import { invokeApplicationCommand, subscribeApplicationProviderEvents } from "@harness/server/application";
 import { secureWindowOptions } from "./security.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -19,8 +19,48 @@ ipcMain.handle("harness:invoke", async (_event, request: HarnessInvokeRequest) =
   return invokeApplicationCommand(request.command, request.payload);
 });
 
+const eventSubscriptions = new Map<string, { senderId: number; unsubscribe: () => void }>();
+
+ipcMain.handle("harness:subscribe", (ipcEvent, request: unknown) => {
+  const value = request as Record<string, unknown> | null;
+  if (!value || value.version !== harnessIpcVersion || value.event !== "provider:event" ||
+      typeof value.subscriptionId !== "string" || !isHarnessEventFilter("provider:event", value.filter)) {
+    throw new Error("Unsupported Harness event subscription.");
+  }
+  const key = `${ipcEvent.sender.id}:${value.subscriptionId}`;
+  eventSubscriptions.get(key)?.unsubscribe();
+  const seen = new Map<string, number>();
+  const send = (providerEvent: ProviderEventEnvelope) => {
+    const cursor = seen.get(providerEvent.runId) || 0;
+    if (providerEvent.sequence <= cursor || ipcEvent.sender.isDestroyed()) return;
+    seen.set(providerEvent.runId, providerEvent.sequence);
+    ipcEvent.sender.send(`harness:event:${value.subscriptionId}`, providerEvent);
+  };
+  const subscription = subscribeApplicationProviderEvents(value.filter, send);
+  eventSubscriptions.set(key, { senderId: ipcEvent.sender.id, unsubscribe: subscription.unsubscribe });
+  for (const providerEvent of subscription.replay) send(providerEvent);
+  return { subscribed: true };
+});
+
+ipcMain.on("harness:unsubscribe", (ipcEvent, request: unknown) => {
+  const subscriptionId = (request as { subscriptionId?: unknown } | null)?.subscriptionId;
+  if (typeof subscriptionId !== "string") return;
+  const key = `${ipcEvent.sender.id}:${subscriptionId}`;
+  eventSubscriptions.get(key)?.unsubscribe();
+  eventSubscriptions.delete(key);
+});
+
 async function createWindow() {
   const window = new BrowserWindow(secureWindowOptions(preloadPath));
+  const rendererId = window.webContents.id;
+  window.webContents.once("destroyed", () => {
+    for (const [key, subscription] of eventSubscriptions) {
+      if (subscription.senderId === rendererId) {
+        subscription.unsubscribe();
+        eventSubscriptions.delete(key);
+      }
+    }
+  });
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://")) void shell.openExternal(url);
     return { action: "deny" };

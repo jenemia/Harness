@@ -15,6 +15,7 @@ import type {
   CommentRecord,
   Event,
   Handoff,
+  ProviderEvent,
   Run,
 } from "../../api/contracts";
 import { runService } from "../../services/runService";
@@ -317,9 +318,11 @@ export function getHandoffDecision(handoff: Handoff, events: Event[]) {
 
 export function TaskTimeline({
   events,
+  providerEvents,
   runs,
 }: {
   events: Event[];
+  providerEvents: ProviderEvent[];
   runs: Run[];
 }) {
   const { locale } = useI18n();
@@ -330,6 +333,13 @@ export function TaskTimeline({
       type: event.type,
       message: event.message,
       detail: JSON.stringify(event.metadata, null, 2),
+    })),
+    ...providerEvents.map((event) => ({
+      id: `${event.runId}-${event.sequence}`,
+      at: event.timestamp,
+      type: `provider.${event.type}`,
+      message: `${event.providerId} · run ${event.runId.slice(0, 8)} · #${event.sequence}`,
+      detail: JSON.stringify(event.payload, null, 2),
     })),
     ...runs.map((run) => ({
       id: run.id,
