@@ -19,7 +19,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Approval, DocumentRecord, Event, Overview, PlanResult, Project, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, Approval, DocumentRecord, Event, Overview, PlanResult, Project, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -209,7 +209,6 @@ export function App() {
             <aside className="right-rail">
               <PlanningPanel
                 overview={overview}
-                settings={settings}
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
@@ -218,15 +217,16 @@ export function App() {
               <AgentPanel
                 overview={overview}
                 providerCatalog={providerCatalog}
-                settings={settings}
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
               <SettingsPanel
+                overview={overview}
                 providerCatalog={providerCatalog}
                 settings={settings}
                 runAction={runAction}
                 onChanged={(next) => setSettings(next)}
+                onProjectChanged={() => loadOverview()}
               />
               <RunPanel overview={overview} />
               <EventPanel overview={overview} />
@@ -318,7 +318,6 @@ function ApprovalsPanel(props: {
 
 function PlanningPanel(props: {
   overview: Overview;
-  settings: GlobalSettings | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -329,10 +328,8 @@ function PlanningPanel(props: {
   const [lastSchedule, setLastSchedule] = useState<ScheduleResult | null>(null);
 
   useEffect(() => {
-    if (props.settings) {
-      setAutoStart(props.settings.autoStartPlans);
-    }
-  }, [props.settings?.autoStartPlans]);
+    setAutoStart(props.overview.settings.autoStartPlans);
+  }, [props.overview.settings.autoStartPlans]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -459,6 +456,7 @@ function DocumentsPanel(props: {
       <DocumentEditor
         projectId={props.overview.project.id}
         document={selected}
+        autoStartDefault={props.overview.settings.autoStartPlans}
         onSelect={setSelectedDocumentId}
         documents={props.overview.documents}
         runAction={props.runAction}
@@ -471,6 +469,7 @@ function DocumentsPanel(props: {
 function DocumentEditor(props: {
   projectId: string;
   document: DocumentRecord | null;
+  autoStartDefault: boolean;
   documents: DocumentRecord[];
   onSelect: (id: string) => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
@@ -486,6 +485,10 @@ function DocumentEditor(props: {
     setTitle(props.document?.title || "");
     setContent(props.document?.content || "");
   }, [props.document?.id]);
+
+  useEffect(() => {
+    setAutoStartPlan(props.autoStartDefault);
+  }, [props.autoStartDefault]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -933,7 +936,6 @@ function formatDate(value: string) {
 function AgentPanel(props: {
   overview: Overview;
   providerCatalog: ProviderCatalog | null;
-  settings: GlobalSettings | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
@@ -946,12 +948,9 @@ function AgentPanel(props: {
   const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
 
   useEffect(() => {
-    if (!props.settings) {
-      return;
-    }
-    setModelBackend(props.settings.defaultModelBackend);
-    setMaxParallel(props.settings.defaultAgentMaxParallel);
-  }, [props.settings?.defaultModelBackend, props.settings?.defaultAgentMaxParallel]);
+    setModelBackend(props.overview.settings.defaultModelBackend);
+    setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
+  }, [props.overview.settings.defaultModelBackend, props.overview.settings.defaultAgentMaxParallel]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -970,8 +969,8 @@ function AgentPanel(props: {
       setName("");
       setPersona("");
       setCliCommand("");
-      setModelBackend("mock");
-      setMaxParallel(1);
+      setModelBackend(props.overview.settings.defaultModelBackend);
+      setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
       await props.onChanged();
     });
   }
@@ -1037,15 +1036,18 @@ function AgentPanel(props: {
 }
 
 function SettingsPanel(props: {
+  overview: Overview;
   providerCatalog: ProviderCatalog | null;
   settings: GlobalSettings | null;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: (settings: GlobalSettings) => void;
+  onProjectChanged: () => Promise<void>;
 }) {
   const [defaultProjectRoot, setDefaultProjectRoot] = useState("");
   const [defaultModelBackend, setDefaultModelBackend] = useState("mock");
   const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
   const [autoStartPlans, setAutoStartPlans] = useState(false);
+  const [projectSettings, setProjectSettings] = useState<ProjectSettings>(props.overview.settings);
 
   useEffect(() => {
     if (!props.settings) {
@@ -1057,7 +1059,11 @@ function SettingsPanel(props: {
     setAutoStartPlans(props.settings.autoStartPlans);
   }, [props.settings]);
 
-  async function submit(event: FormEvent) {
+  useEffect(() => {
+    setProjectSettings(props.overview.settings);
+  }, [props.overview.settings]);
+
+  async function submitGlobal(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
       const response = await api<{ settings: GlobalSettings }>("/api/settings", {
@@ -1073,13 +1079,30 @@ function SettingsPanel(props: {
     });
   }
 
+  async function submitProject(event: FormEvent) {
+    event.preventDefault();
+    await props.runAction(async () => {
+      const response = await api<{ settings: ProjectSettings }>(`/api/projects/${props.overview.project.id}/settings`, {
+        method: "PATCH",
+        body: JSON.stringify(projectSettings)
+      });
+      setProjectSettings(response.settings);
+      await props.onProjectChanged();
+    });
+  }
+
+  function updateProjectSetting<K extends keyof ProjectSettings>(key: K, value: ProjectSettings[K]) {
+    setProjectSettings((current) => ({ ...current, [key]: value }));
+  }
+
   return (
     <section className="rail-panel">
       <div className="panel-header">
         <Settings size={17} />
         <h2>Settings</h2>
       </div>
-      <form className="stack-form" onSubmit={submit}>
+      <form className="stack-form" onSubmit={submitGlobal}>
+        <div className="form-group-title">Global defaults</div>
         <input
           value={defaultProjectRoot}
           onChange={(event) => setDefaultProjectRoot(event.target.value)}
@@ -1109,7 +1132,56 @@ function SettingsPanel(props: {
         </label>
         <button className="secondary-button" type="submit">
           <Settings size={16} />
-          <span>Save</span>
+          <span>Save global</span>
+        </button>
+      </form>
+      <form className="stack-form split-form" onSubmit={submitProject}>
+        <div className="form-group-title">Project defaults</div>
+        <select
+          value={projectSettings.defaultModelBackend}
+          onChange={(event) => updateProjectSetting("defaultModelBackend", event.target.value)}
+        >
+          {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => (
+            <option key={provider.id} value={provider.id}>
+              {provider.label}
+            </option>
+          ))}
+        </select>
+        <input
+          min={1}
+          max={8}
+          type="number"
+          value={projectSettings.defaultAgentMaxParallel}
+          onChange={(event) => updateProjectSetting("defaultAgentMaxParallel", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Default agent parallelism"
+        />
+        <input
+          min={1}
+          max={24}
+          type="number"
+          value={projectSettings.maxProjectParallel}
+          onChange={(event) => updateProjectSetting("maxProjectParallel", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Project parallel limit"
+        />
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={projectSettings.autoStartPlans}
+            onChange={(event) => updateProjectSetting("autoStartPlans", event.target.checked)}
+          />
+          <span>Auto-start plans in this project</span>
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={projectSettings.requireCommandApproval}
+            onChange={(event) => updateProjectSetting("requireCommandApproval", event.target.checked)}
+          />
+          <span>Require command approvals</span>
+        </label>
+        <button className="secondary-button" type="submit">
+          <Settings size={16} />
+          <span>Save project</span>
         </button>
       </form>
     </section>

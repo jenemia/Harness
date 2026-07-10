@@ -22,6 +22,15 @@ export type GlobalSettings = {
   updatedAt: string | null;
 };
 
+export type ProjectSettings = {
+  defaultModelBackend: string;
+  defaultAgentMaxParallel: number;
+  autoStartPlans: boolean;
+  requireCommandApproval: boolean;
+  maxProjectParallel: number;
+  updatedAt: string | null;
+};
+
 export type Agent = {
   id: string;
   name: string;
@@ -101,6 +110,7 @@ export type Run = {
 
 export type Overview = {
   project: Project;
+  settings: ProjectSettings;
   agents: Agent[];
   tasks: Task[];
   documents: DocumentRecord[];

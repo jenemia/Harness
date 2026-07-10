@@ -434,6 +434,18 @@ h3 {
   margin-top: 10px;
 }
 
+.split-form {
+  border-top: 1px solid #f1f2f4;
+  padding-top: 10px;
+}
+
+.form-group-title {
+  color: #44546f;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 input,
 select,
 textarea {

@@ -389,7 +389,7 @@ Global storage:
 - Global model/router settings
 - App update and telemetry preferences, if any
 
-Initial implementation: Harness stores global settings for default project root, default LLM backend, default agent concurrency, and PM plan auto-start behavior.
+Initial implementation: Harness stores global settings for app-wide defaults and project-local settings for default LLM backend, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy.
 
 Candidate paths:
 
@@ -407,7 +407,7 @@ Candidate paths:
 - PM-driven handoff decisions after task completion
 - Automatic handoff by default with approval gates for risky actions
 - Approval queue for command execution requests
-- Configurable concurrency limits
+- Configurable per-agent and per-project concurrency limits
 - Persistent run state so interrupted work can be resumed or audited
 
 ### Packaging

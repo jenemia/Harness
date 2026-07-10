@@ -6,6 +6,7 @@ import {
   getProject,
   getProjectOverview,
   getGlobalSettings,
+  getProjectSettings,
   globalHarnessDir,
   insertEvent,
   listProjects,
@@ -14,7 +15,8 @@ import {
   openProjectDb,
   registerProject,
   seedDefaultAgents,
-  updateGlobalSettings
+  updateGlobalSettings,
+  updateProjectSettings
 } from "./db.js";
 import { createPlan } from "./planner.js";
 import { approveMerge, decideApproval, listRuntimeProviders, startReadyTasks, startTask } from "./runtime.js";
@@ -96,10 +98,17 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "PATCH" && childPath === "settings") {
+        const settings = updateProjectSettings(project.path, await readBody(req));
+        sendJson(res, { settings, overview: getProjectOverview(project) });
+        return;
+      }
+
       if (req.method === "POST" && childPath === "plan") {
         const body = await readBody<{ goal?: string; mode?: "sequential" | "parallel"; autoStart?: boolean }>(req);
         const plan = createPlan(project, body);
-        const schedule = body.autoStart ? await startReadyTasks(project) : null;
+        const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
+        const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
         sendJson(res, { plan, schedule, overview: getProjectOverview(project) }, 201);
         return;
       }
@@ -183,7 +192,8 @@ const server = http.createServer(async (req, res) => {
             autoStart: body.autoStart,
             sourceDocumentId: document.id
           });
-          const schedule = body.autoStart ? await startReadyTasks(project) : null;
+          const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
+          const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
           sendJson(res, { document, plan, schedule, overview: getProjectOverview(project) }, 201);
           return;
         }
@@ -207,7 +217,7 @@ function createAgent(project: ProjectRecord, input: Partial<AgentRecord>) {
 
   const db = openProjectDb(project.path);
   try {
-    const settings = getGlobalSettings();
+    const settings = getProjectSettings(project.path);
     const timestamp = now();
     const agent: AgentRecord = {
       id: randomUUID(),

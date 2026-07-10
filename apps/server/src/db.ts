@@ -11,6 +11,7 @@ import type {
   GlobalSettings,
   ProjectOverview,
   ProjectRecord,
+  ProjectSettings,
   RunRecord,
   TaskRecord,
   TaskStatus
@@ -221,12 +222,98 @@ export function openProjectDb(projectPath: string) {
       created_at TEXT NOT NULL,
       decided_at TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS project_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
   return db;
+}
+
+export function defaultProjectSettings(): ProjectSettings {
+  const globalSettings = getGlobalSettings();
+  return {
+    defaultModelBackend: globalSettings.defaultModelBackend,
+    defaultAgentMaxParallel: globalSettings.defaultAgentMaxParallel,
+    autoStartPlans: globalSettings.autoStartPlans,
+    requireCommandApproval: true,
+    maxProjectParallel: 4,
+    updatedAt: null
+  };
+}
+
+export function getProjectSettings(projectPath: string): ProjectSettings {
+  const db = openProjectDb(projectPath);
+  try {
+    return getProjectSettingsFromDb(db);
+  } finally {
+    db.close();
+  }
+}
+
+export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
+  const rows = db.prepare("SELECT key, value, updated_at FROM project_settings").all() as Array<{
+    key: string;
+    value: string;
+    updated_at: string;
+  }>;
+  const settings = defaultProjectSettings();
+  let updatedAt: string | null = null;
+
+  for (const row of rows) {
+    if (!updatedAt || row.updated_at > updatedAt) {
+      updatedAt = row.updated_at;
+    }
+    if (row.key === "defaultModelBackend") {
+      settings.defaultModelBackend = row.value;
+    }
+    if (row.key === "defaultAgentMaxParallel") {
+      settings.defaultAgentMaxParallel = Math.max(1, Number(row.value || 1));
+    }
+    if (row.key === "autoStartPlans") {
+      settings.autoStartPlans = row.value === "true";
+    }
+    if (row.key === "requireCommandApproval") {
+      settings.requireCommandApproval = row.value === "true";
+    }
+    if (row.key === "maxProjectParallel") {
+      settings.maxProjectParallel = Math.max(1, Number(row.value || 1));
+    }
+  }
+
+  return { ...settings, updatedAt };
+}
+
+export function updateProjectSettings(projectPath: string, input: Partial<ProjectSettings>): ProjectSettings {
+  const db = openProjectDb(projectPath);
+  try {
+    const current = getProjectSettingsFromDb(db);
+    const timestamp = now();
+    const next: ProjectSettings = {
+      defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
+      defaultAgentMaxParallel: Math.max(1, Number(input.defaultAgentMaxParallel || current.defaultAgentMaxParallel)),
+      autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
+      requireCommandApproval: input.requireCommandApproval ?? current.requireCommandApproval,
+      maxProjectParallel: Math.max(1, Number(input.maxProjectParallel || current.maxProjectParallel)),
+      updatedAt: timestamp
+    };
+
+    const stmt = db.prepare("INSERT OR REPLACE INTO project_settings VALUES (?, ?, ?)");
+    stmt.run("defaultModelBackend", next.defaultModelBackend, timestamp);
+    stmt.run("defaultAgentMaxParallel", String(next.defaultAgentMaxParallel), timestamp);
+    stmt.run("autoStartPlans", String(next.autoStartPlans), timestamp);
+    stmt.run("requireCommandApproval", String(next.requireCommandApproval), timestamp);
+    stmt.run("maxProjectParallel", String(next.maxProjectParallel), timestamp);
+    return next;
+  } finally {
+    db.close();
+  }
 }
 
 function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, definition: string) {
@@ -300,6 +387,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
   try {
     return {
       project,
+      settings: getProjectSettingsFromDb(db),
       agents: db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent),
       tasks: db.prepare("SELECT * FROM tasks ORDER BY created_at ASC").all().map(mapTask),
       documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),

@@ -16,11 +16,11 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Automatic PM-driven handoff with approval gates for LLM CLI command execution and merge.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
-- Global settings for default project root, default LLM backend, default agent concurrency, and PM plan auto-start.
+- Global settings for app-wide defaults and project-local settings for default LLM backend, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
 
 LLM CLI providers run inside the task worktree and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, and `HARNESS_WORKTREE_PATH`.
 
-Non-mock providers require human approval before their configured shell command runs. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
+Shell-backed providers require human approval before their configured command runs when the current project has command approvals enabled. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
 
 ## Development
 
@@ -34,13 +34,15 @@ The web app runs on `http://localhost:5173`.
 
 ## Settings
 
-Use the Settings panel or `/api/settings` to configure global defaults. These settings live in the global Harness data directory and are applied when creating new agents or planning new work.
+Use the Settings panel or `/api/settings` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.
+
+Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel or `PATCH /api/projects/:projectId/settings` to configure the current project's default LLM backend, default agent concurrency, project-wide parallel run limit, PM plan auto-start behavior, and command approval policy.
 
 ## PM Planning
 
 Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
 
-Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit.
+Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.
 
 ## Task Tracking
 

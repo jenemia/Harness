@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
   insertEvent,
+  getProjectSettingsFromDb,
   mapAgent,
   mapApproval,
   mapTask,
@@ -10,10 +11,11 @@ import {
   projectHarnessDir
 } from "./db.js";
 import { createDefaultProviders } from "./providers.js";
-import type { AgentRecord, ApprovalRecord, ProjectRecord, TaskRecord } from "./types.js";
+import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
 const reservedAgentRuns = new Map<string, number>();
+const reservedProjectRuns = new Map<string, number>();
 const providers = createDefaultProviders(projectHarnessDir);
 const commandApprovalKind = "command_execution";
 
@@ -38,6 +40,19 @@ export async function startTask(project: ProjectRecord, taskId: string) {
     const task = getTask(db, taskId);
     if (!task) {
       return { accepted: false, reason: "Task not found." };
+    }
+
+    const settings = getProjectSettingsFromDb(db);
+    if (!hasProjectCapacity(db, project.path, settings)) {
+      const reason = "Project has reached its parallel run limit.";
+      insertEvent(db, {
+        taskId: task.id,
+        agentId: task.assigneeAgentId,
+        type: "task.queued",
+        message: reason,
+        metadata: { maxProjectParallel: settings.maxProjectParallel }
+      });
+      return { accepted: false, reason };
     }
 
     const dependencyBlocker = getDependencyBlocker(db, task);
@@ -69,13 +84,14 @@ export async function startTask(project: ProjectRecord, taskId: string) {
     }
 
     assignTask(db, task.id, agent.id);
-    const approvalBlocker = ensureCommandApproval(db, task, agent);
+    const approvalBlocker = ensureCommandApproval(db, task, agent, settings);
     if (approvalBlocker) {
       return { accepted: false, reason: approvalBlocker };
     }
 
     reservedAgentId = agent.id;
     reserveAgent(agent.id);
+    reserveProject(project.path);
   } finally {
     db.close();
   }
@@ -84,6 +100,7 @@ export async function startTask(project: ProjectRecord, taskId: string) {
   void executeTask(project, taskId, reservedAgentId).finally(() => {
     runningTasks.delete(taskId);
     releaseAgent(reservedAgentId);
+    releaseProject(project.path);
   });
   return { accepted: true };
 }
@@ -95,12 +112,18 @@ export async function startReadyTasks(project: ProjectRecord) {
       .prepare("SELECT * FROM tasks WHERE status IN (?, ?) ORDER BY created_at ASC")
       .all("Selected", "Backlog")
       .map(mapTask);
+    const settings = getProjectSettingsFromDb(db);
     const started: string[] = [];
     const skipped: Array<{ taskId: string; reason: string }> = [];
 
     for (const task of tasks) {
       if (runningTasks.has(task.id)) {
         skipped.push({ taskId: task.id, reason: "Task is already running." });
+        continue;
+      }
+
+      if (!hasProjectCapacity(db, project.path, settings)) {
+        skipped.push({ taskId: task.id, reason: "Project has reached its parallel run limit." });
         continue;
       }
 
@@ -123,18 +146,20 @@ export async function startReadyTasks(project: ProjectRecord) {
       }
 
       assignTask(db, task.id, agent.id);
-      const approvalBlocker = ensureCommandApproval(db, task, agent);
+      const approvalBlocker = ensureCommandApproval(db, task, agent, settings);
       if (approvalBlocker) {
         skipped.push({ taskId: task.id, reason: approvalBlocker });
         continue;
       }
 
       reservedAgentRuns.set(agent.id, (reservedAgentRuns.get(agent.id) || 0) + 1);
+      reserveProject(project.path);
       runningTasks.add(task.id);
       started.push(task.id);
       void executeTask(project, task.id, agent.id).finally(() => {
         runningTasks.delete(task.id);
         releaseAgent(agent.id);
+        releaseProject(project.path);
       });
     }
 
@@ -535,9 +560,14 @@ function setTaskBlocked(db: DatabaseSync, taskId: string, reason: string) {
   );
 }
 
-function ensureCommandApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRecord) {
+function ensureCommandApproval(
+  db: DatabaseSync,
+  task: TaskRecord,
+  agent: AgentRecord,
+  settings: ProjectSettings
+) {
   const provider = providers.llm(agent.modelBackend);
-  if (!provider.definition.requiresCommand) {
+  if (!settings.requireCommandApproval || !provider.definition.requiresCommand) {
     return null;
   }
 
@@ -669,6 +699,10 @@ function hasAgentCapacity(db: DatabaseSync, agent: AgentRecord) {
   return getAgentLoad(db, agent.id) < agent.maxParallel;
 }
 
+function hasProjectCapacity(db: DatabaseSync, projectPath: string, settings: ProjectSettings) {
+  return getProjectLoad(db, projectPath) < settings.maxProjectParallel;
+}
+
 function getAgentLoad(db: DatabaseSync, agentId: string) {
   const running = db
     .prepare("SELECT COUNT(*) AS count FROM runs WHERE agent_id = ? AND status = ?")
@@ -676,8 +710,19 @@ function getAgentLoad(db: DatabaseSync, agentId: string) {
   return running.count + (reservedAgentRuns.get(agentId) || 0);
 }
 
+function getProjectLoad(db: DatabaseSync, projectPath: string) {
+  const running = db
+    .prepare("SELECT COUNT(*) AS count FROM runs WHERE status = ?")
+    .get("running") as { count: number };
+  return running.count + (reservedProjectRuns.get(projectPath) || 0);
+}
+
 function reserveAgent(agentId: string) {
   reservedAgentRuns.set(agentId, (reservedAgentRuns.get(agentId) || 0) + 1);
+}
+
+function reserveProject(projectPath: string) {
+  reservedProjectRuns.set(projectPath, (reservedProjectRuns.get(projectPath) || 0) + 1);
 }
 
 function releaseAgent(agentId: string) {
@@ -686,5 +731,14 @@ function releaseAgent(agentId: string) {
     reservedAgentRuns.set(agentId, next);
   } else {
     reservedAgentRuns.delete(agentId);
+  }
+}
+
+function releaseProject(projectPath: string) {
+  const next = (reservedProjectRuns.get(projectPath) || 0) - 1;
+  if (next > 0) {
+    reservedProjectRuns.set(projectPath, next);
+  } else {
+    reservedProjectRuns.delete(projectPath);
   }
 }
