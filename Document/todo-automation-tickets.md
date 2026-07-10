@@ -58,11 +58,15 @@ Status: 완료
 
 Depends on: A01, A02, A03
 
+Status: 완료
+
 - Electron main, secure preload, packaged React renderer와 versioned IPC invoke/subscribe 계약을 추가한다.
 - renderer의 Node·filesystem·child process 직접 접근을 금지한다.
 - folder picker와 주요 board service를 typed IPC로 실행한다.
 
 완료 조건: context isolation이 켜진 desktop에서 주요 기능이 IPC만으로 동작한다.
+
+검증: versioned command contract, shared application command integration, secure BrowserWindow/preload contract, packaged relative assets, full workspace build와 Electron launch smoke.
 
 ### A05: Optional HTTP transport 분리
 

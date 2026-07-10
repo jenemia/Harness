@@ -1,0 +1,24 @@
+{
+  "name": "@harness/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "pnpm --filter @harness/web build && electron dist/main.js",
+    "start": "electron dist/main.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@harness/core": "workspace:*",
+    "@harness/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.13",
+    "electron": "^37.2.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

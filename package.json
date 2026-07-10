@@ -8,9 +8,10 @@
     "dev": "pnpm --parallel --filter @harness/server --filter @harness/web dev",
     "dev:server": "pnpm --filter @harness/server dev",
     "dev:web": "pnpm --filter @harness/web dev",
+    "dev:desktop": "pnpm build && pnpm --filter @harness/desktop start",
     "start": "pnpm --filter @harness/server start",
     "cli": "pnpm --filter @harness/server cli",
-    "test": "pnpm --filter @harness/server test",
+    "test": "pnpm --filter @harness/server test && pnpm --filter @harness/desktop test",
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck"
   },

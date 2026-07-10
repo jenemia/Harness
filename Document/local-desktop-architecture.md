@@ -377,6 +377,8 @@ provider process, PID, session id, last sequence와 workspace는 DB에 기록한
 - 기존 React API client를 typed IPC client로 교체 가능한 interface 뒤에 둔다.
 - folder picker, application lifecycle과 project lock을 desktop main으로 이동한다.
 
+현재 `packages/core`의 versioned command map을 `apps/desktop` main/preload와 React transport adapter가 공유한다. Electron window는 context isolation, sandbox와 web security를 활성화하고 Node integration을 비활성화하며, project·agent·task·folder picker 명령은 server package의 공통 application dispatcher를 직접 호출한다.
+
 ### 4단계: persistent HTTP server 기본 비활성화
 
 - production desktop은 packaged asset과 IPC로 동작한다.

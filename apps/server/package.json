@@ -6,6 +6,9 @@
   "bin": {
     "harness": "./dist/cli.js"
   },
+  "exports": {
+    "./application": "./dist/application.js"
+  },
   "scripts": {
     "cli": "tsx src/cli.ts",
     "dev": "tsx watch src/index.ts",
@@ -15,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@harness/core": "workspace:*",
     "tsx": "^4.20.3",
     "yaml": "^2.9.0"
   },

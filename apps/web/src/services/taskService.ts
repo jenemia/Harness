@@ -1,5 +1,6 @@
 import { api } from "../api/client";
 import type { CommentRecord, PlanResult, Task } from "../api/contracts";
+import { desktopOrHttp } from "../api/desktop";
 
 export const taskService = {
   createFromPrompt: (projectId: string, prompt: string) =>
@@ -7,32 +8,32 @@ export const taskService = {
       method: "POST",
       body: JSON.stringify({ prompt }),
     }),
-  create: (projectId: string, payload: Partial<Task>) =>
+  create: (projectId: string, payload: Partial<Task>) => desktopOrHttp("tasks:create", { projectId, payload }, () =>
     api(`/api/projects/${projectId}/tasks`, {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
-  update: (projectId: string, taskId: string, payload: Partial<Task>) =>
+    })),
+  update: (projectId: string, taskId: string, payload: Partial<Task>) => desktopOrHttp("tasks:update", { projectId, taskId, payload }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
-    }),
-  start: (projectId: string, taskId: string) =>
-    api(`/api/projects/${projectId}/tasks/${taskId}/start`, { method: "POST" }),
-  pause: (projectId: string, taskId: string, reason: string) =>
+    })),
+  start: (projectId: string, taskId: string) => desktopOrHttp("tasks:start", { projectId, taskId }, () =>
+    api(`/api/projects/${projectId}/tasks/${taskId}/start`, { method: "POST" })),
+  pause: (projectId: string, taskId: string, reason: string) => desktopOrHttp("tasks:pause", { projectId, taskId, reason }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/pause`, {
       method: "POST",
       body: JSON.stringify({ reason }),
-    }),
-  resume: (projectId: string, taskId: string) =>
+    })),
+  resume: (projectId: string, taskId: string) => desktopOrHttp("tasks:resume", { projectId, taskId }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/resume`, {
       method: "POST",
-    }),
-  move: (projectId: string, taskId: string, direction: "up" | "down") =>
+    })),
+  move: (projectId: string, taskId: string, direction: "up" | "down") => desktopOrHttp("tasks:move", { projectId, taskId, direction }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/move`, {
       method: "POST",
       body: JSON.stringify({ direction }),
-    }),
+    })),
   merge: (projectId: string, taskId: string) =>
     api(`/api/projects/${projectId}/tasks/${taskId}/merge`, { method: "POST" }),
   resolveMerge: (projectId: string, taskId: string) =>
@@ -48,14 +49,14 @@ export const taskService = {
     projectId: string,
     taskId: string,
     payload: Pick<CommentRecord, "author" | "body">,
-  ) =>
+  ) => desktopOrHttp("tasks:comment", { projectId, taskId, ...payload }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/comments`, {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
-  decompose: (projectId: string, taskId: string, payload: unknown) =>
+    })),
+  decompose: (projectId: string, taskId: string, payload: unknown) => desktopOrHttp("tasks:decompose", { projectId, taskId, payload: payload as object }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/decompose`, {
       method: "POST",
       body: JSON.stringify(payload),
-    }),
+    })),
 };

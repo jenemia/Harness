@@ -9,9 +9,9 @@
 ### 구조 원칙
 
 - [ ] Harness application은 한 번 설치하고 project별 상태와 산출물은 project root의 `.harness/`에 구성한다.
-- [ ] application binary와 UI bundle을 project마다 `.harness/`에 복사하지 않는다.
+- [x] application binary와 UI bundle을 project마다 `.harness/`에 복사하지 않는다.
 - [ ] Electron main process가 SQLite, Git, provider process, scheduler와 policy를 담당하고 React renderer는 typed IPC만 사용한다.
-- [ ] production desktop은 packaged web asset을 열고 별도의 persistent HTTP server를 자동 시작하지 않는다.
+- [x] production desktop은 packaged web asset을 열고 별도의 persistent HTTP server를 자동 시작하지 않는다.
 - [ ] HTTP transport는 headless 또는 remote 사용을 위한 명시적 선택 기능으로만 남긴다.
 - [ ] HTTP route, IPC, CLI와 MCP가 transport별 business logic을 갖지 않고 같은 application service를 호출하게 한다.
 - [x] project lock, SQLite WAL, stale process와 interrupted run recovery를 구현한다.

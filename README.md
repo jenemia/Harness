@@ -1,6 +1,6 @@
 # Harness
 
-Harness is a local-first multi-agent Kanban execution framework. It starts as a local web app for fast MVP iteration and is structured so the same backend boundary can later be wrapped by a desktop shell.
+Harness is a local-first multi-agent Kanban execution framework with an Electron desktop shell and an optional web/headless transport.
 
 ## MVP
 
@@ -55,6 +55,17 @@ Completed task worktree changes create merge approval requests. Approving the re
 If a merge hits conflicts, Harness leaves the conflicted merge in the main checkout, marks the task as `conflict`, and keeps the branch/worktree attached to the task. Resolve and stage the conflicted files locally, then use `tasks:resolve-merge` or the task's `Resolve merge` action to finalize the merge commit. Requesting changes from a conflicted task aborts the in-progress merge and returns the task to `Selected`.
 
 ## Development
+
+Run the desktop shell with its packaged React assets and typed IPC application service:
+
+```bash
+pnpm install
+pnpm dev:desktop
+```
+
+The desktop path does not start an HTTP server. Its secure preload exposes only versioned Harness commands and provider-event subscriptions; Node integration remains disabled in the renderer.
+
+For web-only development:
 
 ```bash
 pnpm install

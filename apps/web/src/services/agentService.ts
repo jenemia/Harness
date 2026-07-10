@@ -1,5 +1,6 @@
 import { api } from "../api/client";
 import type { Agent, AgentTemplate } from "../api/contracts";
+import { desktopOrHttp } from "../api/desktop";
 
 export type AgentPayload = Pick<
   Agent,
@@ -16,8 +17,8 @@ export type AgentPayload = Pick<
 >;
 
 export const agentService = {
-  save: (projectId: string, agentId: string | null, payload: AgentPayload) =>
-    api(
+  save: (projectId: string, agentId: string | null, payload: AgentPayload) => desktopOrHttp(
+    "agents:save", { projectId, agentId, payload }, () => api(
       agentId
         ? `/api/projects/${projectId}/agents/${agentId}`
         : `/api/projects/${projectId}/agents`,
@@ -25,7 +26,7 @@ export const agentService = {
         method: agentId ? "PATCH" : "POST",
         body: JSON.stringify(payload),
       },
-    ),
+    )),
   createTemplate: (payload: AgentPayload) =>
     api<{ template: AgentTemplate; templates: AgentTemplate[] }>(
       "/api/agent-templates",
