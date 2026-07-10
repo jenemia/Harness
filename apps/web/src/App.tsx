@@ -25,7 +25,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanPreviewResult, PlanResult, Project, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanPreviewResult, PlanResult, PlanningMode, Project, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -542,7 +542,7 @@ function PlanningPanel(props: {
   onChanged: () => Promise<void>;
 }) {
   const [goal, setGoal] = useState("");
-  const [mode, setMode] = useState<"sequential" | "parallel">("sequential");
+  const [mode, setMode] = useState<PlanningMode>("auto");
   const [workflowTemplateId, setWorkflowTemplateId] = useState("");
   const [autoStart, setAutoStart] = useState(false);
   const [lastPreview, setLastPreview] = useState<PlanPreviewResult | null>(null);
@@ -602,7 +602,8 @@ function PlanningPanel(props: {
           onChange={(event) => setGoal(event.target.value)}
           placeholder="Goal or bullet list"
         />
-        <select value={mode} onChange={(event) => setMode(event.target.value as "sequential" | "parallel")}>
+        <select value={mode} onChange={(event) => setMode(event.target.value as PlanningMode)}>
+          <option value="auto">Auto PM decision</option>
           <option value="sequential">Sequential handoff</option>
           <option value="parallel">Parallel where safe</option>
         </select>
@@ -634,7 +635,7 @@ function PlanningPanel(props: {
         <div className="plan-result">
           <strong>{lastPlan.tasks.length} tasks created</strong>
           <span>
-            {lastPlan.mode}
+            {formatPlanningMode(lastPlan)}
             {lastSchedule ? ` · ${lastSchedule.started.length} started` : ""}
           </span>
           {lastPlan.warnings.map((warning) => (
@@ -654,7 +655,7 @@ function PlanPreviewBox(props: { agents: Agent[]; preview: PlanPreviewResult }) 
     <div className="plan-preview">
       <div className="plan-preview-header">
         <strong>{props.preview.tasks.length} tasks previewed</strong>
-        <span>{props.preview.mode}</span>
+        <span>{formatPlanningMode(props.preview)}</span>
       </div>
       {props.preview.warnings.map((warning) => (
         <span key={warning} className="plan-warning">
@@ -674,6 +675,10 @@ function PlanPreviewBox(props: { agents: Agent[]; preview: PlanPreviewResult }) 
       </div>
     </div>
   );
+}
+
+function formatPlanningMode(plan: { mode: PlanningMode; effectiveMode: "sequential" | "parallel" }) {
+  return plan.mode === "auto" ? `auto -> ${plan.effectiveMode}` : plan.mode;
 }
 
 function ProjectPanel(props: {
@@ -1005,7 +1010,7 @@ function DocumentEditor(props: {
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [planMode, setPlanMode] = useState<"sequential" | "parallel">("sequential");
+  const [planMode, setPlanMode] = useState<PlanningMode>("auto");
   const [workflowTemplateId, setWorkflowTemplateId] = useState("");
   const [autoStartPlan, setAutoStartPlan] = useState(false);
   const [lastDocumentPreview, setLastDocumentPreview] = useState<PlanPreviewResult | null>(null);
@@ -1116,7 +1121,8 @@ function DocumentEditor(props: {
       </button>
       {props.document && (
         <div className="document-plan-box">
-          <select value={planMode} onChange={(event) => setPlanMode(event.target.value as "sequential" | "parallel")}>
+          <select value={planMode} onChange={(event) => setPlanMode(event.target.value as PlanningMode)}>
+            <option value="auto">Auto PM decision</option>
             <option value="sequential">Sequential tickets</option>
             <option value="parallel">Parallel tickets</option>
           </select>
@@ -1149,7 +1155,7 @@ function DocumentEditor(props: {
           {lastDocumentPreview && <PlanPreviewBox agents={props.agents} preview={lastDocumentPreview} />}
           {lastDocumentPlan && (
             <span className="document-plan-result">
-              {lastDocumentPlan.tasks.length} tickets created
+              {lastDocumentPlan.tasks.length} tickets created · {formatPlanningMode(lastDocumentPlan)}
               {lastDocumentPlan.warnings.map((warning) => (
                 <span key={warning} className="plan-warning">
                   {warning}

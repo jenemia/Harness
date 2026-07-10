@@ -1521,12 +1521,12 @@ function parseOptionalBoolean(value: string | undefined, label: string) {
 
 function normalizeMode(value: string | undefined): PlanningMode {
   if (!value) {
-    return "sequential";
+    return "auto";
   }
-  if (value === "sequential" || value === "parallel") {
+  if (value === "auto" || value === "sequential" || value === "parallel") {
     return value;
   }
-  throw new Error("--mode must be sequential or parallel.");
+  throw new Error("--mode must be auto, sequential, or parallel.");
 }
 
 function normalizeStatus(value: string): TaskStatus {
@@ -1624,13 +1624,13 @@ Usage:
   pnpm --filter @harness/server cli agents:list --project <projectId>
   pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
   pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
-  pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>]
-  pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
+  pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>]
+  pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
   pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli documents:update --project <projectId> --document <documentId> [--title <text>] [--content <text>|--contentFile <file>]
-  pnpm --filter @harness/server cli documents:plan-preview --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>]
-  pnpm --filter @harness/server cli documents:plan --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
+  pnpm --filter @harness/server cli documents:plan-preview --project <projectId> --document <documentId> [--mode auto|sequential|parallel] [--workflowTemplate <id>]
+  pnpm --filter @harness/server cli documents:plan --project <projectId> --document <documentId> [--mode auto|sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli memories:list --project <projectId>
   pnpm --filter @harness/server cli memories:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli memories:update --project <projectId> --memory <memoryId> [--title <text>] [--content <text>|--contentFile <file>]

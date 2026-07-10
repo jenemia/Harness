@@ -3,7 +3,8 @@ import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, nextTaskOrder, now
 import { resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
 
-export type PlanningMode = "sequential" | "parallel";
+export type PlanningMode = "auto" | "sequential" | "parallel";
+export type EffectivePlanningMode = Exclude<PlanningMode, "auto">;
 
 export type PlanRequest = {
   goal?: string;
@@ -36,6 +37,7 @@ export type PlanPreviewTask = {
 export type PlanPreviewResult = {
   goal: string;
   mode: PlanningMode;
+  effectiveMode: EffectivePlanningMode;
   workflowTemplateId: string | null;
   tasks: PlanPreviewTask[];
   warnings: string[];
@@ -51,6 +53,7 @@ export type PlanningProviderDefinition = {
     workflowTemplates: boolean;
     sequentialDependencies: boolean;
     parallelMode: boolean;
+    automaticMode: boolean;
     loadAwareAssignment: boolean;
     largePlanWarnings: boolean;
   };
@@ -126,6 +129,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       metadata: {
         goal: preview.goal,
         mode: preview.mode,
+        effectiveMode: preview.effectiveMode,
         sourceDocumentId: input.sourceDocumentId || null,
         workflowTemplateId: preview.workflowTemplateId,
         taskIds: inserted.map((task) => task.id),
@@ -137,6 +141,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     return {
       goal: preview.goal,
       mode: preview.mode,
+      effectiveMode: preview.effectiveMode,
       workflowTemplateId: preview.workflowTemplateId,
       warnings: preview.warnings,
       tasks: inserted.map<PlannedTaskSummary>((task) => ({
@@ -259,6 +264,7 @@ function createDeterministicPlanningProvider(): PlanningProvider {
         workflowTemplates: true,
         sequentialDependencies: true,
         parallelMode: true,
+        automaticMode: true,
         loadAwareAssignment: true,
         largePlanWarnings: true
       }
@@ -270,18 +276,21 @@ function createDeterministicPlanningProvider(): PlanningProvider {
         throw new Error("Planning goal is required.");
       }
 
-      const mode = input.mode || "sequential";
+      const mode = normalizePlanningMode(input.mode);
       const workflowTemplate = input.workflowTemplateId ? getWorkflowTemplate(input.workflowTemplateId) : null;
       if (input.workflowTemplateId && !workflowTemplate) {
         throw new Error("Workflow template not found.");
       }
-      const planItems = buildPlanItems(goal, mode, workflowTemplate);
+      const explicitItems = workflowTemplate ? [] : parseExplicitItems(goal);
+      const effectiveMode = resolveEffectivePlanningMode(goal, mode, workflowTemplate, explicitItems);
+      const planItems = buildPlanItems(goal, effectiveMode, workflowTemplate, explicitItems);
       const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
       const warnings = buildPlanWarnings(planItems.length, largePlanTaskThreshold);
 
       return {
         goal,
         mode,
+        effectiveMode,
         workflowTemplateId: workflowTemplate?.id || null,
         tasks: planItems.map<PlanPreviewTask>((item, index) => ({
           title: item.title,
@@ -289,8 +298,8 @@ function createDeterministicPlanningProvider(): PlanningProvider {
           assigneeAgentId: null,
           description: item.description,
           acceptanceCriteria: item.acceptanceCriteria,
-          dependencyIndexes: mode === "sequential" && index > 0 ? [index - 1] : [],
-          status: mode === "sequential" && index > 0 ? "Blocked" : "Selected"
+          dependencyIndexes: effectiveMode === "sequential" && index > 0 ? [index - 1] : [],
+          status: effectiveMode === "sequential" && index > 0 ? "Blocked" : "Selected"
         })),
         warnings
       };
@@ -317,7 +326,12 @@ function previewPlanWithAssignments(db: ReturnType<typeof openProjectDb>, input:
   };
 }
 
-function buildPlanItems(goal: string, mode: PlanningMode, workflowTemplate: WorkflowTemplateRecord | null) {
+function buildPlanItems(
+  goal: string,
+  mode: EffectivePlanningMode,
+  workflowTemplate: WorkflowTemplateRecord | null,
+  explicitItems = parseExplicitItems(goal)
+) {
   if (workflowTemplate) {
     return workflowTemplate.steps.map((step) => ({
       title: renderTemplate(step.titleTemplate, goal),
@@ -327,7 +341,6 @@ function buildPlanItems(goal: string, mode: PlanningMode, workflowTemplate: Work
     }));
   }
 
-  const explicitItems = parseExplicitItems(goal);
   if (explicitItems.length >= 2) {
     return explicitItems.map((title, index) => ({
       title,
@@ -373,6 +386,41 @@ function buildPlanItems(goal: string, mode: PlanningMode, workflowTemplate: Work
   }
 
   return base;
+}
+
+function resolveEffectivePlanningMode(
+  goal: string,
+  requestedMode: PlanningMode,
+  workflowTemplate: WorkflowTemplateRecord | null,
+  explicitItems: string[]
+): EffectivePlanningMode {
+  if (requestedMode !== "auto") {
+    return requestedMode;
+  }
+  if (workflowTemplate) {
+    return "sequential";
+  }
+  if (hasSequentialSignal(goal)) {
+    return "sequential";
+  }
+  if (explicitItems.length >= 2) {
+    return "parallel";
+  }
+  return "sequential";
+}
+
+function hasSequentialSignal(text: string) {
+  return /(?:->|\breview\s+after\b|\bafter\b|\bbefore\b|\bthen\b|\bdepends?\b|\bdependency\b|\bhandoff\b|순차|단계|이후|다음|의존|먼저|후에|검토 후|넘겨|인계)/i.test(text);
+}
+
+function normalizePlanningMode(value: string | undefined): PlanningMode {
+  if (!value) {
+    return "auto";
+  }
+  if (value === "auto" || value === "sequential" || value === "parallel") {
+    return value;
+  }
+  throw new Error("Planning mode must be auto, sequential, or parallel.");
 }
 
 function renderTemplate(template: string, goal: string) {

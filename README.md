@@ -151,6 +151,8 @@ Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` 
 
 Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition and expected assignees before any tasks are written. Plans at or above the project's large plan threshold require preview confirmation before creation; API and CLI callers pass `allowLargePlan` after reviewing the preview. The first planning provider is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, spreads assignments across matching agents by current and planned load, records assignment summaries in the plan event, and links sequential dependencies when requested.
 
+Planning mode can be `auto`, `sequential`, or `parallel`. In `auto` mode, the PM planner records both the requested mode and the effective mode it chose: workflow templates and sequence/dependency wording become sequential chains, while independent bullet lists become parallel ready tasks.
+
 Select a workflow template to make PM planning follow a reusable role chain. Harness seeds `Plan, Build, Review` and `Build and Review` templates, and exposes `/api/workflow-templates` for custom templates.
 
 Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.

@@ -39,7 +39,7 @@ import {
   updateProjectRecord,
   updateProjectSettings
 } from "./db.js";
-import { createPlan, previewProjectPlan } from "./planner.js";
+import { createPlan, previewProjectPlan, type PlanningMode } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
@@ -264,7 +264,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && childPath === "plan") {
         const body = await readBody<{
           goal?: string;
-          mode?: "sequential" | "parallel";
+          mode?: PlanningMode;
           autoStart?: boolean;
           workflowTemplateId?: string;
           allowLargePlan?: boolean;
@@ -280,7 +280,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && childPath === "plan-preview") {
         const body = await readBody<{
           goal?: string;
-          mode?: "sequential" | "parallel";
+          mode?: PlanningMode;
           workflowTemplateId?: string;
         }>(req);
         const settings = getProjectSettings(project.path);
@@ -431,7 +431,7 @@ const server = http.createServer(async (req, res) => {
 
         if (req.method === "POST" && action === "plan") {
           const body = await readBody<{
-            mode?: "sequential" | "parallel";
+            mode?: PlanningMode;
             autoStart?: boolean;
             workflowTemplateId?: string;
             allowLargePlan?: boolean;
@@ -455,7 +455,7 @@ const server = http.createServer(async (req, res) => {
 
         if (req.method === "POST" && action === "plan-preview") {
           const body = await readBody<{
-            mode?: "sequential" | "parallel";
+            mode?: PlanningMode;
             workflowTemplateId?: string;
           }>(req);
           const document = getDocument(project, documentId);

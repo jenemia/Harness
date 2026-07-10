@@ -302,6 +302,7 @@ export type ProviderCatalog = {
       workflowTemplates: boolean;
       sequentialDependencies: boolean;
       parallelMode: boolean;
+      automaticMode: boolean;
       loadAwareAssignment: boolean;
       largePlanWarnings: boolean;
     };
@@ -341,9 +342,13 @@ export type ProviderCatalog = {
   }>;
 };
 
+export type PlanningMode = "auto" | "sequential" | "parallel";
+export type EffectivePlanningMode = Exclude<PlanningMode, "auto">;
+
 export type PlanResult = {
   goal: string;
-  mode: "sequential" | "parallel";
+  mode: PlanningMode;
+  effectiveMode: EffectivePlanningMode;
   workflowTemplateId: string | null;
   warnings: string[];
   tasks: Array<{
@@ -357,7 +362,8 @@ export type PlanResult = {
 
 export type PlanPreviewResult = {
   goal: string;
-  mode: "sequential" | "parallel";
+  mode: PlanningMode;
+  effectiveMode: EffectivePlanningMode;
   workflowTemplateId: string | null;
   warnings: string[];
   tasks: Array<{
