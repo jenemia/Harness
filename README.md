@@ -6,6 +6,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 
 - Local project registry with project-local `.harness/` storage.
 - Project sidebar summaries for task, blocker, approval, running, and merge counts across local folders.
+- Project health report for blockers, approvals, merges, failed runs, and next recommended action.
 - Project templates for seeding new folders with a useful starter agent team.
 - Jira-like Kanban board.
 - Jira-like task detail drawer with editable metadata, labels, parent/subtask links, dependencies, runs, changed files, timeline, worktree, and merge state.
@@ -49,6 +50,7 @@ The server package also exposes a local JSON CLI for headless automation:
 ```bash
 pnpm cli projects:list
 pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
+pnpm cli projects:report --project <projectId>
 pnpm cli templates:projects
 pnpm cli templates:workflows
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>

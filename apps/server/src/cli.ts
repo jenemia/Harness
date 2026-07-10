@@ -19,6 +19,7 @@ import {
   seedProjectFromTemplate
 } from "./db.js";
 import { createPlan, type PlanningMode } from "./planner.js";
+import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
   decideApproval,
@@ -35,6 +36,7 @@ const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
   "projects:register": registerProjectCommand,
   "projects:overview": overviewCommand,
+  "projects:report": reportCommand,
   "templates:agents": listAgentTemplatesCommand,
   "templates:workflows": listWorkflowTemplatesCommand,
   "templates:projects": listProjectTemplatesCommand,
@@ -90,6 +92,12 @@ function registerProjectCommand(args: string[]) {
 function overviewCommand(args: string[]) {
   const project = getRequiredProject(args);
   return getProjectOverview(project);
+}
+
+function reportCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  const overview = getProjectOverview(project);
+  return { report: createProjectHealthReport(overview) };
 }
 
 async function scheduleCommand(args: string[]) {
@@ -503,6 +511,7 @@ Usage:
   pnpm --filter @harness/server cli projects:list
   pnpm --filter @harness/server cli projects:register --path <folder> [--name <name>] [--seedDefaults false] [--projectTemplate <id>]
   pnpm --filter @harness/server cli projects:overview --project <projectId>
+  pnpm --filter @harness/server cli projects:report --project <projectId>
   pnpm --filter @harness/server cli templates:agents
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects

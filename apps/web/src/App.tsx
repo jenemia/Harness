@@ -221,6 +221,7 @@ export function App() {
             </section>
 
             <aside className="right-rail">
+              <ProjectHealthPanel overview={overview} />
               <PlanningPanel
                 overview={overview}
                 workflowTemplates={workflowTemplates}
@@ -335,6 +336,63 @@ function ApprovalsPanel(props: {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+function ProjectHealthPanel({ overview }: { overview: Overview }) {
+  const blockedTasks = overview.tasks.filter((task) => task.status === "Blocked");
+  const pendingApprovals = overview.approvals.filter((approval) => approval.status === "pending").length;
+  const pendingMerges = overview.tasks.filter((task) => task.mergeStatus === "pending" || task.mergeStatus === "conflict").length;
+  const failedRuns = overview.runs.filter((run) => run.status === "failed").length;
+  const readyTasks = overview.tasks.filter((task) => task.status === "Selected" || task.status === "Backlog").length;
+  const idleAgents = overview.agents.filter((agent) => agent.status === "idle").length;
+  const unassignedTasks = overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
+  const recommendation =
+    pendingApprovals > 0
+      ? "Review approvals"
+      : pendingMerges > 0
+        ? "Resolve merges"
+        : blockedTasks.length > 0
+          ? "Clear blockers"
+          : failedRuns > 0
+            ? "Review failed runs"
+            : readyTasks > 0 && idleAgents > 0
+              ? "Run ready tasks"
+              : "No immediate blockers";
+
+  return (
+    <section className="rail-panel">
+      <div className="panel-header">
+        <Activity size={17} />
+        <h2>Health</h2>
+      </div>
+      <div className="compact-list">
+        <div className="compact-row">
+          <strong>{readyTasks}</strong>
+          <span>ready</span>
+        </div>
+        <div className="compact-row">
+          <strong>{blockedTasks.length}</strong>
+          <span>blocked</span>
+        </div>
+        <div className="compact-row">
+          <strong>{pendingApprovals}</strong>
+          <span>approvals</span>
+        </div>
+        <div className="compact-row">
+          <strong>{pendingMerges}</strong>
+          <span>merges</span>
+        </div>
+        <div className="compact-row">
+          <strong>{unassignedTasks}</strong>
+          <span>unassigned</span>
+        </div>
+        <div className="compact-row">
+          <strong>{recommendation}</strong>
+          <span>next</span>
+        </div>
       </div>
     </section>
   );

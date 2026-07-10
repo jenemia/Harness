@@ -32,6 +32,7 @@ import {
   updateProjectSettings
 } from "./db.js";
 import { createPlan } from "./planner.js";
+import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
   decideApproval,
@@ -165,6 +166,11 @@ const server = http.createServer(async (req, res) => {
 
       if (req.method === "GET" && childPath === "overview") {
         sendJson(res, getProjectOverview(project));
+        return;
+      }
+
+      if (req.method === "GET" && childPath === "report") {
+        sendJson(res, { report: createProjectHealthReport(getProjectOverview(project)) });
         return;
       }
 

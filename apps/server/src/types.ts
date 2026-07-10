@@ -23,6 +23,26 @@ export type ProjectSummary = {
   busyAgents: number;
 };
 
+export type ProjectHealthReport = {
+  projectId: string;
+  generatedAt: string;
+  statusCounts: Record<TaskStatus, number>;
+  readyTasks: number;
+  blockedTasks: Array<{
+    id: string;
+    title: string;
+    reason: string | null;
+  }>;
+  pendingApprovals: number;
+  pendingMerges: number;
+  failedRuns: number;
+  runningRuns: number;
+  unassignedTasks: number;
+  busyAgents: number;
+  idleAgents: number;
+  recommendations: string[];
+};
+
 export type ProjectListItem = ProjectRecord & {
   summary: ProjectSummary;
 };
