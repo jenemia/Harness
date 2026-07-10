@@ -21,8 +21,8 @@
 ### 인증 원칙
 
 - [ ] Codex, Claude와 Cursor provider는 각 CLI의 기존 login session을 재사용하고 Harness가 별도 API token 입력을 요구하지 않게 한다.
-- [ ] Harness는 CLI credential을 복사하거나 `.harness/`, global DB, prompt, log와 event에 저장하지 않는다.
-- [ ] 로그인되지 않은 provider에는 공식 CLI login command와 상태 확인 방법을 안내한다.
+- [x] Harness는 CLI credential을 복사하거나 `.harness/`, global DB, prompt, log와 event에 저장하지 않는다.
+- [x] 로그인되지 않은 provider에는 공식 CLI login command와 상태 확인 방법을 안내한다.
 - [ ] Harness가 provider API에 직접 접근해야 하는 예외 기능만 OAuth 2.1 PKCE 또는 device authorization을 사용한다.
 - [ ] OAuth credential은 OS keychain에 저장하고 `.harness/`에는 account reference와 비민감 metadata만 기록한다.
 - [ ] MCP 기본 연결은 stdio와 OS-local socket permission을 사용하고 persistent bearer token이나 API token을 요구하지 않는다.

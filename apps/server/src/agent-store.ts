@@ -13,6 +13,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { parse, stringify } from "yaml";
 import { projectHarnessPath } from "./project-store.js";
 import type { AgentRecord } from "./types.js";
+import { assertNoCredentialMaterial } from "./credential-security.js";
 
 const agentSchemaVersion = 1;
 const knownSections = ["Persona", "Instructions", "Boundaries", "Review Policy", "Output Format"];
@@ -337,14 +338,11 @@ function legacyAgent(row: Record<string, unknown>): AgentRecord {
 }
 
 function assertNoSecrets(content: string) {
-  const patterns = [
-    /\bsk-[A-Za-z0-9_-]{12,}\b/,
-    /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)\s*(?::|=|\s)\s*["']?[A-Za-z0-9_./+-]{8,}/i,
-    /\b(?:ghp_|github_pat_|xox[baprs]-)[A-Za-z0-9_-]{10,}\b/,
-    /\bAKIA[A-Z0-9]{16}\b/,
-    /\bBearer\s+[A-Za-z0-9._~+/-]{12,}/i
-  ];
-  if (patterns.some((pattern) => pattern.test(content))) throw new Error("Agent definition cannot contain credentials or secrets.");
+  try {
+    assertNoCredentialMaterial(content, "Agent definition");
+  } catch {
+    throw new Error("Agent definition cannot contain credentials or secrets.");
+  }
 }
 
 function sectionContent(sections: Array<{ name: string; content: string }>, name: string) {

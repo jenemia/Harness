@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ensureProjectLayout, projectHarnessPath, withProjectWriterLock } from "./project-store.js";
 import { syncProjectAgentDefinitions } from "./agent-store.js";
+import { assertNoCredentialMaterial, containsCredentialMaterial } from "./credential-security.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -115,6 +116,7 @@ export function openGlobalDb() {
   seedDefaultAgentTemplates(db);
   seedDefaultWorkflowTemplates(db);
   seedDefaultProjectTemplates(db);
+  purgeCredentialProviderCommands(db, "settings");
   return db;
 }
 
@@ -480,6 +482,7 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
   const current = getGlobalSettings();
   const db = openGlobalDb();
   try {
+    if (input.providerCommands !== undefined) assertNoCredentialMaterial(input.providerCommands, "Provider commands");
     const next: GlobalSettings = {
       defaultProjectRoot: input.defaultProjectRoot?.trim() || current.defaultProjectRoot,
       defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
@@ -945,6 +948,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "runs", "agent_definition_hash", "TEXT");
   ensureColumn(db, "runs", "agent_definition_schema_version", "INTEGER");
   ensureColumn(db, "runs", "agent_definition_snapshot", "TEXT");
+  purgeCredentialProviderCommands(db, "project_settings");
   syncProjectAgentDefinitions(db, projectPath);
   return db;
 }
@@ -1036,6 +1040,7 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
   const db = openProjectDb(projectPath);
   try {
     const current = getProjectSettingsFromDb(db);
+    if (input.providerCommands !== undefined) assertNoCredentialMaterial(input.providerCommands, "Provider commands");
     const providerCommandOverrides =
       input.providerCommands !== undefined
         ? normalizeStringMap(input.providerCommands)
@@ -1098,6 +1103,18 @@ function ensureColumn(db: DatabaseSync, tableName: string, columnName: string, d
   if (!columns.some((column) => column.name === columnName)) {
     db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
   }
+}
+
+function purgeCredentialProviderCommands(db: DatabaseSync, tableName: "settings" | "project_settings") {
+  const row = db.prepare(`SELECT value FROM ${tableName} WHERE key = ?`).get("providerCommands") as { value: string } | undefined;
+  if (!row || !containsCredentialMaterial(row.value)) return;
+  const commands = parseStringMap(row.value, {});
+  const safeCommands = Object.fromEntries(Object.entries(commands).filter(([, command]) => !containsCredentialMaterial(command)));
+  db.prepare(`UPDATE ${tableName} SET value = ?, updated_at = ? WHERE key = ?`).run(
+    JSON.stringify(safeCommands),
+    now(),
+    "providerCommands"
+  );
 }
 
 export function listProjects(): ProjectRecord[] {

@@ -15,10 +15,11 @@ import {
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
-import { createDefaultProviders, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
+import { createDefaultProviders, diagnoseCliAuthentication, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
 import { getPlanningProviderDefinition } from "./planner.js";
 import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriterLock } from "./project-store.js";
 import { createAgentRunSnapshot } from "./agent-store.js";
+import { redactCredentialMaterial } from "./credential-security.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -62,7 +63,19 @@ export function listRuntimeProviders() {
           commandExample: provider.commandExample
         }))
     },
-    llmProviders
+    llmProviders: llmProviders.map((provider) => ({
+      ...provider,
+      authenticationStatus: provider.authentication ? diagnoseCliAuthentication(provider.authentication) : null
+    })),
+    cliAuthentication: {
+      cursor: diagnoseCliAuthentication({
+        strategy: "cli-session",
+        executable: "cursor-agent",
+        versionArgs: ["--version"],
+        statusArgs: ["status"],
+        loginCommand: "cursor-agent login"
+      })
+    }
   };
 }
 
@@ -809,7 +822,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
     const execution = withProviderCommand(agent, freshTask, settings);
     const executionAgent = execution.agent;
     const selectedProvider = providers.llm(executionAgent.modelBackend);
-    const commandPreview = executionAgent.cliCommand || null;
+    const commandPreview = executionAgent.cliCommand ? redactCredentialMaterial(executionAgent.cliCommand) : null;
     const startedAt = now();
     runId = randomUUID();
     db.prepare(`
@@ -883,6 +896,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       timeoutMs: settings.maxRunSeconds * 1000
     });
     const completedAt = now();
+    const safeOutput = redactCredentialMaterial(result.output);
+    const safeError = result.error ? redactCredentialMaterial(result.error) : null;
     const changedFiles = workspace.kind === "git-worktree" ? await collectChangedFiles(workspace.worktreePath) : [];
     const commitResult = result.ok && workspace.kind === "git-worktree"
       ? await providers.workspace().commitAll(
@@ -893,8 +908,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
 
     db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, changed_files = ?, completed_at = ? WHERE id = ?").run(
       result.ok ? "completed" : "failed",
-      [result.output, commitResult.output].filter(Boolean).join("\n\n"),
-      result.error,
+      [safeOutput, redactCredentialMaterial(commitResult.output)].filter(Boolean).join("\n\n"),
+      safeError,
       JSON.stringify(changedFiles),
       completedAt,
       runId
@@ -908,8 +923,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
         taskId: task.id,
         agentId: agent.id,
         type: "run.failed",
-        message: result.error || "Agent run failed.",
-        metadata: { output: result.output }
+        message: safeError || "Agent run failed.",
+        metadata: { output: safeOutput }
       });
       return;
     }
@@ -919,15 +934,16 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       agentId: agent.id,
       type: "run.completed",
       message: `${agent.name} completed the run.`,
-      metadata: { output: result.output, commit: commitResult }
+      metadata: { output: safeOutput, commit: { ...commitResult, output: redactCredentialMaterial(commitResult.output) } }
     });
 
     await autoHandoff(project, db, task.id, agent);
   } catch (error) {
+    const safeMessage = redactCredentialMaterial(error instanceof Error ? error.message : String(error));
     if (runId) {
       db.prepare("UPDATE runs SET status = ?, error = ?, completed_at = ? WHERE id = ?").run(
         "failed",
-        error instanceof Error ? error.message : String(error),
+        safeMessage,
         now(),
         runId
       );
@@ -943,7 +959,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
         taskId: task.id,
         agentId: task.assigneeAgentId,
         type: "run.failed",
-        message: error instanceof Error ? error.message : String(error),
+        message: safeMessage,
         metadata: {}
       });
     }

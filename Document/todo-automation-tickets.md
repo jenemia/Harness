@@ -86,11 +86,15 @@ Status: 완료
 
 Depends on: A01, A02
 
+Status: 완료
+
 - Codex, Claude, Cursor CLI의 기존 login session을 재사용한다.
 - executable/version/login 상태 진단과 공식 login 안내를 제공한다.
 - credential이 DB, `.harness/`, prompt, event, report와 telemetry에 저장되지 않게 redaction 테스트를 추가한다.
 
 완료 조건: Harness token 입력 없이 CLI provider를 실행하며 credential 유출 회귀 테스트가 통과한다.
+
+검증: executable/version/login diagnostics, missing-CLI 안내, literal credential settings 거부, provider output/error/event redaction, CLI provider catalog smoke와 전체 build.
 
 ### A07: Versioned provider event 계약
 

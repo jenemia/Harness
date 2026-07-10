@@ -382,7 +382,17 @@ export type ProviderCatalog = {
     description: string;
     requiresCommand: boolean;
     commandExample: string | null;
+    authenticationStatus: CliAuthenticationStatus | null;
   }>;
+  cliAuthentication: { cursor: CliAuthenticationStatus };
+};
+
+export type CliAuthenticationStatus = {
+  installed: boolean;
+  authenticated: boolean;
+  version: string | null;
+  loginCommand: string;
+  message: string;
 };
 
 export type PlanningMode = "auto" | "sequential" | "parallel";

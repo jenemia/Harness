@@ -42,6 +42,8 @@ Harness is a local-first multi-agent Kanban execution framework with an Electron
 
 LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, `HARNESS_TASK_COMMENTS`, `HARNESS_TASK_RUN_SUMMARY`, `HARNESS_WORKSPACE_KIND`, `HARNESS_WORKSPACE_PATH`, and the backward-compatible `HARNESS_WORKTREE_PATH`.
 
+Codex, Claude Code, and Cursor use their own existing CLI login sessions; Harness does not ask for or store their API tokens. Check installation and login state with `pnpm cli providers:list`. When a CLI is missing or logged out, the catalog reports the login command to run in a terminal. Literal credentials in provider command settings are rejected, and provider output is redacted before it reaches run history or events.
+
 Global memory is written to `.harness/global-memory.md` and exposed as `HARNESS_GLOBAL_MEMORY` and `HARNESS_GLOBAL_MEMORY_FILE`. Project memory is written to `.harness/project-memory.md` and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 
 Shell-backed providers require matching agent tool permission before execution. Agents need `shell`, `llm-cli`, the provider kind, or the provider id in `allowedTools` before a command-backed LLM provider can run.

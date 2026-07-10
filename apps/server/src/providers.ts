@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import type { AgentRecord, ApprovalRecord, CommentRecord, MemoryRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 export type CommandResult = {
@@ -87,7 +88,31 @@ export type LlmProviderDefinition = {
   description: string;
   requiresCommand: boolean;
   commandExample: string | null;
+  authentication?: CliAuthenticationDefinition;
 };
+
+export type CliAuthenticationDefinition = {
+  strategy: "cli-session";
+  executable: string;
+  versionArgs: string[];
+  statusArgs: string[];
+  loginCommand: string;
+};
+
+export function diagnoseCliAuthentication(authentication: CliAuthenticationDefinition) {
+  const version = spawnSync(authentication.executable, authentication.versionArgs, { encoding: "utf8", timeout: 3000 });
+  if (version.error && (version.error as NodeJS.ErrnoException).code === "ENOENT") {
+    return { installed: false, authenticated: false, version: null, loginCommand: authentication.loginCommand, message: `${authentication.executable} is not installed or not on PATH.` };
+  }
+  const status = spawnSync(authentication.executable, authentication.statusArgs, { encoding: "utf8", timeout: 3000 });
+  return {
+    installed: version.status === 0,
+    authenticated: status.status === 0,
+    version: version.status === 0 ? (version.stdout || version.stderr).trim().split(/\r?\n/)[0] || null : null,
+    loginCommand: authentication.loginCommand,
+    message: status.status === 0 ? "Existing CLI login session is available." : `Run ${authentication.loginCommand} in a terminal, then retry.`
+  };
+}
 
 export type ProviderCommandResolution = {
   command: string | null;
@@ -291,14 +316,16 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
     createCliLlmProvider(platformProvider, {
       id: "codex",
       label: "Codex CLI",
-      description: "Runs a user-configured Codex CLI command inside the task workspace.",
-      commandExample: "codex exec \"$HARNESS_PROMPT_FILE\""
+      description: "Runs Codex CLI with its existing user login session inside the task workspace.",
+      commandExample: "codex exec \"$HARNESS_PROMPT_FILE\"",
+      authentication: { strategy: "cli-session", executable: "codex", versionArgs: ["--version"], statusArgs: ["login", "status"], loginCommand: "codex login" }
     }),
     createCliLlmProvider(platformProvider, {
       id: "claude",
       label: "Claude Code CLI",
-      description: "Runs a user-configured Claude Code CLI command inside the task workspace.",
-      commandExample: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\""
+      description: "Runs Claude Code CLI with its existing user login session inside the task workspace.",
+      commandExample: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\"",
+      authentication: { strategy: "cli-session", executable: "claude", versionArgs: ["--version"], statusArgs: ["auth", "status"], loginCommand: "claude login" }
     }),
     createCliLlmProvider(platformProvider, {
       id: "gemini",

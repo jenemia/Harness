@@ -338,6 +338,20 @@ export function SettingsPanel(props: {
           )}
         </div>
       )}
+      {props.providerCatalog && (
+        <div className="provider-help">
+          {props.providerCatalog.llmProviders
+            .filter((provider) => provider.authenticationStatus)
+            .map((provider) => (
+              <span key={`${provider.id}-auth`}>
+                {provider.label}: {provider.authenticationStatus?.message}
+                {provider.authenticationStatus?.version ? ` (${provider.authenticationStatus.version})` : ""}
+              </span>
+            ))}
+          <span>Cursor CLI: {props.providerCatalog.cliAuthentication.cursor.message}</span>
+          <span>Harness reuses each CLI login session and does not store provider tokens.</span>
+        </div>
+      )}
       <form className="stack-form" onSubmit={submitGlobal}>
         <div className="form-group-title">{t("settings.globalDefaults")}</div>
         <FolderPickerField
