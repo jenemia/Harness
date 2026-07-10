@@ -2204,7 +2204,8 @@ function SettingsPanel(props: {
           <span>
             command policy {props.providerCatalog.policy.capabilities.llmCommandPermission ? "on" : "off"} | provider
             tools {props.providerCatalog.policy.capabilities.providerSpecificTools ? "on" : "off"} | prompt boundaries{" "}
-            {props.providerCatalog.policy.capabilities.boundaryPromptInjection ? "on" : "off"}
+            {props.providerCatalog.policy.capabilities.boundaryPromptInjection ? "on" : "off"} | risky commands{" "}
+            {props.providerCatalog.policy.capabilities.riskyCommandApproval ? "approval" : "off"}
           </span>
         </div>
       )}

@@ -124,6 +124,8 @@ Initial implementation: shell-backed LLM providers create a command execution ap
 
 Initial implementation: completed task worktree changes create merge approval requests in the same approval queue. Approving a merge request merges the task branch into the main checkout; rejecting it sends the task back to Selected with requested changes recorded in the timeline.
 
+Initial implementation: the local policy provider detects risky shell commands and forces a command approval request even when project-wide command approvals are disabled. The first risk rules cover recursive forced deletes, hard Git resets, Git clean, Git push, sudo, package install/update commands, and remote scripts piped into a shell.
+
 Initial implementation: task run output can be converted into follow-up Kanban tasks from the task detail run list. Follow-ups are created as child tasks with a dependency on the source task so PM output can become tracked work.
 
 Risk boundaries can include:
@@ -206,6 +208,8 @@ Certain actions should require user approval:
 - Pushing to remote repositories
 - Creating large numbers of tasks
 - Marking project milestones complete
+
+Initial implementation: command-backed LLM providers still honor project-level command approval settings, but risky shell command detection is enforced by the policy provider independently of that setting. Risk tags and command previews are recorded in task events and approval request metadata.
 
 ### Review Agent
 
@@ -415,7 +419,7 @@ LLM providers should receive a generated prompt file and normalized environment 
 
 Initial implementation: provider command defaults can be configured globally and per project. Agent-specific CLI commands override project provider commands, and project provider commands inherit from global defaults.
 
-Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a `git-worktree` workspace provider that owns task worktree creation, snapshotting, changed-file collection, commits, and merge operations. Runtime approval behavior is selected through a `local-human` approval provider that owns command approval policy, decision messages, and rejection reasons while the project database stores the approval records. Runtime policy behavior is selected through a `local-agent-policy` provider that blocks command-backed LLM providers unless the assigned agent allows `shell`, `llm-cli`, the provider kind, or the provider id. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, approval provider capabilities, policy provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
+Initial implementation: runtime platform behavior is selected through explicit Node platform providers such as `node-darwin`, `node-win32`, and `node-linux`-style fallbacks. Runtime workspace behavior is selected through a `git-worktree` workspace provider that owns task worktree creation, snapshotting, changed-file collection, commits, and merge operations. Runtime approval behavior is selected through a `local-human` approval provider that owns command approval policy, decision messages, and rejection reasons while the project database stores the approval records. Runtime policy behavior is selected through a `local-agent-policy` provider that blocks command-backed LLM providers unless the assigned agent allows `shell`, `llm-cli`, the provider kind, or the provider id, and forces approval for risky shell command patterns even when project command approvals are disabled. The provider catalog exposes the active platform provider label, OS id, shell, process group support, workspace provider capabilities, approval provider capabilities, policy provider capabilities, and LLM provider definitions through the API, UI Settings panel, and headless CLI.
 
 ### Database
 

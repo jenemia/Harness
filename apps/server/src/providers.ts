@@ -106,6 +106,7 @@ export type PolicyProviderDefinition = {
     llmCommandPermission: boolean;
     providerSpecificTools: boolean;
     boundaryPromptInjection: boolean;
+    riskyCommandApproval: boolean;
   };
 };
 
@@ -136,11 +137,20 @@ export type PolicyEvaluation =
       metadata: Record<string, string | null>;
     };
 
+export type CommandRiskEvaluation = {
+  requiresApproval: boolean;
+  reason: string | null;
+  tags: string[];
+  metadata: Record<string, string | null>;
+};
+
 export type ApprovalProvider = {
   id: string;
   definition: ApprovalProviderDefinition;
   evaluateCommandExecution(input: {
     required: boolean;
+    riskReason: string | null;
+    riskTags: string[];
     task: TaskRecord;
     agent: AgentRecord;
     llmProvider: LlmProviderDefinition;
@@ -167,6 +177,13 @@ export type PolicyProvider = {
     effectiveBackend: string;
     commandPreview: string | null;
   }): PolicyEvaluation;
+  evaluateCommandRisk(input: {
+    task: TaskRecord;
+    agent: AgentRecord;
+    llmProvider: LlmProviderDefinition;
+    effectiveBackend: string;
+    commandPreview: string | null;
+  }): CommandRiskEvaluation;
 };
 
 export class ProviderRegistry {
@@ -255,7 +272,8 @@ function createLocalAgentPolicyProvider(): PolicyProvider {
       capabilities: {
         llmCommandPermission: true,
         providerSpecificTools: true,
-        boundaryPromptInjection: true
+        boundaryPromptInjection: true,
+        riskyCommandApproval: true
       }
     },
 
@@ -289,8 +307,53 @@ function createLocalAgentPolicyProvider(): PolicyProvider {
           allowedTools: input.agent.allowedTools.join(",")
         }
       };
+    },
+
+    evaluateCommandRisk(input) {
+      const baseMetadata = {
+        policyProvider: this.id,
+        riskTags: null,
+        commandPreview: input.commandPreview,
+        provider: input.llmProvider.id,
+        effectiveBackend: input.effectiveBackend
+      };
+      if (!input.llmProvider.requiresCommand || !input.commandPreview) {
+        return { requiresApproval: false, reason: null, tags: [], metadata: baseMetadata };
+      }
+
+      const risks = detectRiskyCommand(input.commandPreview);
+      if (risks.length === 0) {
+        return { requiresApproval: false, reason: null, tags: [], metadata: baseMetadata };
+      }
+
+      return {
+        requiresApproval: true,
+        reason: `Risky command policy requires approval before running: ${risks.map((risk) => risk.label).join(", ")}.`,
+        tags: risks.map((risk) => risk.tag),
+        metadata: {
+          policyProvider: this.id,
+          riskTags: risks.map((risk) => risk.tag).join(","),
+          commandPreview: input.commandPreview,
+          provider: input.llmProvider.id,
+          effectiveBackend: input.effectiveBackend
+        }
+      };
     }
   };
+}
+
+function detectRiskyCommand(command: string) {
+  const normalized = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
+  const patterns: Array<{ tag: string; label: string; regex: RegExp }> = [
+    { tag: "destructive-delete", label: "recursive forced delete", regex: /\brm\s+-[^\n;|&]*r[^\n;|&]*f|\brm\s+-[^\n;|&]*f[^\n;|&]*r/i },
+    { tag: "git-reset-hard", label: "hard Git reset", regex: /\bgit\s+reset\s+--hard\b/i },
+    { tag: "git-clean", label: "Git clean", regex: /\bgit\s+clean\s+-[^\n;|&]*[fdx]/i },
+    { tag: "git-push", label: "Git push", regex: /\bgit\s+push\b/i },
+    { tag: "elevated-permission", label: "sudo", regex: /\bsudo\b/i },
+    { tag: "package-install", label: "package install or update", regex: /\b(?:npm|pnpm|yarn|bun)\s+(?:install|add|remove|update|upgrade)\b|\b(?:pip|pip3|uv|cargo|go)\s+(?:install|add|get)\b/i },
+    { tag: "remote-shell", label: "remote script piped to shell", regex: /\b(?:curl|wget)\b[^;&]*\|\s*(?:sh|bash|zsh)\b/i }
+  ];
+  return patterns.filter((pattern) => pattern.regex.test(normalized));
 }
 
 function createPlatformProvider(): PlatformProvider {
@@ -607,7 +670,9 @@ function createLocalHumanApprovalProvider(): ApprovalProvider {
         return { action: "block", reason: this.rejectionReason(rejected) };
       }
 
-      const reason = `${input.agent.name} needs approval before running ${input.llmProvider.label}.`;
+      const reason = input.riskReason
+        ? `${input.agent.name} needs approval before running ${input.llmProvider.label}. ${input.riskReason}`
+        : `${input.agent.name} needs approval before running ${input.llmProvider.label}.`;
       const pending = input.existingApprovals.find(
         (approval) => approval.status === "pending" && approval.commandPreview === input.commandPreview
       );
@@ -623,7 +688,9 @@ function createLocalHumanApprovalProvider(): ApprovalProvider {
           provider: input.llmProvider.id,
           approvalProvider: this.id,
           effectiveBackend: input.effectiveBackend,
-          commandPreview: input.commandPreview
+          commandPreview: input.commandPreview,
+          riskTags: input.riskTags.join(",") || null,
+          riskReason: input.riskReason
         }
       };
     },

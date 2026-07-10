@@ -307,6 +307,7 @@ export type ProviderCatalog = {
       llmCommandPermission: boolean;
       providerSpecificTools: boolean;
       boundaryPromptInjection: boolean;
+      riskyCommandApproval: boolean;
     };
   };
   llmProviders: Array<{

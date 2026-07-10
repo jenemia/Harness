@@ -39,6 +39,8 @@ Shell-backed providers require matching agent tool permission before execution. 
 
 Shell-backed providers also require human approval before their configured command runs when the current project has command approvals enabled. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
 
+Risky shell commands require approval even when project command approvals are otherwise disabled. The local policy provider currently flags recursive forced deletes, hard Git resets, Git clean, Git push, sudo, package install/update commands, and remote scripts piped into a shell.
+
 Completed task worktree changes create merge approval requests. Approving the request merges the task branch into the main checkout; rejecting it sends the task back to `Selected` with changes requested.
 
 If a merge hits conflicts, Harness leaves the conflicted merge in the main checkout, marks the task as `conflict`, and keeps the branch/worktree attached to the task. Resolve and stage the conflicted files locally, then use `tasks:resolve-merge` or the task's `Resolve merge` action to finalize the merge commit. Requesting changes from a conflicted task aborts the in-progress merge and returns the task to `Selected`.

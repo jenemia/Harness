@@ -1086,13 +1086,33 @@ function ensureCommandApproval(
     return policy.reason;
   }
 
+  const commandRisk = providers.policy().evaluateCommandRisk({
+    task,
+    agent,
+    llmProvider: provider.definition,
+    effectiveBackend,
+    commandPreview
+  });
+
   const existingRows = db
     .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
     .all(task.id, agent.id, commandApprovalKind)
     .map(mapApproval);
+  const hasCommandDecision = existingRows.some((approval) => approval.commandPreview === commandPreview);
+  if (commandRisk.requiresApproval && !hasCommandDecision) {
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: agent.id,
+      type: "policy.risk_detected",
+      message: commandRisk.reason || "Risky command policy requires approval.",
+      metadata: commandRisk.metadata
+    });
+  }
 
   const evaluation = providers.approval().evaluateCommandExecution({
-    required: settings.requireCommandApproval,
+    required: settings.requireCommandApproval || commandRisk.requiresApproval,
+    riskReason: commandRisk.reason,
+    riskTags: commandRisk.tags,
     task,
     agent,
     llmProvider: provider.definition,
