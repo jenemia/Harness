@@ -556,9 +556,19 @@ function PlanningPanel(props: {
   async function submit(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
+      const confirmedPreview =
+        lastPreview?.goal === goal.trim() &&
+        lastPreview.mode === mode &&
+        lastPreview.workflowTemplateId === (workflowTemplateId || null);
       const response = await api<{ plan: PlanResult; schedule: ScheduleResult | null }>(`/api/projects/${props.overview.project.id}/plan`, {
         method: "POST",
-        body: JSON.stringify({ goal, mode, autoStart, workflowTemplateId: workflowTemplateId || undefined })
+        body: JSON.stringify({
+          goal,
+          mode,
+          autoStart,
+          workflowTemplateId: workflowTemplateId || undefined,
+          allowLargePlan: confirmedPreview
+        })
       });
       setLastPlan(response.plan);
       setLastSchedule(response.schedule);
@@ -1024,6 +1034,8 @@ function DocumentEditor(props: {
         });
         props.onSelect(response.document.id);
       }
+      setLastDocumentPreview(null);
+      setLastDocumentPlan(null);
       await props.onChanged();
     });
   }
@@ -1035,6 +1047,9 @@ function DocumentEditor(props: {
     }
 
     await props.runAction(async () => {
+      const confirmedPreview =
+        lastDocumentPreview?.mode === planMode &&
+        lastDocumentPreview.workflowTemplateId === (workflowTemplateId || null);
       const response = await api<{ plan: PlanResult; schedule: ScheduleResult | null }>(
         `/api/projects/${props.projectId}/documents/${document.id}/plan`,
         {
@@ -1042,7 +1057,8 @@ function DocumentEditor(props: {
           body: JSON.stringify({
             mode: planMode,
             autoStart: autoStartPlan,
-            workflowTemplateId: workflowTemplateId || undefined
+            workflowTemplateId: workflowTemplateId || undefined,
+            allowLargePlan: confirmedPreview
           })
         }
       );

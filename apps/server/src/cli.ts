@@ -345,7 +345,8 @@ async function createPlanCommand(args: string[]) {
   const plan = createPlan(project, {
     goal,
     mode,
-    workflowTemplateId: options.workflowTemplate
+    workflowTemplateId: options.workflowTemplate,
+    allowLargePlan: options.allowLargePlan === "true"
   });
   const shouldAutoStart = options.autoStart === "true";
   const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
@@ -401,6 +402,7 @@ async function planDocumentCommand(args: string[]) {
     goal: `Document: ${document.title}\n\n${document.content}`,
     mode,
     workflowTemplateId: options.workflowTemplate,
+    allowLargePlan: options.allowLargePlan === "true",
     sourceDocumentId: document.id
   });
   const shouldAutoStart = options.autoStart === "true";
@@ -1613,12 +1615,12 @@ Usage:
   pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
   pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
   pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>]
-  pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
+  pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
   pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli documents:update --project <projectId> --document <documentId> [--title <text>] [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli documents:plan-preview --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>]
-  pnpm --filter @harness/server cli documents:plan --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
+  pnpm --filter @harness/server cli documents:plan --project <projectId> --document <documentId> [--mode sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli memories:list --project <projectId>
   pnpm --filter @harness/server cli memories:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli memories:update --project <projectId> --memory <memoryId> [--title <text>] [--content <text>|--contentFile <file>]

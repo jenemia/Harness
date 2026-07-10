@@ -267,6 +267,7 @@ const server = http.createServer(async (req, res) => {
           mode?: "sequential" | "parallel";
           autoStart?: boolean;
           workflowTemplateId?: string;
+          allowLargePlan?: boolean;
         }>(req);
         const plan = createPlan(project, body);
         const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;
@@ -431,6 +432,7 @@ const server = http.createServer(async (req, res) => {
             mode?: "sequential" | "parallel";
             autoStart?: boolean;
             workflowTemplateId?: string;
+            allowLargePlan?: boolean;
           }>(req);
           const document = getDocument(project, documentId);
           const plan = createPlan(project, {
@@ -438,6 +440,7 @@ const server = http.createServer(async (req, res) => {
             mode: body.mode,
             autoStart: body.autoStart,
             workflowTemplateId: body.workflowTemplateId,
+            allowLargePlan: body.allowLargePlan,
             sourceDocumentId: document.id
           });
           const shouldAutoStart = body.autoStart ?? getProjectSettings(project.path).autoStartPlans;

@@ -217,7 +217,7 @@ Initial implementation: command-backed LLM providers still honor project-level c
 
 Initial implementation: the Approvals panel and headless `approvals:list` command can filter pending and recent decisions by approval kind, status, task, or agent, making command, merge, and risky handoff gates easier to review as projects accumulate requests.
 
-Initial implementation: PM planning and document planning expose web preview actions, preview endpoints, and CLI commands that return the same task breakdown, dependency indexes, initial statuses, and large-plan warnings without creating tasks. A later approval gate can reuse this preview before allowing very large task creation.
+Initial implementation: PM planning and document planning expose web preview actions, preview endpoints, and CLI commands that return the same task breakdown, dependency indexes, initial statuses, and large-plan warnings without creating tasks. Plans with 10 or more tasks require preview confirmation through the web UI or an explicit `allowLargePlan` flag in API/CLI calls. A later approval gate can reuse this preview before allowing very large task creation.
 
 ### Review Agent
 

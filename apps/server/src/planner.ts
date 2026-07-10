@@ -11,6 +11,7 @@ export type PlanRequest = {
   autoStart?: boolean;
   sourceDocumentId?: string;
   workflowTemplateId?: string;
+  allowLargePlan?: boolean;
 };
 
 export type PlannedTaskSummary = {
@@ -36,6 +37,8 @@ export type PlanPreviewResult = {
   tasks: PlanPreviewTask[];
   warnings: string[];
 };
+
+const largePlanTaskThreshold = 10;
 
 export function previewPlan(input: PlanRequest): PlanPreviewResult {
   const goal = input.goal?.trim();
@@ -69,6 +72,9 @@ export function previewPlan(input: PlanRequest): PlanPreviewResult {
 
 export function createPlan(project: ProjectRecord, input: PlanRequest) {
   const preview = previewPlan(input);
+  if (preview.tasks.length >= largePlanTaskThreshold && !input.allowLargePlan) {
+    throw new Error("Large plans require preview confirmation. Preview the plan first, then set allowLargePlan to true.");
+  }
   const db = openProjectDb(project.path);
   try {
     const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
@@ -287,7 +293,7 @@ function parseExplicitItems(goal: string) {
 
 function buildPlanWarnings(taskCount: number) {
   const warnings: string[] = [];
-  if (taskCount >= 10) {
+  if (taskCount >= largePlanTaskThreshold) {
     warnings.push(
       `This plan previews ${taskCount} tasks. Review the preview before creating tasks or split the goal into smaller documents.`
     );

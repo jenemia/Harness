@@ -81,10 +81,10 @@ pnpm cli templates:project-create --name "Frontend Team" --agentsFile ./project-
 pnpm cli agents:create --project <projectId> --name "Frontend Agent" --role programmer --persona "Build polished React UI" --capabilities frontend,react --allowedTools worktree,shell,tests --boundaries "Stay inside the task worktree" --maxParallel 2
 pnpm cli plans:preview --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
-pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
+pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential --allowLargePlan true
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
 pnpm cli documents:plan-preview --project <projectId> --document <documentId> --workflowTemplate <templateId>
-pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId>
+pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId> --allowLargePlan true
 pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
 pnpm cli global-memories:create --title "User preferences" --content "Prefer small focused commits"
 pnpm cli board:show --project <projectId>
@@ -148,7 +148,7 @@ Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` 
 
 ## PM Planning
 
-Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition before any tasks are written. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
+Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition before any tasks are written. Plans with 10 or more tasks require preview confirmation before creation; API and CLI callers pass `allowLargePlan` after reviewing the preview. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
 
 Select a workflow template to make PM planning follow a reusable role chain. Harness seeds `Plan, Build, Review` and `Build and Review` templates, and exposes `/api/workflow-templates` for custom templates.
 
