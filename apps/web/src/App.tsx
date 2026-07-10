@@ -1948,6 +1948,7 @@ function TaskDetailDrawer(props: {
         <TaskRuns
           projectId={props.overview.project.id}
           runs={runs}
+          events={events}
           runAction={props.runAction}
           onChanged={props.onChanged}
         />
@@ -2037,9 +2038,18 @@ function TaskComments(props: {
 function TaskRuns(props: {
   projectId: string;
   runs: Run[];
+  events: Event[];
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const runStartEvents = useMemo(() => {
+    return new Map(
+      props.events
+        .filter((event) => event.type === "run.started" && typeof event.metadata.runId === "string")
+        .map((event) => [event.metadata.runId as string, event])
+    );
+  }, [props.events]);
+
   async function createFollowUps(run: Run) {
     await props.runAction(async () => {
       await api(`/api/projects/${props.projectId}/runs/${run.id}/followups`, { method: "POST" });
@@ -2052,52 +2062,64 @@ function TaskRuns(props: {
       <h3>Runs</h3>
       <div className="run-list">
         {props.runs.length === 0 && <p className="drawer-copy">No runs yet.</p>}
-        {props.runs.map((run) => (
-          <div className="run-detail" key={run.id}>
-            <div className="run-detail-top">
-              <span className={`run-state ${run.status}`}>
-                {run.status === "completed" ? <CheckCircle2 size={14} /> : <Activity size={14} />}
-                {run.status}
-              </span>
-              <span>{formatDate(run.startedAt)}</span>
+        {props.runs.map((run) => {
+          const startMetadata = asRecord(runStartEvents.get(run.id)?.metadata);
+          const commandKey = typeof startMetadata.providerCommandKey === "string" ? startMetadata.providerCommandKey : "";
+          const commandSource = typeof startMetadata.providerCommandSource === "string" ? startMetadata.providerCommandSource : "";
+          const platformProvider = typeof startMetadata.platformProviderId === "string" ? startMetadata.platformProviderId : "";
+          return (
+            <div className="run-detail" key={run.id}>
+              <div className="run-detail-top">
+                <span className={`run-state ${run.status}`}>
+                  {run.status === "completed" ? <CheckCircle2 size={14} /> : <Activity size={14} />}
+                  {run.status}
+                </span>
+                <span>{formatDate(run.startedAt)}</span>
+              </div>
+              {run.snapshotRef && (
+                <div className="snapshot-line">
+                  <GitBranch size={14} />
+                  <span>snapshot {run.snapshotRef.slice(0, 12)}</span>
+                </div>
+              )}
+              {(run.modelBackend || run.providerId) && (
+                <div className="snapshot-line">
+                  <Bot size={14} />
+                  <span>{[run.modelBackend, run.providerId].filter(Boolean).join(" via ")}</span>
+                </div>
+              )}
+              {(commandKey || platformProvider) && (
+                <div className="snapshot-line">
+                  <Settings size={14} />
+                  <span>{[commandKey || commandSource, platformProvider].filter(Boolean).join(" on ")}</span>
+                </div>
+              )}
+              {run.commandPreview && (
+                <div className="snapshot-line">
+                  <Play size={14} />
+                  <span>{run.commandPreview}</span>
+                </div>
+              )}
+              {run.changedFiles.length > 0 && (
+                <div className="changed-file-list">
+                  {run.changedFiles.map((file) => (
+                    <span className="changed-file-row" key={file}>
+                      {file}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {run.output && <pre>{run.output}</pre>}
+              {run.error && <pre className="error-pre">{run.error}</pre>}
+              <div className="run-actions">
+                <button className="secondary-button" type="button" onClick={() => void createFollowUps(run)}>
+                  <Plus size={16} />
+                  <span>Follow-ups</span>
+                </button>
+              </div>
             </div>
-            {run.snapshotRef && (
-              <div className="snapshot-line">
-                <GitBranch size={14} />
-                <span>snapshot {run.snapshotRef.slice(0, 12)}</span>
-              </div>
-            )}
-            {(run.modelBackend || run.providerId) && (
-              <div className="snapshot-line">
-                <Bot size={14} />
-                <span>{[run.modelBackend, run.providerId].filter(Boolean).join(" via ")}</span>
-              </div>
-            )}
-            {run.commandPreview && (
-              <div className="snapshot-line">
-                <Play size={14} />
-                <span>{run.commandPreview}</span>
-              </div>
-            )}
-            {run.changedFiles.length > 0 && (
-              <div className="changed-file-list">
-                {run.changedFiles.map((file) => (
-                  <span className="changed-file-row" key={file}>
-                    {file}
-                  </span>
-                ))}
-              </div>
-            )}
-            {run.output && <pre>{run.output}</pre>}
-            {run.error && <pre className="error-pre">{run.error}</pre>}
-            <div className="run-actions">
-              <button className="secondary-button" type="button" onClick={() => void createFollowUps(run)}>
-                <Plus size={16} />
-                <span>Follow-ups</span>
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

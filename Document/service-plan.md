@@ -254,7 +254,7 @@ Initial implementation: tasks can optionally override the agent's model backend.
 
 Every agent action should be auditable. Users should be able to answer: who did what, when, why, and with which model.
 
-Initial implementation: every run stores the assigned agent, effective model backend, provider id, command preview when applicable, workspace path, branch when present, snapshot ref, changed files, output, error, and timestamps. Run and approval timeline events also record the selected provider command key and platform provider. Task detail and timeline views expose this audit trail.
+Initial implementation: every run stores the assigned agent, effective model backend, provider id, command preview when applicable, workspace path, branch when present, snapshot ref, changed files, output, error, and timestamps. Run and approval timeline events also record the selected provider command key and platform provider, and the task Runs panel surfaces that resolution beside the run. Task detail and timeline views expose this audit trail.
 
 Initial implementation: recent completed or failed runs for the same task are injected into the generated agent prompt and `HARNESS_TASK_RUN_SUMMARY`, so reviewer and handoff agents receive prior output, provider, timing, and changed-file context.
 

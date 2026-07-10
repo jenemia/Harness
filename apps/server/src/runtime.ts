@@ -782,6 +782,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       type: "run.started",
       message: `${agent.name} started work in ${workspace.worktreePath}.`,
       metadata: {
+        runId,
         branchName: workspace.branchName,
         worktreePath: workspace.worktreePath,
         snapshotRef,
