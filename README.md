@@ -9,7 +9,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Jira-like Kanban board.
 - Jira-like task detail drawer with task metadata, dependencies, runs, timeline, worktree, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.
-- Agent persona management.
+- Agent persona, backend, capability, and concurrency management.
 - Task assignment and execution.
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
 - Ready-task scheduler with agent `maxParallel` capacity checks.

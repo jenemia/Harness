@@ -10,6 +10,7 @@ import {
   globalHarnessDir,
   insertEvent,
   listProjectsWithSummaries,
+  mapAgent,
   mapDocument,
   now,
   openProjectDb,
@@ -122,6 +123,13 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && childPath === "agents") {
         const agent = createAgent(project, await readBody(req));
         sendJson(res, { agent, overview: getProjectOverview(project) }, 201);
+        return;
+      }
+
+      const agentActionMatch = childPath.match(/^agents\/([^/]+)$/);
+      if (agentActionMatch && req.method === "PATCH") {
+        const agent = updateAgent(project, agentActionMatch[1], await readBody(req));
+        sendJson(res, { agent, overview: getProjectOverview(project) });
         return;
       }
 
@@ -260,6 +268,57 @@ function createAgent(project: ProjectRecord, input: Partial<AgentRecord>) {
       type: "agent.created",
       message: `${agent.name} was created.`,
       metadata: { role: agent.role, modelBackend: agent.modelBackend }
+    });
+
+    return agent;
+  } finally {
+    db.close();
+  }
+}
+
+function updateAgent(project: ProjectRecord, agentId: string, input: Partial<AgentRecord>) {
+  const db = openProjectDb(project.path);
+  try {
+    const existing = db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId);
+    if (!existing) {
+      throw new Error("Agent not found.");
+    }
+
+    db.prepare(`
+      UPDATE agents
+      SET name = COALESCE(?, name),
+          role = COALESCE(?, role),
+          persona = COALESCE(?, persona),
+          model_backend = COALESCE(?, model_backend),
+          cli_command = ?,
+          capabilities = COALESCE(?, capabilities),
+          max_parallel = COALESCE(?, max_parallel),
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      input.name?.trim() || null,
+      input.role?.trim() || null,
+      input.persona?.trim() || null,
+      input.modelBackend?.trim() || null,
+      input.cliCommand === undefined ? (existing as { cli_command: string | null }).cli_command : input.cliCommand?.trim() || null,
+      Array.isArray(input.capabilities) ? JSON.stringify(input.capabilities) : null,
+      input.maxParallel ? Math.max(1, Number(input.maxParallel)) : null,
+      now(),
+      agentId
+    );
+
+    const agent = mapAgent(db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId));
+    insertEvent(db, {
+      taskId: null,
+      agentId,
+      type: "agent.updated",
+      message: `${agent.name} was updated.`,
+      metadata: {
+        role: agent.role,
+        modelBackend: agent.modelBackend,
+        capabilities: agent.capabilities,
+        maxParallel: agent.maxParallel
+      }
     });
 
     return agent;

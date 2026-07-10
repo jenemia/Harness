@@ -981,40 +981,69 @@ function AgentPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const [editingAgentId, setEditingAgentId] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState("worker");
   const [modelBackend, setModelBackend] = useState("mock");
   const [persona, setPersona] = useState("");
   const [cliCommand, setCliCommand] = useState("");
+  const [capabilitiesText, setCapabilitiesText] = useState("");
   const [maxParallel, setMaxParallel] = useState(1);
   const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
 
   useEffect(() => {
-    setModelBackend(props.overview.settings.defaultModelBackend);
-    setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
+    if (!editingAgentId) {
+      setModelBackend(props.overview.settings.defaultModelBackend);
+      setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
+    }
   }, [props.overview.settings.defaultModelBackend, props.overview.settings.defaultAgentMaxParallel]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
-      await api(`/api/projects/${props.overview.project.id}/agents`, {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          role,
-          persona,
-          cliCommand: cliCommand || null,
-          modelBackend,
-          maxParallel
-        })
-      });
-      setName("");
-      setPersona("");
-      setCliCommand("");
-      setModelBackend(props.overview.settings.defaultModelBackend);
-      setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
+      const payload = {
+        name,
+        role,
+        persona,
+        cliCommand: cliCommand || null,
+        modelBackend,
+        maxParallel,
+        capabilities: parseCapabilities(capabilitiesText)
+      };
+      await api(
+        editingAgentId
+          ? `/api/projects/${props.overview.project.id}/agents/${editingAgentId}`
+          : `/api/projects/${props.overview.project.id}/agents`,
+        {
+          method: editingAgentId ? "PATCH" : "POST",
+          body: JSON.stringify(payload)
+        }
+      );
+      resetForm();
       await props.onChanged();
     });
+  }
+
+  function editAgent(agent: Agent) {
+    setEditingAgentId(agent.id);
+    setName(agent.name);
+    setRole(agent.role);
+    setPersona(agent.persona);
+    setCliCommand(agent.cliCommand || "");
+    setCapabilitiesText(agent.capabilities.join(", "));
+    setModelBackend(agent.modelBackend);
+    setMaxParallel(agent.maxParallel);
+  }
+
+  function resetForm() {
+    setEditingAgentId("");
+    setName("");
+    setPersona("");
+    setCliCommand("");
+    setCapabilitiesText("");
+    setRole("worker");
+    setModelBackend(props.overview.settings.defaultModelBackend);
+    setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
   }
 
   return (
@@ -1030,11 +1059,16 @@ function AgentPanel(props: {
             <div>
               <strong>{agent.name}</strong>
               <span>{agent.role} · {agent.modelBackend} · max {agent.maxParallel}</span>
+              {agent.capabilities.length > 0 && <span>{agent.capabilities.join(", ")}</span>}
             </div>
+            <button className="mini-button" type="button" onClick={() => editAgent(agent)}>
+              Edit
+            </button>
           </div>
         ))}
       </div>
       <form className="stack-form" onSubmit={submit}>
+        {editingAgentId && <div className="form-group-title">Editing agent</div>}
         <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Agent name" />
         <select value={role} onChange={(event) => setRole(event.target.value)}>
           <option value="worker">worker</option>
@@ -1059,6 +1093,11 @@ function AgentPanel(props: {
         />
         <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder="Persona" />
         <input
+          value={capabilitiesText}
+          onChange={(event) => setCapabilitiesText(event.target.value)}
+          placeholder="Capabilities, comma separated"
+        />
+        <input
           value={cliCommand}
           onChange={(event) => setCliCommand(event.target.value)}
           placeholder={selectedProvider?.commandExample || "CLI command"}
@@ -1068,13 +1107,26 @@ function AgentPanel(props: {
             {selectedProvider.description}
           </p>
         )}
+        {editingAgentId && (
+          <button className="secondary-button" type="button" onClick={resetForm}>
+            <X size={16} />
+            <span>Cancel</span>
+          </button>
+        )}
         <button className="secondary-button" type="submit">
           <Plus size={16} />
-          <span>Agent</span>
+          <span>{editingAgentId ? "Save agent" : "Agent"}</span>
         </button>
       </form>
     </section>
   );
+}
+
+function parseCapabilities(value: string) {
+  return value
+    .split(",")
+    .map((capability) => capability.trim())
+    .filter(Boolean);
 }
 
 function SettingsPanel(props: {

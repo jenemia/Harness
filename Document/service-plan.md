@@ -480,6 +480,8 @@ The agent directory should include:
 - Recent activity
 - Performance metrics
 
+Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, and per-agent parallelism.
+
 ## 9. MVP Scope Proposal
 
 The first build should prove the local project, Kanban model, and real agent execution loop before complex autonomy.
@@ -488,7 +490,7 @@ MVP features:
 
 - Create/open local project folders.
 - Show project-level task, blocker, approval, run, and merge summaries in the project list.
-- Create agents with personas.
+- Create and edit agents with personas, capabilities, model backends, CLI overrides, and concurrency limits.
 - Create/edit Kanban tasks.
 - Create a PM plan from a user goal and turn it into assigned Kanban tasks.
 - Assign a task to an agent.

@@ -439,7 +439,7 @@ h3 {
 
 .agent-row {
   display: grid;
-  grid-template-columns: 12px 1fr;
+  grid-template-columns: 12px 1fr auto;
   gap: 8px;
   align-items: center;
   min-height: 38px;
@@ -552,6 +552,16 @@ textarea {
   padding: 0;
   background: #f1f2f4;
   color: #172b4d;
+}
+
+.mini-button {
+  border: 0;
+  border-radius: 6px;
+  background: #f1f2f4;
+  color: #172b4d;
+  font-size: 12px;
+  min-height: 28px;
+  padding: 0 8px;
 }
 
 .compact-row {
