@@ -12,6 +12,7 @@ import {
   globalHarnessDir,
   insertEvent,
   listAgentTemplates,
+  listProjects,
   listProjectsWithSummaries,
   listWorkflowTemplates,
   mapAgent,
@@ -32,6 +33,7 @@ import {
   approveMerge,
   decideApproval,
   listRuntimeProviders,
+  recoverInterruptedRuns,
   requestMergeChanges,
   startReadyTasks,
   startTask,
@@ -296,9 +298,30 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+recoverRegisteredProjects();
+
 server.listen(port, () => {
   console.log(`Harness server listening on http://localhost:${port}`);
 });
+
+function recoverRegisteredProjects() {
+  const results = listProjects().map((project) => {
+    try {
+      return recoverInterruptedRuns(project);
+    } catch (error) {
+      console.error(`Failed to recover project ${project.name}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
+    }
+  }).filter(Boolean);
+  const interruptedRuns = results.reduce((count, result) => count + (result?.interruptedRuns.length || 0), 0);
+  const resetTasks = results.reduce((count, result) => count + (result?.resetTasks.length || 0), 0);
+  const resetAgents = results.reduce((count, result) => count + (result?.resetAgents.length || 0), 0);
+  if (interruptedRuns || resetTasks || resetAgents) {
+    console.log(
+      `Recovered ${interruptedRuns} interrupted run(s), ${resetTasks} task(s), and ${resetAgents} agent(s).`
+    );
+  }
+}
 
 function createAgent(project: ProjectRecord, input: Partial<AgentRecord>) {
   if (!input.name?.trim()) {

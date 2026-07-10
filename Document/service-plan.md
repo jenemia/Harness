@@ -431,6 +431,8 @@ Candidate paths:
 - Configurable per-agent and per-project concurrency limits
 - Persistent run state so interrupted work can be resumed or audited
 
+Initial implementation: when the server starts, Harness scans registered projects for stale `running` runs, closes them as failed interruption records, resets affected in-progress tasks to `Selected` with an audit note, and marks stale busy agents idle so work can be retried.
+
 ### Packaging
 
 - Local web app for MVP validation

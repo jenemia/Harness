@@ -6,13 +6,14 @@ import {
   mapAgent,
   mapApproval,
   mapMemory,
+  mapRun,
   mapTask,
   now,
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
 import { createDefaultProviders } from "./providers.js";
-import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, TaskRecord } from "./types.js";
+import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
 const reservedAgentRuns = new Map<string, number>();
@@ -28,6 +29,106 @@ export function listRuntimeProviders() {
     },
     llmProviders: providers.llmDefinitions()
   };
+}
+
+export type RecoveryResult = {
+  projectId: string;
+  interruptedRuns: string[];
+  resetTasks: string[];
+  resetAgents: string[];
+};
+
+export function recoverInterruptedRuns(project: ProjectRecord): RecoveryResult {
+  const db = openProjectDb(project.path);
+  try {
+    const timestamp = now();
+    const runningRuns = db.prepare("SELECT * FROM runs WHERE status = ?").all("running").map(mapRun);
+    const interruptedTaskIds = new Set(runningRuns.map((run) => run.taskId));
+
+    for (const run of runningRuns) {
+      const message = "Run was interrupted before the Harness server restarted.";
+      db.prepare("UPDATE runs SET status = ?, error = ?, completed_at = ? WHERE id = ?").run(
+        "failed",
+        message,
+        timestamp,
+        run.id
+      );
+      insertEvent(db, {
+        taskId: run.taskId,
+        agentId: run.agentId,
+        type: "run.interrupted",
+        message,
+        metadata: {
+          runId: run.id,
+          startedAt: run.startedAt,
+          branchName: run.branchName,
+          worktreePath: run.worktreePath,
+          snapshotRef: run.snapshotRef
+        }
+      });
+    }
+
+    const activeTasks = db
+      .prepare("SELECT * FROM tasks WHERE status IN (?, ?)")
+      .all("In Progress", "In Review")
+      .map(mapTask);
+    const resetTasks: string[] = [];
+    for (const task of activeTasks) {
+      const reason = interruptedTaskIds.has(task.id)
+        ? "Previous run was interrupted by a Harness restart. Review the latest failed run before retrying."
+        : "Task was left active without a running Harness process. Review its history before retrying.";
+      db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+        "Selected",
+        reason,
+        timestamp,
+        task.id
+      );
+      resetTasks.push(task.id);
+      insertEvent(db, {
+        taskId: task.id,
+        agentId: task.assigneeAgentId,
+        type: "task.recovered",
+        message: "Harness reset this interrupted task so it can be run again.",
+        metadata: { previousStatus: task.status, interruptedRun: interruptedTaskIds.has(task.id) }
+      });
+    }
+
+    const busyAgents = db
+      .prepare("SELECT * FROM agents WHERE status = ? OR current_task_id IS NOT NULL")
+      .all("busy")
+      .map(mapAgent);
+    if (busyAgents.length > 0) {
+      db.prepare("UPDATE agents SET status = ?, current_task_id = ?, updated_at = ? WHERE status = ? OR current_task_id IS NOT NULL").run(
+        "idle",
+        null,
+        timestamp,
+        "busy"
+      );
+    }
+
+    if (runningRuns.length > 0 || resetTasks.length > 0 || busyAgents.length > 0) {
+      insertEvent(db, {
+        taskId: null,
+        agentId: null,
+        type: "runtime.recovered",
+        message: `Recovered ${runningRuns.length} interrupted run(s), ${resetTasks.length} task(s), and ${busyAgents.length} agent(s).`,
+        metadata: {
+          interruptedRunIds: runningRuns.map((run: RunRecord) => run.id),
+          resetTaskIds: resetTasks,
+          resetAgentIds: busyAgents.map((agent) => agent.id)
+        }
+      });
+    }
+
+    return {
+      projectId: project.id,
+      interruptedRuns: runningRuns.map((run) => run.id),
+      resetTasks,
+      resetAgents: busyAgents.map((agent) => agent.id)
+    };
+  } finally {
+    db.close();
+  }
 }
 
 export async function startTask(project: ProjectRecord, taskId: string) {

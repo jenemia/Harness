@@ -17,6 +17,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Ready-task scheduler with agent `maxParallel` capacity checks.
 - Git worktree per executable task.
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
+- Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Task-level model backend overrides for routing specific work to a different provider.
@@ -69,6 +70,8 @@ Select a workflow template to make PM planning follow a reusable role chain. Har
 Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start ready tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.
 
 When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
+
+When the server starts, Harness scans registered projects for runs that were left `running` by a previous process. Those runs are closed as failed with an interruption event, affected tasks return to `Selected`, and busy agents are reset to idle.
 
 ## Task Tracking
 
