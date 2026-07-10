@@ -459,11 +459,12 @@ The task detail view should include:
 - Subtasks
 - Activity timeline
 - Agent execution logs
+- Handoff history
 - Linked files
 - Comments
 - Human approval prompts
 
-Initial implementation: board cards can open a task detail drawer showing metadata, dependencies, branch/worktree, merge state, task-scoped runs, run output/errors, and an activity timeline.
+Initial implementation: board cards can open a task detail drawer showing metadata, dependencies, branch/worktree, merge state, task-scoped runs, run output/errors, handoff history, and an activity timeline.
 
 ### Agent Directory
 

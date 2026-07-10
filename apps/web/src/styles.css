@@ -769,6 +769,7 @@ textarea {
 
 .path-list,
 .dependency-list,
+.handoff-list,
 .run-list,
 .timeline-list {
   display: flex;
@@ -779,6 +780,7 @@ textarea {
 .path-line-row,
 .drawer-warning,
 .dependency-row,
+.handoff-row,
 .run-detail-top,
 .timeline-row {
   align-items: flex-start;
@@ -816,6 +818,27 @@ textarea {
 .dependency-row span,
 .dependency-row b {
   font-size: 12px;
+}
+
+.handoff-row {
+  align-items: center;
+  background: #f7f8f9;
+  border-radius: 6px;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 8px 10px;
+}
+
+.handoff-row strong,
+.handoff-row span,
+.handoff-row small {
+  display: block;
+  font-size: 12px;
+}
+
+.handoff-row span,
+.handoff-row small {
+  color: #626f86;
 }
 
 .run-detail {

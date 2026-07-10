@@ -9,6 +9,7 @@ import type {
   DocumentRecord,
   EventRecord,
   GlobalSettings,
+  HandoffRecord,
   ProjectOverview,
   ProjectRecord,
   ProjectSettings,
@@ -433,6 +434,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       tasks: db.prepare("SELECT * FROM tasks ORDER BY created_at ASC").all().map(mapTask),
       documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
+      handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
       events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
       runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun)
     };
@@ -616,6 +618,18 @@ export function mapApproval(row: unknown): ApprovalRecord {
     commandPreview: r.command_preview ? String(r.command_preview) : null,
     createdAt: String(r.created_at),
     decidedAt: r.decided_at ? String(r.decided_at) : null
+  };
+}
+
+export function mapHandoff(row: unknown): HandoffRecord {
+  const r = row as Record<string, string | null>;
+  return {
+    id: String(r.id),
+    taskId: String(r.task_id),
+    fromAgentId: r.from_agent_id ? String(r.from_agent_id) : null,
+    toAgentId: r.to_agent_id ? String(r.to_agent_id) : null,
+    reason: String(r.reason),
+    createdAt: String(r.created_at)
   };
 }
 

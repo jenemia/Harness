@@ -88,6 +88,15 @@ export type Approval = {
   decidedAt: string | null;
 };
 
+export type Handoff = {
+  id: string;
+  taskId: string;
+  fromAgentId: string | null;
+  toAgentId: string | null;
+  reason: string;
+  createdAt: string;
+};
+
 export type Event = {
   id: string;
   taskId: string | null;
@@ -118,6 +127,7 @@ export type Overview = {
   tasks: Task[];
   documents: DocumentRecord[];
   approvals: Approval[];
+  handoffs: Handoff[];
   events: Event[];
   runs: Run[];
 };

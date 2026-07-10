@@ -90,6 +90,15 @@ export type ApprovalRecord = {
   decidedAt: string | null;
 };
 
+export type HandoffRecord = {
+  id: string;
+  taskId: string;
+  fromAgentId: string | null;
+  toAgentId: string | null;
+  reason: string;
+  createdAt: string;
+};
+
 export type EventRecord = {
   id: string;
   taskId: string | null;
@@ -120,6 +129,7 @@ export type ProjectOverview = {
   tasks: TaskRecord[];
   documents: DocumentRecord[];
   approvals: ApprovalRecord[];
+  handoffs: HandoffRecord[];
   events: EventRecord[];
   runs: RunRecord[];
 };

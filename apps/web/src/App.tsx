@@ -19,7 +19,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, Approval, DocumentRecord, Event, Overview, PlanResult, Project, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
+import type { Agent, Approval, DocumentRecord, Event, Handoff, Overview, PlanResult, Project, ProjectSettings, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -736,6 +736,7 @@ function TaskDetailDrawer(props: {
 }) {
   const runs = props.overview.runs.filter((run) => run.taskId === props.task.id);
   const events = props.overview.events.filter((event) => event.taskId === props.task.id);
+  const handoffs = props.overview.handoffs.filter((handoff) => handoff.taskId === props.task.id);
   const dependencies = props.task.dependencyTaskIds
     .map((id) => props.overview.tasks.find((task) => task.id === id))
     .filter(Boolean) as Task[];
@@ -837,6 +838,7 @@ function TaskDetailDrawer(props: {
         )}
 
         <TaskRuns runs={runs} />
+        <TaskHandoffs handoffs={handoffs} agents={props.overview.agents} />
         <TaskTimeline events={events} runs={runs} />
       </aside>
     </div>
@@ -880,6 +882,32 @@ function TaskRuns({ runs }: { runs: Run[] }) {
             {run.error && <pre className="error-pre">{run.error}</pre>}
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function TaskHandoffs({ handoffs, agents }: { handoffs: Handoff[]; agents: Agent[] }) {
+  const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+
+  return (
+    <section className="drawer-section">
+      <h3>Handoffs</h3>
+      <div className="handoff-list">
+        {handoffs.length === 0 && <p className="drawer-copy">No handoffs yet.</p>}
+        {handoffs.map((handoff) => {
+          const from = handoff.fromAgentId ? agentsById.get(handoff.fromAgentId) : null;
+          const to = handoff.toAgentId ? agentsById.get(handoff.toAgentId) : null;
+          return (
+            <div className="handoff-row" key={handoff.id}>
+              <div>
+                <strong>{from?.name || "PM Agent"} to {to?.name || "Unassigned"}</strong>
+                <span>{handoff.reason}</span>
+              </div>
+              <small>{formatDate(handoff.createdAt)}</small>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
