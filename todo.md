@@ -321,29 +321,29 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ## 8. README를 협업 시나리오와 설치 과정 중심으로 개편
 
-- [ ] 첫 문단에서 Harness가 해결하는 문제와 대상 사용자를 설명한다.
-- [ ] 긴 MVP 기능 목록보다 `사람과 에이전트가 하나의 카드에서 협업하는 방식`을 먼저 보여준다.
-- [ ] 카드 초안 작성 → 실시간 리뷰 → 내용 반영 → 실행 → 질문 대기 → 응답과 재개 → 검토와 병합 시나리오를 작성한다.
-- [ ] 주요 화면 이미지 또는 짧은 데모를 추가한다.
-- [ ] 제품 철학, 대표 시나리오, 핵심 개념, 아키텍처, 시작하기, 상세 기능 순으로 문서를 재구성한다.
-- [ ] local-first, 프로젝트 로컬 데이터, provider 확장성, Git worktree 격리라는 차별점을 명확히 설명한다.
-- [ ] 현재 지원 범위와 아직 구현되지 않은 기능을 구분한다.
-- [ ] 기존 CLI와 상세 설정 예시는 별도 섹션 또는 문서로 이동해 첫 사용 흐름을 단순화한다.
+- [x] 첫 문단에서 Harness가 해결하는 문제와 대상 사용자를 설명한다.
+- [x] 긴 MVP 기능 목록보다 `사람과 에이전트가 하나의 카드에서 협업하는 방식`을 먼저 보여준다.
+- [x] 카드 초안 작성 → 실시간 리뷰 → 내용 반영 → 실행 → 질문 대기 → 응답과 재개 → 검토와 병합 시나리오를 작성한다.
+- [x] 주요 화면 이미지 또는 짧은 데모를 추가한다.
+- [x] 제품 철학, 대표 시나리오, 핵심 개념, 아키텍처, 시작하기, 상세 기능 순으로 문서를 재구성한다.
+- [x] local-first, 프로젝트 로컬 데이터, provider 확장성, Git worktree 격리라는 차별점을 명확히 설명한다.
+- [x] 현재 지원 범위와 아직 구현되지 않은 기능을 구분한다.
+- [x] 기존 CLI와 상세 설정 예시는 별도 섹션 또는 문서로 이동해 첫 사용 흐름을 단순화한다.
 
 ### 설치 및 연결 안내
 
-- [ ] Node.js, pnpm, Git과 최소 한 개의 LLM CLI 등 필수 prerequisite와 지원 version을 명시한다.
-- [ ] source 설치를 `git clone` → `pnpm install` → 실제 desktop development command 순서로 안내하고 web-only 개발 command와 구분한다.
-- [ ] desktop build·설치·실행 command를 기본 경로로 안내하고 `pnpm start` 기반 HTTP server는 선택적 headless 경로로 구분한다.
-- [ ] macOS, Windows, Linux별 폴더 선택기와 필요한 system dependency 차이를 설명한다.
-- [ ] Codex, Claude Code, Gemini, Ollama와 Cursor CLI의 설치·로그인·provider 설정 예시를 제공한다.
-- [ ] Codex, Claude와 Cursor는 Harness에 token을 입력하는 대신 각 CLI의 기존 login session을 재사용한다는 점을 안내한다.
-- [ ] 직접 provider 인증이 필요한 예외 기능은 OAuth와 OS keychain을 사용하고 project 파일에는 credential을 저장하지 않는다고 설명한다.
-- [ ] provider command가 OS별 key에서 어떻게 선택되는지 최소 예시와 확인 command를 제공한다.
-- [ ] Cursor와 다른 client에 Harness MCP server를 등록하는 설정 예시를 제공한다.
-- [ ] 첫 project 등록, Git 초기화, 첫 agent 생성, 첫 task 실행과 승인까지의 quick start를 작성한다.
-- [ ] 개발 server 또는 선택적 HTTP transport의 port 충돌, provider executable 미탐지, 로그인 실패, Git 초기 commit 부재와 MCP 연결 실패 해결법을 추가한다.
-- [ ] 아직 제공되지 않는 desktop 설치 방법은 지원되는 것처럼 작성하지 않고 source/local server 설치와 구분한다.
+- [x] Node.js, pnpm, Git과 최소 한 개의 LLM CLI 등 필수 prerequisite와 지원 version을 명시한다.
+- [x] source 설치를 `git clone` → `pnpm install` → 실제 desktop development command 순서로 안내하고 web-only 개발 command와 구분한다.
+- [x] desktop build·설치·실행 command를 기본 경로로 안내하고 `pnpm start` 기반 HTTP server는 선택적 headless 경로로 구분한다.
+- [x] macOS, Windows, Linux별 폴더 선택기와 필요한 system dependency 차이를 설명한다.
+- [x] Codex, Claude Code, Gemini, Ollama와 Cursor CLI의 설치·로그인·provider 설정 예시를 제공한다.
+- [x] Codex, Claude와 Cursor는 Harness에 token을 입력하는 대신 각 CLI의 기존 login session을 재사용한다는 점을 안내한다.
+- [x] 직접 provider 인증이 필요한 예외 기능은 OAuth와 OS keychain을 사용하고 project 파일에는 credential을 저장하지 않는다고 설명한다.
+- [x] provider command가 OS별 key에서 어떻게 선택되는지 최소 예시와 확인 command를 제공한다.
+- [x] Cursor와 다른 client에 Harness MCP server를 등록하는 설정 예시를 제공한다.
+- [x] 첫 project 등록, Git 초기화, 첫 agent 생성, 첫 task 실행과 승인까지의 quick start를 작성한다.
+- [x] 개발 server 또는 선택적 HTTP transport의 port 충돌, provider executable 미탐지, 로그인 실패, Git 초기 commit 부재와 MCP 연결 실패 해결법을 추가한다.
+- [x] 아직 제공되지 않는 desktop 설치 방법은 지원되는 것처럼 작성하지 않고 source/local server 설치와 구분한다.
 
 ### README 완료 조건
 

@@ -1,253 +1,175 @@
 # Harness
 
-Harness is a local-first multi-agent Kanban execution framework with an Electron desktop shell and an optional web/headless transport.
+Harness is a local-first desktop workspace for people who want several coding agents to collaborate on one accountable task card—not disappear into unrelated chat sessions. The board, agent definitions, run history, approvals, reviews, and Git worktrees stay with the project under `.harness/`.
 
-## MVP
+## One card, one collaborative thread
 
-- Local project registry with project-local `.harness/` storage.
-- Project root scanning for importing existing Harness folders and Git repositories.
-- Native OS folder selection for adding, scanning, and re-linking project folders without typing paths.
-- Git initialization flow for plain folders that need a baseline commit before agent worktrees can run.
-- Project sidebar summaries for task, backlog, selected, blocker, failed run, approval, running, follow-up, and merge counts across local folders.
-- Project health report for blockers, approvals, merges, failed runs, follow-up backlog items, scheduler readiness gaps, provider command setup gaps, and next recommended action.
-- Attention panel for pending approvals, merges, failed runs, blocked tasks, and follow-up backlog items.
-- Project templates for seeding new folders with a useful starter agent team.
-- Jira-like Kanban board and backlog queue with task search, assignee filtering, label filtering, ready selection, and board-order controls.
-- Single prompt-based work creation modal with plain text, Markdown lists, and structured Markdown ticket support.
-- Jira-like task detail drawer with editable metadata, labels, linked files, parent/subtask links, dependencies, runs, changed files, handoff decision badges, timeline, workspace, and merge state.
-- Project-local Documents panel for specs, notes, and planning material.
-- Project-local and global Memory panel for conventions and preferences injected into agent prompts.
-- Agent persona, backend, capability, allowed tool, boundary, template, current work, run metrics, and concurrency management.
-- Task assignment and execution.
-- PM planning endpoint that decomposes a goal into assigned Kanban tasks.
-- Task-level decomposition for turning a parent task into parallel or sequential subtasks.
-- Workflow templates for reusable PM planning role chains.
-- Selected-task scheduler with agent `maxParallel` capacity checks; Backlog stays as a planning queue until promoted.
-- Scheduler result feedback showing started and skipped task counts after manual or PM-triggered scheduling.
-- Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
-- Git worktree per executable task.
-- Harness workspace mode for non-code tasks that do not need Git worktrees.
-- Automatic workspace mode selection for common code, docs, planning, and research task signals.
-- Automatic PM-driven handoff with project-level handoff rules, dynamic fallback routing, and approval gates for risky handoffs, LLM CLI command execution, and merge.
-- PM completion evaluation events before automatic handoffs or Done transitions.
-- Follow-up ticket creation from PM review, task drawer, API, or CLI when agent output contains next-step or TODO signals, with duplicate child follow-ups skipped.
-- Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
-- Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
-- Configurable run timeout for command-backed providers.
-- Provider-based platform, workspace, planning, approval, policy, and LLM adapters.
-- Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
-- Provider catalog exposes OS/model-specific command key precedence and examples for configuring CLI backends, with Settings shortcuts for inserting matching command keys.
-- Task-level model backend overrides for routing specific work to a different provider.
-- Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, large plan confirmation threshold, and command approval policy.
+1. Write a rough card in the desktop Draft modal.
+2. Planning and edge-case reviewers comment live; accept selected suggestions or reply with constraints.
+3. Approve the proposed revision, then assign or schedule the resulting task.
+4. Harness runs the selected CLI provider inside the task workspace and streams normalized events.
+5. Questions, permission requests, and command approvals pause the run without losing context.
+6. Your response creates a linked resumed run; the completion report shows evidence and a snapshot-pinned file diff.
+7. Review files and inline comments, create focused follow-ups, then approve the Git merge.
 
-LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, `HARNESS_TASK_COMMENTS`, `HARNESS_TASK_RUN_SUMMARY`, `HARNESS_WORKSPACE_KIND`, `HARNESS_WORKSPACE_PATH`, and the backward-compatible `HARNESS_WORKTREE_PATH`.
+```mermaid
+sequenceDiagram
+  participant H as Human
+  participant B as Harness card
+  participant A as Agent team
+  H->>B: Draft a task
+  B->>A: Live planning and edge-case review
+  A-->>H: Suggestions and questions
+  H->>B: Apply selected feedback and start
+  B->>A: Isolated provider run
+  A-->>B: Question or approval request
+  H->>B: Respond and resume
+  A-->>B: Completion evidence and changes
+  H->>B: Review diff and approve merge
+```
 
-Codex, Claude Code, and Cursor use their own existing CLI login sessions; Harness does not ask for or store their API tokens. Check installation and login state with `pnpm cli providers:list`. When a CLI is missing or logged out, the catalog reports the login command to run in a terminal. Literal credentials in provider command settings are rejected, and provider output is redacted before it reaches run history or events.
+The same validation, scheduler, approval, workspace-protection, interaction, and audit services back Electron IPC, the optional HTTP transport, the CLI, and Harness MCP.
 
-Global memory is written to `.harness/global-memory.md` and exposed as `HARNESS_GLOBAL_MEMORY` and `HARNESS_GLOBAL_MEMORY_FILE`. Project memory is written to `.harness/project-memory.md` and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
+## Why it is different
 
-Shell-backed providers require matching agent tool permission before execution. Agents need `shell`, `llm-cli`, the provider kind, or the provider id in `allowedTools` before a command-backed LLM provider can run.
+- Local-first: project state lives in `<project>/.harness`; global preferences live under `HARNESS_HOME` or the user data directory.
+- Accountable collaboration: drafts, handoffs, questions, approvals, retries, review comments, and merges remain attached to the card.
+- Provider choice: mock, shell, Codex CLI, Claude Code, Gemini CLI, Ollama, Cursor Agent CLI, and custom wrappers share one run contract.
+- Workspace isolation: code tasks use Git worktrees, canonical-path checks, snapshots, and a pre-push guard.
+- No copied provider secrets: Codex, Claude, and Cursor reuse their own CLI login sessions.
+- External control without policy bypass: scoped stdio MCP tools call the same application service.
 
-Shell-backed providers also require human approval before their configured command runs when the current project has command approvals enabled. Pending requests appear in the Approvals panel and can be approved or rejected without losing task context.
+## Current support
 
-Risky shell commands require approval even when project command approvals are otherwise disabled. The local policy provider currently flags recursive forced deletes, hard Git resets, Git clean, Git push, sudo, package install/update commands, and remote scripts piped into a shell.
+Supported now: source-run Electron desktop, browser/headless development, macOS/Windows/Linux folder adapters, project/task/agent management, live draft review, provider streaming, pause/resume interactions, completion reports and diffs, scoped MCP, and optional OTLP tracing.
 
-Completed task worktree changes create merge approval requests. Approving the request merges the task branch into the main checkout; rejecting it sends the task back to `Selected` with changes requested.
+Not currently shipped: signed desktop installers, auto-update, hosted multi-user sync, mobile clients, or a built-in remote LLM credential vault. Cursor desktop's `cursor` launcher is not the headless `cursor-agent` provider executable.
 
-If a merge hits conflicts, Harness leaves the conflicted merge in the main checkout, marks the task as `conflict`, and keeps the branch/worktree attached to the task. Resolve and stage the conflicted files locally, then use `tasks:resolve-merge` or the task's `Resolve merge` action to finalize the merge commit. Requesting changes from a conflicted task aborts the in-progress merge and returns the task to `Selected`.
+## Prerequisites
 
-## Development
+- Node.js 22 or newer (Node's built-in SQLite support is required).
+- pnpm 11 (`corepack enable` is sufficient when Corepack is available).
+- Git 2.30 or newer, with `user.name` and `user.email` configured for worktree commits.
+- At least one provider: the built-in mock provider needs no install; real work needs one supported CLI or a configured shell command.
 
-Run the desktop shell with its packaged React assets and typed IPC application service:
+Harness is tested by this repository's CI-style commands on Node 24, pnpm 11, and Git 2.50. Earlier compatible releases may work but are not the verified baseline.
+
+## Install from source and open the desktop
+
+Signed installers are not available yet. Use the source workflow:
 
 ```bash
+git clone https://github.com/jenemia/Harness.git
+cd Harness
+corepack enable
 pnpm install
 pnpm dev:desktop
 ```
 
-The desktop path does not start an HTTP server. Its secure preload exposes only versioned Harness commands and provider-event subscriptions; Node integration remains disabled in the renderer.
+`pnpm dev:desktop` builds the packages and opens Electron with packaged React assets. It does not start a persistent HTTP listener.
 
-For web-only development:
-
-```bash
-pnpm install
-pnpm dev
-```
-
-The server runs on `http://localhost:4000`.
-The web app runs on `http://localhost:5173`.
-If port 4000 is already busy, start the server with another `PORT` and run the web app with `VITE_API_PROXY_TARGET=http://localhost:<port>`.
-
-For a single local server after building:
+To build first and launch the same local desktop path:
 
 ```bash
 pnpm build
-pnpm start
+pnpm --filter @harness/desktop start
 ```
 
-`pnpm start` serves the built web app and API from the server on `http://localhost:4000`. Set `PORT=<port>` to use another port, or `HARNESS_WEB_DIST=<folder>` to serve a custom web build.
-
-## CLI
-
-The server package also exposes a local JSON CLI for headless automation:
+Web-only development is separate:
 
 ```bash
-pnpm cli projects:list
-pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
-pnpm cli projects:import-root --root ~/Documents --includePlainFolders false
-pnpm cli projects:init-git --project <projectId>
-pnpm cli projects:update --project <projectId> --path ./moved-project --name "Moved Project"
-pnpm cli projects:unregister --project <projectId>
-pnpm cli projects:report --project <projectId>
-pnpm cli settings:update --defaultModelBackend codex --largePlanTaskThreshold 12 --providerCommands '{"node-darwin.codex":"codex exec \"$HARNESS_PROMPT_FILE\"","codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
-pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --largePlanTaskThreshold 8 --requireCommandApproval true
+pnpm dev
+```
+
+This starts the optional API on `http://localhost:4000` and Vite on `http://localhost:5173`. A built, single-process headless/web deployment uses `pnpm build && pnpm start`.
+
+## First project smoke flow
+
+Run the automated source smoke before configuring a paid provider:
+
+```bash
+pnpm smoke:quick-start
+```
+
+It uses a temporary `HARNESS_HOME` and project, registers the folder, creates the baseline Git commit, creates a shell-backed agent and selected task, verifies a command approval is raised, approves it, executes the task, and checks the completed run. It deletes all temporary data afterward.
+
+In the desktop, the equivalent path is Projects → Add folder → Initialize Git (for a plain folder) → Agents → New Agent → New Work → Selected → Start → Attention/Approvals.
+
+## Provider setup and login
+
+Harness stores provider command configuration, never provider login credentials. Verify every configured backend with:
+
+```bash
 pnpm cli providers:list
-pnpm cli templates:projects
-pnpm cli templates:workflows
-pnpm cli templates:agent-create --name "Docs Agent" --role writer --persona "Write concise project docs" --capabilities docs,writing --allowedTools documents,memory --boundaries "Use only validated project facts"
-pnpm cli templates:workflow-create --name "Build, Review, Docs" --stepsFile ./workflow.steps.json
-pnpm cli templates:project-create --name "Frontend Team" --agentsFile ./project-template-agents.json
-pnpm cli agents:create --project <projectId> --name "Frontend Agent" --role programmer --persona "Build polished React UI" --capabilities frontend,react --allowedTools worktree,shell,tests --boundaries "Stay inside the task worktree" --maxParallel 2
-pnpm cli plans:preview --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
-pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
-pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential --allowLargePlan true
-pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
-pnpm cli documents:create --project <projectId> --title "Implementation Tickets" --contentFile ./Document/implementation-tickets.md
-pnpm cli documents:plan-preview --project <projectId> --document <documentId> --workflowTemplate <templateId>
-pnpm cli documents:plan --project <projectId> --document <documentId> --workflowTemplate <templateId> --allowLargePlan true
-pnpm cli memories:create --project <projectId> --title "Coding conventions" --contentFile ./CONVENTIONS.md
-pnpm cli global-memories:create --title "User preferences" --content "Prefer small focused commits"
-pnpm cli board:show --project <projectId>
-pnpm cli runs:list --project <projectId> --status completed,failed
-pnpm cli runs:show --project <projectId> --run <runId>
-pnpm cli runs:followups --project <projectId> --run <runId>
-pnpm cli tasks:list --project <projectId> --status Selected,Blocked
-pnpm cli tasks:show --project <projectId> --task <taskId>
-pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
-pnpm cli tasks:create --project <projectId> --title "Draft release notes" --status Selected --workspaceMode harness
-pnpm cli tasks:create --project <projectId> --title "Research onboarding notes" --status Selected --workspaceMode auto
-pnpm cli tasks:create --project <projectId> --title "Review API shape" --linkedFiles apps/server/src/index.ts,apps/web/src/api.ts
-pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
-pnpm cli tasks:update --project <projectId> --task <taskId> --waivedDependencies <dependencyTaskId>
-pnpm cli tasks:decompose --project <projectId> --task <taskId> --mode sequential --itemsFile ./subtasks.txt
-pnpm cli tasks:move --project <projectId> --task <taskId> --direction up
-pnpm cli tasks:pause --project <projectId> --task <taskId> --reason "Waiting on product decision"
-pnpm cli tasks:resume --project <projectId> --task <taskId>
-pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
-pnpm cli approvals:list --project <projectId> --status pending --kind merge
-pnpm cli approvals:approve --project <projectId> --approval <approvalId>
-pnpm cli tasks:merge --project <projectId> --task <taskId>
-pnpm cli tasks:resolve-merge --project <projectId> --task <taskId>
-pnpm cli tasks:request-changes --project <projectId> --task <taskId> --reason "Needs another pass"
-pnpm cli tasks:schedule --project <projectId>
 ```
 
-The CLI uses the same global/project-local storage as the web app and honors `HARNESS_HOME`.
+| Backend | Install/login owned by | Harness checks | Typical command |
+| --- | --- | --- | --- |
+| Codex CLI | Codex CLI | `codex --version`, `codex login status` | `codex exec "$HARNESS_PROMPT_FILE"` |
+| Claude Code | Claude CLI | `claude --version`, `claude auth status` | `claude -p "$(cat "$HARNESS_PROMPT_FILE")"` |
+| Gemini CLI | Gemini CLI | executable/configured command | `gemini -p "$(cat "$HARNESS_PROMPT_FILE")"` |
+| Ollama | local Ollama service | executable/configured command | `ollama run llama3.1 "$(cat "$HARNESS_PROMPT_FILE")"` |
+| Cursor Agent | Cursor Agent CLI | `cursor-agent --version`, `cursor-agent status` | `cursor-agent -p --force --output-format stream-json` |
 
-## Settings
+Official install entry points: [Codex CLI](https://github.com/openai/codex), [Claude Code](https://docs.anthropic.com/en/docs/claude-code/getting-started), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Ollama](https://ollama.com/download), and [Cursor Agent CLI](https://docs.cursor.com/en/cli/installation). Follow each provider's current installer and authentication flow; Harness only diagnoses the resulting executable/session.
 
-Use the Settings panel, `/api/settings`, or `settings:get` and `settings:update` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.
+Run `codex login`, `claude login`, or `cursor-agent login` in a terminal when its status check fails, then restart Harness so Electron receives the updated `PATH`. Gemini and Ollama authentication/model setup remains owned by those tools.
 
-Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel, `PATCH /api/projects/:projectId/settings`, or `project-settings:get` and `project-settings:update` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, run timeout, PM plan auto-start behavior, large plan confirmation threshold, command approval policy, and PM handoff rules.
+Provider command lookup checks `<platformProviderId>.<modelBackend>`, then `<nodePlatform>.<modelBackend>`, then `<modelBackend>`. For example on macOS:
 
-Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. Project/global command lookup checks OS-specific keys first, then the model key: `<platformProviderId>.<modelBackend>`, `<nodePlatform>.<modelBackend>`, then `<modelBackend>` such as `node-darwin.codex`, `darwin.codex`, and `codex`. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
-
-Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. Dynamic handoffs with risk or error signals pause for human approval before the next agent starts. If no configured or dynamic handoff applies, the task moves to Done.
-
-The provider catalog exposes the active OS platform provider, workspace isolation provider, planning provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including structured ticket parsing, planning, and approval capabilities. Project health reports also flag command-backed model backends that do not have an agent override or matching provider command key configured, plus Selected tasks that the scheduler cannot start because of dependency, project capacity, or agent capacity gaps.
-
-### Cursor CLI provider
-
-The `cursor-cli` backend runs Cursor Agent inside the selected task workspace and reuses the CLI-owned login session. The Cursor desktop application and the headless Agent CLI are separate installations; Harness checks the `cursor-agent` compatibility command on `PATH` with `cursor-agent --version` and `cursor-agent status`. Install/login using Cursor's CLI instructions, then restart Harness so the desktop process receives the updated `PATH`.
-
-Harness defaults to `cursor-agent -p --force --output-format stream-json` with the generated prompt file, applies the project run timeout, and converts Cursor NDJSON into the common run timeline. The catalog advertises live text, tool events and session-resume support; unavailable usage/diff/graceful-stop features remain marked unsupported. To select a Cursor model or resume a known session, override the `cursor-cli` provider command globally, per project, or on an agent, for example:
-
-```json
-{
-  "cursor-cli": "cursor-agent -p --force --output-format stream-json --model \"gpt-5\" < \"$HARNESS_PROMPT_FILE\""
-}
+```bash
+pnpm cli settings:update --providerCommands '{"node-darwin.codex":"codex exec \"$HARNESS_PROMPT_FILE\"","codex":"codex exec \"$HARNESS_PROMPT_FILE\""}'
+pnpm cli providers:list
 ```
 
-Project default, agent backend and task backend selection determine where `cursor-cli` is used; an agent `cliCommand` remains the highest-precedence override. The outer command still follows Harness command approval and workspace runtime rules.
+Direct future API integrations must use OAuth and the OS keychain; credentials must never be stored in `.harness/`, prompts, events, reports, or telemetry.
 
-This provider direction is **Harness → Cursor**: Harness launches Cursor to execute a task. A Cursor MCP connection is the opposite direction, **Cursor → Harness**: Cursor launches the Harness MCP server to inspect or mutate the board. MCP setup is configured separately and does not change the task provider.
+## Cursor desktop, Cursor Agent, and MCP
 
-## Project Templates
+These are three distinct paths:
 
-Use the project create form, `/api/project-templates`, or `templates:project-create` to start a folder with a reusable team shape. Harness seeds software engineering, research, and content production project templates; each one creates the starter agents for that workflow.
+- `/Applications/Cursor.app/Contents/Resources/app/bin/cursor` opens/controls Cursor desktop on macOS; it does not satisfy the `cursor-agent` provider check.
+- `cursor-agent` is the headless execution provider Harness launches inside a task workspace.
+- Cursor as an MCP client launches `harness-mcp-server` and uses Harness board tools.
 
-Agent and workflow templates can also be managed headlessly with `templates:agent-create` and `templates:workflow-create`.
+Register a read-only MCP client and run the protocol smoke:
 
-Projects can be removed from the Harness registry with the sidebar remove button, `DELETE /api/projects/:projectId`, or `projects:unregister`. This only removes the app registry entry; the project folder and `.harness/` data stay on disk.
+```bash
+pnpm --filter @harness/server cli mcp:client-save --client cursor --read true --write false
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  | pnpm --filter @harness/server mcp -- --client cursor
+```
 
-Project lists include folder and `.harness/harness.db` availability so moved or deleted folders can be spotted without recreating missing project data.
+Cursor, Claude Desktop, Codex, permission scopes, installed/source JSON, and diagnostics are documented in [Harness MCP setup](Document/mcp-setup.md).
 
-Moved folders can be re-linked with the sidebar relink form, `PATCH /api/projects/:projectId`, or `projects:update`. Updating a registry path does not create a new folder.
+## OS notes
 
-The project sidebar can scan the global default project root and import existing Harness folders or Git repositories. The same flow is available through `POST /api/projects/import-root` and `projects:import-root`; plain folders are included only when explicitly requested.
+- macOS uses the built-in `osascript` folder chooser. Electron launched from Finder may have a smaller `PATH`; start it from a configured terminal or use absolute provider commands.
+- Windows uses the STA PowerShell folder dialog and a named-pipe application bridge. Ensure PowerShell and Git are on `PATH`.
+- Linux tries `zenity`, then `kdialog`; install one for native folder selection. Headless environments can register a folder with the CLI.
 
-Folder controls in the web app open the host OS picker: Finder on macOS, the Windows folder dialog, and Zenity or KDialog on Linux. Linux desktops need either `zenity` or `kdialog` installed.
+## Troubleshooting
 
-Projects without Git or without an initial commit can be initialized from the sidebar `Init Git` button, `POST /api/projects/:projectId/init-git`, or `projects:init-git`. Harness initializes the repository when needed, excludes `.harness/` from Git, and creates a baseline commit so task worktrees can be created safely.
+- Port busy: desktop needs no HTTP port. For web development use `PORT=4010 pnpm dev:server` and `VITE_API_PROXY_TARGET=http://localhost:4010 pnpm dev:web`.
+- Provider missing: run `pnpm cli providers:list`, then use the reported login command. Confirm the executable from the same shell that launches Electron.
+- Cursor desktop found but Cursor provider missing: the `cursor` and `cursor-agent` executables are different; install/login to Cursor Agent CLI.
+- Git initialization error: configure Git identity, then run `pnpm cli projects:init-git --project <projectId>` before a worktree task.
+- Approval never runs: check Attention/Approvals or `pnpm cli approvals:list --project <projectId> --status pending`.
+- MCP connection failure: run `pnpm --filter @harness/server cli mcp:diagnose`, verify the client id is configured, and repeat the read-only stdio smoke above.
+- Moved project: re-link with `pnpm cli projects:update --project <projectId> --path <new-path>`; project-local state moves with `.harness/`.
 
-## Agents
+## Architecture and reference
 
-Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` CLI commands to manage persona-driven worker profiles, model backend defaults, CLI overrides, capabilities, allowed tools, boundaries, and per-agent concurrency.
+- [Local desktop architecture](Document/local-desktop-architecture.md)
+- [MCP setup](Document/mcp-setup.md)
+- [OpenTelemetry/OTLP](Document/observability.md)
+- [CLI reference](Document/cli-reference.md) and `pnpm cli --help` for the complete JSON command list
 
-## PM Planning
+## Verify changes
 
-Use the dashboard's `Add work` button to turn a plain-language prompt or Markdown document into board tasks. The modal intentionally exposes no assignee, backend, priority, dependency, or planning-mode controls; `POST /api/projects/:projectId/tasks/from-prompt` applies automatic planning and assignment defaults. Advanced API and CLI callers can continue to use `/plan`, `/plan-preview`, and `plans:preview`. The first planning provider is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, spreads assignments across matching agents by current and planned load, records assignment summaries in the plan event, and links sequential dependencies when requested.
-
-Planning mode can be `auto`, `sequential`, or `parallel`. In `auto` mode, the PM planner records both the requested mode and the effective mode it chose: workflow templates and sequence/dependency wording become sequential chains, while independent bullet lists become parallel ready tasks.
-
-Select a workflow template to make PM planning follow a reusable role chain. Harness seeds `Plan, Build, Review` and `Build and Review` templates, and exposes `/api/workflow-templates` for custom templates.
-
-Set `autoStart` on the planning request or use `POST /api/projects/:projectId/schedule` to start Selected tasks while respecting each agent's `maxParallel` limit and the project's `maxProjectParallel` limit.
-
-When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
-
-After a successful run, the PM runtime inspects the latest output and changed files before deciding the configured handoff, dynamic fallback handoff, or Done transition. The resulting `pm.evaluated` event appears in the task timeline, and handoff rows show decision source, target role, changed-file count, and detected signals.
-
-Tasks can be paused from the board, task detail drawer, API, or CLI. Paused tasks stay out of scheduler runs until they are resumed back to `Selected`, and pause/resume events are recorded in the task timeline.
-
-Tasks can be moved up or down within their current board column from the board, task detail drawer, API, or `tasks:move`. The scheduler reads the same board order when choosing Selected work.
-
-Task dependencies can be explicitly waived from the task detail drawer, API, or `tasks:update --waivedDependencies`. Waived dependencies stay visible on the task, but the scheduler no longer blocks on them.
-
-Large tasks can be decomposed from the task detail drawer, `POST /api/projects/:projectId/tasks/:taskId/decompose`, or `tasks:decompose`. Parallel decomposition creates ready child tasks, while sequential decomposition links each child to the previous child and marks downstream work blocked until dependencies complete.
-
-When the server starts, Harness scans registered projects for runs that were left `running` by a previous process. Those runs are closed as failed with an interruption event, affected tasks return to `Selected`, and busy agents are reset to idle.
-
-## Task Tracking
-
-Open a task from the board to inspect its status, assignee, labels, linked files, parent/subtask links, workspace mode, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, PM handoff decision history, follow-up task creation, and task-scoped activity timeline. New tasks can use automatic workspace selection, while existing tasks keep an explicit `worktree` or `harness` mode.
-
-The board can be filtered by task text, assignee, and label while preserving each task's column position and filtered column counts.
-
-Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files. Run and approval timeline events also record the selected provider command key and platform provider, and the task Runs and Approvals panels surface that resolution beside the relevant run or request.
-
-Recent completed or failed runs for the same task are injected into the generated agent prompt and `HARNESS_TASK_RUN_SUMMARY`, giving reviewer or handoff agents the prior agent output and changed-file context.
-
-Task comments are injected into the generated agent prompt and `HARNESS_TASK_COMMENTS`, so human notes and handoff context travel into the next agent run.
-
-Linked files are injected into the generated agent prompt and exposed to command-backed providers as `HARNESS_LINKED_FILES`, so model-specific CLI wrappers can use the same task context.
-
-The Runs panel can be filtered by status, agent, provider, and model backend. Headless workflows can inspect the same Kanban state through `board:show`, filtered `tasks:list`, task-scoped `tasks:show`, filtered `runs:list`, run-scoped `runs:show`, and `runs:followups` for turning agent output into child tasks.
-
-## Approvals
-
-Harness blocks task execution before running shell-backed LLM providers until the user approves the request. Risky PM handoffs also pause in the same approval queue before the target agent starts. The Approvals panel and `approvals:list` can be filtered by approval kind while keeping pending and recent decisions visible. Approved tasks resume automatically. Rejected tasks remain blocked with the decision recorded in the task timeline.
-
-Harness also queues merge approvals when a completed task has worktree changes waiting to land. Merge approvals can be accepted or sent back for changes from the same Approvals panel and CLI commands.
-
-## Documents
-
-Use the Documents panel to create and edit project-local notes, service plans, specs, and acceptance criteria. Documents are stored in the project-local Harness database and included in project overview state.
-
-Document-to-plan workflows remain available headlessly through `documents:list`, `documents:create`, `documents:update`, `documents:plan-preview`, and `documents:plan`. The dashboard keeps document editing separate from work creation so all new work starts from the same simplified `Add work` modal.
-
-## Memory
-
-Use the Memory panel to store project conventions, user preferences, recurring decisions, and other durable context. Memory can be project-local or global. Both scopes are included in every agent prompt, with separate files and environment variables so agents can distinguish reusable preferences from project-specific context.
-
-The same memory can be managed headlessly through `memories:list`, `memories:create`, `memories:update`, `global-memories:list`, `global-memories:create`, and `global-memories:update`.
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm smoke:quick-start
+```

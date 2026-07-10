@@ -254,11 +254,15 @@ Status: 완료
 
 Depends on: A04, A08, A11, A13, A14, A16, A17
 
+Status: 완료
+
 - 실제 협업 시나리오를 먼저 보여주고 현재 지원·미지원 범위를 분리한다.
 - desktop, 선택적 HTTP, provider login, MCP와 OS별 troubleshooting을 검증된 명령으로 작성한다.
 - quick start smoke 절차를 자동화한다.
 
 완료 조건: 새 사용자가 문서만으로 첫 project·agent·task·approval 흐름을 재현한다.
+
+검증: 임시 HARNESS_HOME에서 project 등록, Git baseline, shell agent/task 생성, command approval 생성·승인과 completed run까지 `pnpm smoke:quick-start`로 재현했다. Node/pnpm/Git 기준, desktop/headless 분리, OS folder picker, 공식 provider 설치·login 진단, Cursor desktop/Agent/MCP 구분, port·PATH·Git·MCP troubleshooting과 전체 CLI reference를 현재 command와 대조했다.
 
 ### A19: Agent Dog Overlay
 
