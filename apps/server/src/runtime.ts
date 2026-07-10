@@ -25,7 +25,9 @@ export function listRuntimeProviders() {
   return {
     platform: {
       id: providers.platform().id,
-      platform: providers.platform().platform
+      label: providers.platform().label,
+      platform: providers.platform().platform,
+      capabilities: providers.platform().capabilities
     },
     llmProviders: providers.llmDefinitions()
   };

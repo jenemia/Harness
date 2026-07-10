@@ -24,6 +24,7 @@ import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
   decideApproval,
+  listRuntimeProviders,
   requestMergeChanges,
   startReadyTasks,
   startTask,
@@ -41,6 +42,7 @@ const commands: Record<string, CommandHandler> = {
   "templates:agents": listAgentTemplatesCommand,
   "templates:workflows": listWorkflowTemplatesCommand,
   "templates:projects": listProjectTemplatesCommand,
+  "providers:list": listProvidersCommand,
   "plans:create": createPlanCommand,
   "documents:list": listDocumentsCommand,
   "documents:create": createDocumentCommand,
@@ -121,6 +123,10 @@ function listWorkflowTemplatesCommand() {
 
 function listProjectTemplatesCommand() {
   return { templates: listProjectTemplates() };
+}
+
+function listProvidersCommand() {
+  return listRuntimeProviders();
 }
 
 async function createPlanCommand(args: string[]) {
@@ -637,6 +643,7 @@ Usage:
   pnpm --filter @harness/server cli templates:agents
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects
+  pnpm --filter @harness/server cli providers:list
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
   pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]

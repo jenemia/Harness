@@ -242,7 +242,13 @@ export type Overview = {
 export type ProviderCatalog = {
   platform: {
     id: string;
+    label: string;
     platform: string;
+    capabilities: {
+      shell: string;
+      processGroups: boolean;
+      gitWorktrees: boolean;
+    };
   };
   llmProviders: Array<{
     id: string;

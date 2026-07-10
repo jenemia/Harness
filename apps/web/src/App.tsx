@@ -1839,6 +1839,20 @@ function SettingsPanel(props: {
         <Settings size={17} />
         <h2>Settings</h2>
       </div>
+      {props.providerCatalog && (
+        <div className="provider-summary">
+          <div className="form-group-title">Runtime provider</div>
+          <strong>{props.providerCatalog.platform.label}</strong>
+          <span>
+            {props.providerCatalog.platform.id} on {props.providerCatalog.platform.platform}
+          </span>
+          <span>
+            shell {props.providerCatalog.platform.capabilities.shell} | process groups{" "}
+            {props.providerCatalog.platform.capabilities.processGroups ? "on" : "off"} | git worktrees{" "}
+            {props.providerCatalog.platform.capabilities.gitWorktrees ? "on" : "off"}
+          </span>
+        </div>
+      )}
       <form className="stack-form" onSubmit={submitGlobal}>
         <div className="form-group-title">Global defaults</div>
         <input

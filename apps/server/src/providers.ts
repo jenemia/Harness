@@ -22,7 +22,13 @@ export type LlmRunContext = {
 
 export type PlatformProvider = {
   id: string;
+  label: string;
   platform: NodeJS.Platform;
+  capabilities: {
+    shell: string;
+    processGroups: boolean;
+    gitWorktrees: boolean;
+  };
   run(command: string, args: string[], cwd: string, allowFailure?: boolean): Promise<CommandResult>;
   runShell(command: string, cwd: string, extraEnv: Record<string, string>, timeoutMs?: number): Promise<{ ok: boolean; output: string; error: string | null }>;
   ensureGitReady(projectPath: string): Promise<void>;
@@ -74,7 +80,7 @@ export class ProviderRegistry {
 }
 
 export function createDefaultProviders(projectHarnessDir: (projectPath: string) => string) {
-  const platformProvider = createNodePlatformProvider(projectHarnessDir);
+  const platformProvider = createPlatformProvider(projectHarnessDir);
   return new ProviderRegistry(platformProvider, [
     createMockLlmProvider(),
     createShellLlmProvider(platformProvider),
@@ -111,21 +117,61 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
   ]);
 }
 
-function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => string): PlatformProvider {
-  return {
+function createPlatformProvider(projectHarnessDir: (projectPath: string) => string): PlatformProvider {
+  if (process.platform === "darwin") {
+    return createNodePlatformProvider(projectHarnessDir, {
+      id: "node-darwin",
+      label: "Node macOS Platform",
+      shell: process.env.SHELL || "/bin/zsh",
+      processGroups: true
+    });
+  }
+
+  if (process.platform === "win32") {
+    return createNodePlatformProvider(projectHarnessDir, {
+      id: "node-win32",
+      label: "Node Windows Platform",
+      shell: process.env.ComSpec || "cmd.exe",
+      processGroups: false
+    });
+  }
+
+  return createNodePlatformProvider(projectHarnessDir, {
     id: `node-${process.platform}`,
+    label: `Node ${process.platform} Platform`,
+    shell: process.env.SHELL || "/bin/sh",
+    processGroups: true
+  });
+}
+
+function createNodePlatformProvider(
+  projectHarnessDir: (projectPath: string) => string,
+  config: {
+    id: string;
+    label: string;
+    shell: string;
+    processGroups: boolean;
+  }
+): PlatformProvider {
+  return {
+    id: config.id,
+    label: config.label,
     platform: process.platform,
+    capabilities: {
+      shell: config.shell,
+      processGroups: config.processGroups,
+      gitWorktrees: true
+    },
 
     run,
 
     async runShell(command, cwd, extraEnv, timeoutMs) {
       const result = await new Promise<{ code: number | null; output: string; error: string; timedOut: boolean }>((resolve) => {
-        const useProcessGroup = process.platform !== "win32";
         const child = spawn(command, {
           cwd,
-          shell: true,
+          shell: config.shell,
           env: { ...process.env, ...extraEnv },
-          detached: useProcessGroup
+          detached: config.processGroups
         });
         let output = "";
         let error = "";
@@ -134,10 +180,10 @@ function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => 
         const timeout = timeoutMs
           ? setTimeout(() => {
               timedOut = true;
-              killShellProcess(child.pid, "SIGTERM", useProcessGroup);
+              killShellProcess(child.pid, "SIGTERM", config.processGroups);
               setTimeout(() => {
                 if (!closed) {
-                  killShellProcess(child.pid, "SIGKILL", useProcessGroup);
+                  killShellProcess(child.pid, "SIGKILL", config.processGroups);
                 }
               }, 1000);
             }, timeoutMs)

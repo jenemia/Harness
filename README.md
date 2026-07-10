@@ -51,6 +51,7 @@ The server package also exposes a local JSON CLI for headless automation:
 pnpm cli projects:list
 pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
 pnpm cli projects:report --project <projectId>
+pnpm cli providers:list
 pnpm cli templates:projects
 pnpm cli templates:workflows
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
@@ -78,6 +79,8 @@ Each project also has project-local settings stored inside `<project>/.harness/h
 Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`; roles without a matching rule move to Done after successful completion.
+
+The provider catalog exposes the active OS platform provider, its shell/process/worktree capabilities, and the available LLM providers through `/api/providers` and `providers:list`.
 
 ## Project Templates
 
