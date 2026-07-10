@@ -1,0 +1,271 @@
+.board-area {
+  min-width: 0;
+}
+
+.task-composer {
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) 170px 170px 190px 170px minmax(
+      170px,
+      220px
+    ) 120px;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.board-filters {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 1fr) 180px 170px auto auto;
+  margin-bottom: 14px;
+}
+
+.search-field {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dfe1e6;
+  border-radius: 6px;
+  color: #626f86;
+  display: flex;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.search-field input {
+  border: 0;
+  min-height: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.search-field input:focus {
+  outline: 0;
+}
+
+.filter-count {
+  color: #626f86;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.secondary-button.compact {
+  min-height: 36px;
+  padding: 8px 10px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(178px, 1fr));
+  gap: 12px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
+.kanban-column {
+  background: #ebecf0;
+  border-radius: 8px;
+  min-height: 620px;
+  padding: 10px;
+}
+
+.column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 32px;
+  color: #44546f;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.column-header b {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #dfe1e6;
+}
+
+.column-empty {
+  border: 1px dashed #d0d4dc;
+  border-radius: 6px;
+  color: #626f86;
+  font-size: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.task-card {
+  background: #ffffff;
+  border: 1px solid #dfe1e6;
+  border-radius: 8px;
+  box-shadow: 0 1px 1px rgb(9 30 66 / 10%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 156px;
+  padding: 12px;
+}
+
+.task-card p {
+  color: #44546f;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.task-title-button {
+  border: 0;
+  background: transparent;
+  color: #172b4d;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 0;
+  text-align: left;
+}
+
+.task-title-button:hover {
+  color: #0c66e4;
+}
+
+.issue-key,
+.priority-pill,
+.agent-chip,
+.backend-chip,
+.branch-chip,
+.dependency-chip,
+.label-chip,
+.merge-chip,
+.run-state {
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  min-height: 24px;
+  padding: 5px 8px;
+}
+
+.issue-key {
+  background: #f4f5f7;
+  color: #626f86;
+}
+
+.priority-pill {
+  margin-left: auto;
+  background: #fff7d6;
+  color: #7f5f01;
+}
+
+.task-meta {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.agent-chip,
+.backend-chip,
+.branch-chip,
+.dependency-chip,
+.label-chip,
+.merge-chip {
+  max-width: 100%;
+  background: #e9f2ff;
+  color: #0c66e4;
+}
+
+.agent-chip.busy {
+  background: #fff0b3;
+  color: #7f5f01;
+}
+
+.backend-chip {
+  background: #e9f2ff;
+  color: #0c66e4;
+}
+
+.branch-chip {
+  background: #dcfff1;
+  color: #216e4e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dependency-chip {
+  background: #f1f2f4;
+  color: #44546f;
+}
+
+.label-chip {
+  align-items: center;
+  background: #f1f2f4;
+  color: #44546f;
+  display: inline-flex;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+
+.merge-chip.pending {
+  background: #fff7d6;
+  color: #7f5f01;
+}
+
+.merge-chip.merged {
+  background: #dcfff1;
+  color: #216e4e;
+}
+
+.merge-chip.conflict,
+.blocked-note {
+  background: #ffeceb;
+  color: #ae2a19;
+}
+
+.blocked-note {
+  border-radius: 6px;
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 7px 8px;
+}
+
+.card-controls {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 1fr 36px;
+  gap: 8px;
+}
+
+.merge-button,
+.request-changes-button {
+  grid-column: 1 / -1;
+  border: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  background: #216e4e;
+  color: #ffffff;
+}
+
+.request-changes-button {
+  background: #f1f2f4;
+  color: #172b4d;
+}
+
+.merge-button.inline,
+.request-changes-button.inline {
+  grid-column: auto;
+  padding: 0 12px;
+}
