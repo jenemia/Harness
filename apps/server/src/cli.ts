@@ -53,7 +53,7 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
-import type { AgentRecord, DocumentRecord, MemoryRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import type { AgentRecord, ApprovalRecord, DocumentRecord, MemoryRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
@@ -469,9 +469,31 @@ function resumeTaskCommand(args: string[]) {
 }
 
 function listApprovalsCommand(args: string[]) {
+  const options = parseOptions(args);
   const project = getRequiredProject(args);
   const overview = getProjectOverview(project);
-  return { approvals: overview.approvals, overview };
+  const statuses = options.status
+    ? new Set(parseCsv(options.status).map((status) => normalizeApprovalStatus(status)))
+    : null;
+  const kinds = options.kind ? new Set(parseCsv(options.kind).map((kind) => normalizeApprovalKind(kind))) : null;
+  const taskId = options.task || null;
+  const agentId = options.agent || null;
+  const approvals = overview.approvals.filter((approval) => {
+    if (statuses && !statuses.has(approval.status)) {
+      return false;
+    }
+    if (kinds && !kinds.has(approval.kind)) {
+      return false;
+    }
+    if (taskId && approval.taskId !== taskId) {
+      return false;
+    }
+    if (agentId && approval.agentId !== agentId) {
+      return false;
+    }
+    return true;
+  });
+  return { approvals, overview };
 }
 
 async function approveApprovalCommand(args: string[]) {
@@ -1492,6 +1514,25 @@ function normalizeRunStatus(value: string) {
   return status;
 }
 
+function normalizeApprovalStatus(value: string) {
+  const statuses: Array<ApprovalRecord["status"]> = ["pending", "approved", "rejected"];
+  const status = statuses.find((item) => item.toLowerCase() === value.toLowerCase());
+  if (!status) {
+    throw new Error(`--status must be one of: ${statuses.join(", ")}`);
+  }
+  return status;
+}
+
+function normalizeApprovalKind(value: string) {
+  const kinds: Array<ApprovalRecord["kind"]> = ["command_execution", "merge", "handoff"];
+  const normalized = value.toLowerCase().replace("-", "_");
+  const kind = kinds.find((item) => item.toLowerCase() === normalized);
+  if (!kind) {
+    throw new Error(`--kind must be one of: ${kinds.join(", ")}`);
+  }
+  return kind;
+}
+
 function parseCsv(value: string | undefined) {
   if (!value) {
     return [];
@@ -1553,7 +1594,7 @@ Usage:
   pnpm --filter @harness/server cli global-memories:list
   pnpm --filter @harness/server cli global-memories:create --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli global-memories:update --memory <memoryId> [--title <text>] [--content <text>|--contentFile <file>]
-  pnpm --filter @harness/server cli approvals:list --project <projectId>
+  pnpm --filter @harness/server cli approvals:list --project <projectId> [--status pending,approved,rejected] [--kind command_execution,merge,handoff] [--task <taskId>] [--agent <agentId>]
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli board:show --project <projectId>

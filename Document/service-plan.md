@@ -215,7 +215,7 @@ Certain actions should require user approval:
 
 Initial implementation: command-backed LLM providers still honor project-level command approval settings, but risky shell command detection is enforced by the policy provider independently of that setting. Risk tags and command previews are recorded in task events and approval request metadata. PM handoffs with risk/error completion signals also create approval requests so a human can approve or reject the next-agent transition before it runs.
 
-Initial implementation: the Approvals panel can filter pending and recent decisions by approval kind, making command, merge, and risky handoff gates easier to review as projects accumulate requests.
+Initial implementation: the Approvals panel and headless `approvals:list` command can filter pending and recent decisions by approval kind, status, task, or agent, making command, merge, and risky handoff gates easier to review as projects accumulate requests.
 
 ### Review Agent
 

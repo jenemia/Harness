@@ -102,7 +102,7 @@ pnpm cli tasks:move --project <projectId> --task <taskId> --direction up
 pnpm cli tasks:pause --project <projectId> --task <taskId> --reason "Waiting on product decision"
 pnpm cli tasks:resume --project <projectId> --task <taskId>
 pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed from CLI"
-pnpm cli approvals:list --project <projectId>
+pnpm cli approvals:list --project <projectId> --status pending --kind merge
 pnpm cli approvals:approve --project <projectId> --approval <approvalId>
 pnpm cli tasks:merge --project <projectId> --task <taskId>
 pnpm cli tasks:resolve-merge --project <projectId> --task <taskId>
@@ -182,7 +182,7 @@ The Runs panel can be filtered by status, agent, provider, and model backend. He
 
 ## Approvals
 
-Harness blocks task execution before running shell-backed LLM providers until the user approves the request. Risky PM handoffs also pause in the same approval queue before the target agent starts. The Approvals panel can be filtered by approval kind while keeping pending and recent decisions visible. Approved tasks resume automatically. Rejected tasks remain blocked with the decision recorded in the task timeline.
+Harness blocks task execution before running shell-backed LLM providers until the user approves the request. Risky PM handoffs also pause in the same approval queue before the target agent starts. The Approvals panel and `approvals:list` can be filtered by approval kind while keeping pending and recent decisions visible. Approved tasks resume automatically. Rejected tasks remain blocked with the decision recorded in the task timeline.
 
 Harness also queues merge approvals when a completed task has worktree changes waiting to land. Merge approvals can be accepted or sent back for changes from the same Approvals panel and CLI commands.
 
