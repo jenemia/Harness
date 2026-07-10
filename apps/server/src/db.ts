@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { ensureProjectLayout, projectHarnessPath, withProjectWriterLock } from "./project-store.js";
+import { syncProjectAgentDefinitions } from "./agent-store.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -921,6 +922,12 @@ export function openProjectDb(projectPath: string) {
   `);
   ensureColumn(db, "agents", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "agents", "boundaries", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "agents", "definition_path", "TEXT");
+  ensureColumn(db, "agents", "definition_hash", "TEXT");
+  ensureColumn(db, "agents", "definition_schema_version", "INTEGER");
+  ensureColumn(db, "agents", "parse_status", "TEXT NOT NULL DEFAULT 'legacy'");
+  ensureColumn(db, "agents", "parse_error", "TEXT");
+  ensureColumn(db, "agents", "enabled", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "waived_dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "linked_file_paths", "TEXT NOT NULL DEFAULT '[]'");
@@ -935,6 +942,10 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "runs", "provider_id", "TEXT");
   ensureColumn(db, "runs", "command_preview", "TEXT");
   ensureColumn(db, "runs", "changed_files", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "runs", "agent_definition_hash", "TEXT");
+  ensureColumn(db, "runs", "agent_definition_schema_version", "INTEGER");
+  ensureColumn(db, "runs", "agent_definition_snapshot", "TEXT");
+  syncProjectAgentDefinitions(db, projectPath);
   return db;
 }
 
@@ -1640,8 +1651,17 @@ export function mapAgent(row: unknown): AgentRecord {
     allowedTools: parseJsonStringArray(r.allowed_tools),
     boundaries: r.boundaries ? String(r.boundaries) : "",
     maxParallel: Number(r.max_parallel),
+    enabled: Number(r.enabled ?? 1) !== 0,
     status: String(r.status) as AgentRecord["status"],
     currentTaskId: r.current_task_id ? String(r.current_task_id) : null,
+    definitionPath: r.definition_path ? String(r.definition_path) : null,
+    definitionHash: r.definition_hash ? String(r.definition_hash) : null,
+    definitionSchemaVersion:
+      r.definition_schema_version === null || r.definition_schema_version === undefined
+        ? null
+        : Number(r.definition_schema_version),
+    parseStatus: (r.parse_status ? String(r.parse_status) : "legacy") as AgentRecord["parseStatus"],
+    parseError: r.parse_error ? String(r.parse_error) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };
@@ -1819,6 +1839,12 @@ export function mapRun(row: unknown): RunRecord {
     output: r.output ? String(r.output) : null,
     error: r.error ? String(r.error) : null,
     changedFiles: JSON.parse(String(r.changed_files || "[]")) as string[],
+    agentDefinitionHash: r.agent_definition_hash ? String(r.agent_definition_hash) : null,
+    agentDefinitionSchemaVersion:
+      r.agent_definition_schema_version === null || r.agent_definition_schema_version === undefined
+        ? null
+        : Number(r.agent_definition_schema_version),
+    agentDefinitionSnapshot: r.agent_definition_snapshot ? String(r.agent_definition_snapshot) : null,
     startedAt: String(r.started_at),
     completedAt: r.completed_at ? String(r.completed_at) : null
   };

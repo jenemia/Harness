@@ -350,7 +350,8 @@ function createAgentCommand(args: string[]) {
     capabilities: parseCsv(options.capabilities),
     allowedTools: parseCsv(options.allowedTools),
     boundaries: readOptionalText(options, "boundaries", "boundariesFile") || "",
-    maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
+    maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined,
+    enabled: parseOptionalBoolean(options.enabled, "enabled")
   });
   return { agent, overview: getProjectOverview(project) };
 }
@@ -368,7 +369,8 @@ function updateAgentCommand(args: string[]) {
     capabilities: options.capabilities !== undefined ? parseCsv(options.capabilities) : undefined,
     allowedTools: options.allowedTools !== undefined ? parseCsv(options.allowedTools) : undefined,
     boundaries: readOptionalText(options, "boundaries", "boundariesFile"),
-    maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
+    maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined,
+    enabled: parseOptionalBoolean(options.enabled, "enabled")
   });
   return { agent, overview: getProjectOverview(project) };
 }

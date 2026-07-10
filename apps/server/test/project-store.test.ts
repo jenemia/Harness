@@ -62,7 +62,12 @@ test("project layout, WAL, writer lock, move recovery, and interrupted run recov
     const startedAt = new Date().toISOString();
     runtimeDb.prepare("UPDATE tasks SET status = ? WHERE id = ?").run("In Progress", task.id);
     runtimeDb.prepare("UPDATE agents SET status = ?, current_task_id = ? WHERE id = ?").run("busy", task.id, agent.id);
-    runtimeDb.prepare("INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+    runtimeDb.prepare(`
+      INSERT INTO runs (
+        id, task_id, agent_id, status, branch_name, worktree_path, snapshot_ref, model_backend,
+        provider_id, command_preview, output, error, changed_files, started_at, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
       "run-interrupted",
       task.id,
       agent.id,

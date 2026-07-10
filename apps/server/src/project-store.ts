@@ -195,6 +195,10 @@ export async function withProjectWriterLockAsync<T>(projectPath: string, operati
   });
 }
 
+export function withoutProjectWriterLock<T>(operation: () => T): T {
+  return lockContext.exit(operation);
+}
+
 function createManifest(projectId?: string): ProjectManifest {
   const timestamp = new Date().toISOString();
   return { formatVersion, schemaVersion, projectId: projectId || randomUUID(), createdAt: timestamp, updatedAt: timestamp };

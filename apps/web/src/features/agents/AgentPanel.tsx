@@ -28,6 +28,7 @@ export function AgentPanel(props: {
   const [allowedToolsText, setAllowedToolsText] = useState("");
   const [boundaries, setBoundaries] = useState("");
   const [maxParallel, setMaxParallel] = useState(1);
+  const [enabled, setEnabled] = useState(true);
   const selectedProvider = props.providerCatalog?.llmProviders.find(
     (provider) => provider.id === modelBackend,
   );
@@ -76,6 +77,7 @@ export function AgentPanel(props: {
     cliCommand: cliCommand || null,
     modelBackend,
     maxParallel,
+    enabled,
     capabilities: parseCapabilities(capabilitiesText),
     allowedTools: parseCapabilities(allowedToolsText),
     boundaries,
@@ -140,6 +142,7 @@ export function AgentPanel(props: {
     setBoundaries(agent.boundaries);
     setModelBackend(agent.modelBackend);
     setMaxParallel(agent.maxParallel);
+    setEnabled(agent.enabled);
   }
 
   function resetForm() {
@@ -153,6 +156,7 @@ export function AgentPanel(props: {
     setRole("worker");
     setModelBackend(props.overview.settings.defaultModelBackend);
     setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
+    setEnabled(true);
   }
 
   return (
@@ -181,6 +185,10 @@ export function AgentPanel(props: {
                 <span>
                   {agent.role} · {agent.modelBackend} · max {agent.maxParallel}
                 </span>
+                <span>
+                  definition: {agent.parseStatus} · {agent.definitionPath || "not materialized"}
+                </span>
+                {agent.parseError && <span>definition error: {agent.parseError}</span>}
                 {agent.capabilities.length > 0 && (
                   <span>{agent.capabilities.join(", ")}</span>
                 )}
@@ -259,6 +267,14 @@ export function AgentPanel(props: {
           }
           placeholder="Max parallel"
         />
+        <label className="checkbox-row">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+          />
+          <span>Enabled for new runs</span>
+        </label>
         <textarea
           value={persona}
           onChange={(event) => setPersona(event.target.value)}

@@ -15,7 +15,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "tsx": "^4.20.3"
+    "tsx": "^4.20.3",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.13",

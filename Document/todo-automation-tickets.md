@@ -44,11 +44,15 @@ Status: 완료
 
 Depends on: A02
 
+Status: 완료
+
 - `.harness/agent/<slug>--<id>/agent.md` schema, parser, validator와 atomic writer를 구현한다.
 - instruction path escape와 secret 저장을 차단하고 기존 DB agent를 idempotent하게 materialize한다.
 - definition hash, run snapshot, 외부 수정 충돌과 invalid 상태를 지원한다.
 
 완료 조건: agent Markdown이 기준 원본이며 이동·외부 편집·migration 후에도 실행 맥락이 재현된다.
+
+검증: schema round-trip, unknown field/section 보존, stable folder, external sync, hash conflict, disabled/invalid 실행 차단, path·symlink·secret 거부, template migration과 run snapshot 회귀 테스트.
 
 ### A04: Electron shell과 typed IPC
 

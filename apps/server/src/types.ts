@@ -123,8 +123,14 @@ export type AgentRecord = {
   allowedTools: string[];
   boundaries: string;
   maxParallel: number;
+  enabled: boolean;
   status: "idle" | "busy" | "offline";
   currentTaskId: string | null;
+  definitionPath: string | null;
+  definitionHash: string | null;
+  definitionSchemaVersion: number | null;
+  parseStatus: "legacy" | "valid" | "invalid";
+  parseError: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -276,6 +282,9 @@ export type RunRecord = {
   output: string | null;
   error: string | null;
   changedFiles: string[];
+  agentDefinitionHash: string | null;
+  agentDefinitionSchemaVersion: number | null;
+  agentDefinitionSnapshot: string | null;
   startedAt: string;
   completedAt: string | null;
 };

@@ -17,7 +17,8 @@ import {
 } from "./db.js";
 import { createDefaultProviders, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand } from "./providers.js";
 import { getPlanningProviderDefinition } from "./planner.js";
-import { withProjectWriterLock, withProjectWriterLockAsync } from "./project-store.js";
+import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriterLock } from "./project-store.js";
+import { createAgentRunSnapshot } from "./agent-store.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -245,6 +246,12 @@ async function startTaskMutation(project: ProjectRecord, taskId: string) {
       return { accepted: false, reason };
     }
 
+    const definitionBlocker = getAgentDefinitionBlocker(agent);
+    if (definitionBlocker) {
+      setTaskBlocked(db, task.id, definitionBlocker);
+      return { accepted: false, reason: definitionBlocker };
+    }
+
     assignTask(db, task.id, agent.id);
     const approvalBlocker = ensureCommandApproval(db, task, agent, settings);
     if (approvalBlocker) {
@@ -259,10 +266,12 @@ async function startTaskMutation(project: ProjectRecord, taskId: string) {
   }
 
   runningTasks.add(taskId);
-  void executeTask(project, taskId, reservedAgentId).finally(() => {
-    runningTasks.delete(taskId);
-    releaseAgent(reservedAgentId);
-    releaseProject(project.path);
+  withoutProjectWriterLock(() => {
+    void executeTask(project, taskId, reservedAgentId).finally(() => {
+      runningTasks.delete(taskId);
+      releaseAgent(reservedAgentId);
+      releaseProject(project.path);
+    });
   });
   return { accepted: true };
 }
@@ -386,6 +395,13 @@ async function startReadyTasksMutation(project: ProjectRecord) {
         continue;
       }
 
+      const definitionBlocker = getAgentDefinitionBlocker(agent);
+      if (definitionBlocker) {
+        setTaskBlocked(db, task.id, definitionBlocker);
+        skipped.push({ taskId: task.id, reason: definitionBlocker });
+        continue;
+      }
+
       assignTask(db, task.id, agent.id);
       const approvalBlocker = ensureCommandApproval(db, task, agent, settings);
       if (approvalBlocker) {
@@ -397,10 +413,12 @@ async function startReadyTasksMutation(project: ProjectRecord) {
       reserveProject(project.path);
       runningTasks.add(task.id);
       started.push(task.id);
-      void executeTask(project, task.id, agent.id).finally(() => {
-        runningTasks.delete(task.id);
-        releaseAgent(agent.id);
-        releaseProject(project.path);
+      withoutProjectWriterLock(() => {
+        void executeTask(project, task.id, agent.id).finally(() => {
+          runningTasks.delete(task.id);
+          releaseAgent(agent.id);
+          releaseProject(project.path);
+        });
       });
     }
 
@@ -773,6 +791,12 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       });
       return;
     }
+    const definitionBlocker = getAgentDefinitionBlocker(agent);
+    if (definitionBlocker || !agent.definitionPath) {
+      setTaskBlocked(db, task.id, definitionBlocker || "Agent definition path is unavailable.");
+      return;
+    }
+    const agentSnapshot = createAgentRunSnapshot(project.path, agent.definitionPath);
 
     const settings = getProjectSettingsFromDb(db);
     assignTask(db, task.id, agent.id);
@@ -792,8 +816,9 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       INSERT INTO runs (
         id, task_id, agent_id, status, branch_name, worktree_path, snapshot_ref,
         model_backend, provider_id, command_preview, output, error, changed_files,
-        started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        started_at, completed_at, agent_definition_hash, agent_definition_schema_version,
+        agent_definition_snapshot
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       runId,
       task.id,
@@ -809,7 +834,10 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       null,
       JSON.stringify([]),
       startedAt,
-      null
+      null,
+      agentSnapshot.hash,
+      agentSnapshot.schemaVersion,
+      agentSnapshot.content
     );
 
     db.prepare("UPDATE tasks SET branch_name = ?, worktree_path = ?, updated_at = ? WHERE id = ?").run(
@@ -851,6 +879,7 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       projectMemory,
       taskComments,
       taskRuns,
+      agentDefinitionSnapshot: agentSnapshot.content,
       timeoutMs: settings.maxRunSeconds * 1000
     });
     const completedAt = now();
@@ -1458,6 +1487,19 @@ function chooseAgentWithCapacity(db: DatabaseSync, task: TaskRecord): AgentRecor
   return rows.find((agent) => hasAgentCapacity(db, agent)) || null;
 }
 
+function getAgentDefinitionBlocker(agent: AgentRecord) {
+  if (!agent.enabled) {
+    return "Agent is disabled in its agent.md definition.";
+  }
+  if (agent.parseStatus === "invalid") {
+    return `Agent definition is invalid: ${agent.parseError || "Fix agent.md before starting a new run."}`;
+  }
+  if (!agent.definitionPath || !agent.definitionHash) {
+    return "Agent definition has not been materialized yet.";
+  }
+  return null;
+}
+
 function assignTask(db: DatabaseSync, taskId: string, agentId: string) {
   db.prepare("UPDATE tasks SET assignee_agent_id = ?, updated_at = ? WHERE id = ?").run(agentId, now(), taskId);
 }
@@ -1720,11 +1762,13 @@ function scheduleReadyDependents(project: ProjectRecord, db: DatabaseSync, compl
 }
 
 function deferRuntimeTask(task: () => Promise<unknown>) {
-  setTimeout(() => {
-    task().catch((error) => {
-      console.error(error instanceof Error ? error.message : String(error));
-    });
-  }, 0);
+  withoutProjectWriterLock(() => {
+    setTimeout(() => {
+      task().catch((error) => {
+        console.error(error instanceof Error ? error.message : String(error));
+      });
+    }, 0);
+  });
 }
 
 function hasAgentCapacity(db: DatabaseSync, agent: AgentRecord) {

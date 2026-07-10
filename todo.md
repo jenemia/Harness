@@ -356,13 +356,13 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### 파일 구조와 원본 소유권
 
-- [ ] project별 agent 정의를 `.harness/agent/<agent-slug>--<short-id>/` 아래에 생성한다.
-- [ ] 각 agent folder에 필수 `agent.md`와 선택적 `instructions/*.md`를 지원한다.
-- [ ] `agent.md`를 역할, persona, instruction, boundary와 실행 설정의 기준 원본으로 사용한다.
+- [x] project별 agent 정의를 `.harness/agent/<agent-slug>--<short-id>/` 아래에 생성한다.
+- [x] 각 agent folder에 필수 `agent.md`와 선택적 `instructions/*.md`를 지원한다.
+- [x] `agent.md`를 역할, persona, instruction, boundary와 실행 설정의 기준 원본으로 사용한다.
 - [ ] DB에는 agent id, 파일 경로, content hash, parse 상태, runtime 상태, current task와 실행 통계만 파생 index로 저장한다.
-- [ ] role, persona와 instruction 본문을 DB와 Markdown 양쪽에서 각각 수정 가능한 원본으로 중복 저장하지 않는다.
-- [ ] agent folder 이름은 표시 이름이 바뀌어도 유지되는 stable path로 사용한다.
-- [ ] agent definition과 instruction file에는 provider credential, OAuth token, API key와 secret을 저장하지 않는다.
+- [x] role, persona와 instruction 본문을 DB와 Markdown 양쪽에서 각각 수정 가능한 원본으로 중복 저장하지 않는다.
+- [x] agent folder 이름은 표시 이름이 바뀌어도 유지되는 stable path로 사용한다.
+- [x] agent definition과 instruction file에는 provider credential, OAuth token, API key와 secret을 저장하지 않는다.
 
 ```text
 .harness/agent/
@@ -375,12 +375,12 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### Markdown 형식
 
-- [ ] `agent.md`는 versioned YAML frontmatter와 Markdown body를 사용한다.
-- [ ] frontmatter에 schema version, id, name, role, model backend, capabilities, allowed tools, max parallel, enabled와 instruction file 목록을 정의한다.
-- [ ] body에 `Persona`, `Instructions`, `Boundaries`와 선택적 `Review Policy`, `Output Format` section을 지원한다.
-- [ ] 알 수 없는 frontmatter field와 custom Markdown section은 손실 없이 보존해 향후 schema 확장을 막지 않는다.
-- [ ] instruction file 적용 순서는 `agent.md`의 `instructionFiles` 목록으로 명시하고 암묵적인 전체 folder scan 순서에 의존하지 않는다.
-- [ ] instruction file은 agent folder 내부 상대 경로만 허용하고 absolute path, `..`와 symlink escape를 차단한다.
+- [x] `agent.md`는 versioned YAML frontmatter와 Markdown body를 사용한다.
+- [x] frontmatter에 schema version, id, name, role, model backend, capabilities, allowed tools, max parallel, enabled와 instruction file 목록을 정의한다.
+- [x] body에 `Persona`, `Instructions`, `Boundaries`와 선택적 `Review Policy`, `Output Format` section을 지원한다.
+- [x] 알 수 없는 frontmatter field와 custom Markdown section은 손실 없이 보존해 향후 schema 확장을 막지 않는다.
+- [x] instruction file 적용 순서는 `agent.md`의 `instructionFiles` 목록으로 명시하고 암묵적인 전체 folder scan 순서에 의존하지 않는다.
+- [x] instruction file은 agent folder 내부 상대 경로만 허용하고 absolute path, `..`와 symlink escape를 차단한다.
 
 ```md
 ---
@@ -425,23 +425,23 @@ instructionFiles:
 
 ### 저장, 외부 편집과 충돌 처리
 
-- [ ] Markdown 저장은 temporary file과 atomic rename을 사용해 부분 저장을 방지한다.
+- [x] Markdown 저장은 temporary file과 atomic rename을 사용해 부분 저장을 방지한다.
 - [ ] file watcher가 외부 editor의 `agent.md`와 instruction 변경을 debounce해 감지한다.
-- [ ] 유효한 외부 변경은 agent index와 UI에 반영하고 다음 run부터 사용한다.
-- [ ] parsing 또는 validation 실패 시 실행 중 run은 시작 당시 snapshot으로 유지하고 해당 agent의 새 run은 차단하며 `invalid` 상태를 표시한다.
+- [x] 유효한 외부 변경은 agent index와 UI에 반영하고 다음 run부터 사용한다.
+- [x] parsing 또는 validation 실패 시 실행 중 run은 시작 당시 snapshot으로 유지하고 해당 agent의 새 run은 차단하며 `invalid` 상태를 표시한다.
 - [ ] UI에서 편집 중 외부 파일이 바뀌면 content hash로 충돌을 감지하고 overwrite, reload 또는 수동 merge를 선택하게 한다.
 - [ ] app, web, CLI와 MCP에서 저장할 때 같은 validation과 atomic writer를 사용한다.
-- [ ] 여러 process가 동시에 agent를 수정할 때 project writer lock과 expected content hash를 확인한다.
+- [x] 여러 process가 동시에 agent를 수정할 때 project writer lock과 expected content hash를 확인한다.
 
 ### 실행 snapshot과 migration
 
-- [ ] task 실행 시작 시 사용한 agent definition hash와 schema version을 run에 기록한다.
-- [ ] run prompt에 합성된 `agent.md`와 instruction 내용을 snapshot으로 보존하되 secret 검사를 통과하게 한다.
-- [ ] agent 파일이 변경돼도 이미 실행 중인 run의 persona와 instruction은 바뀌지 않게 한다.
-- [ ] 기존 DB agent를 `.harness/agent` folder와 Markdown으로 내보내는 idempotent migration을 구현한다.
-- [ ] migration은 agent id, assignment, run history와 template 관계를 보존한다.
-- [ ] migration 성공 전 기존 DB 원본을 제거하지 않고 rollback과 재실행 경로를 제공한다.
-- [ ] project template 적용 시 template agent를 project-local Markdown folder로 materialize한다.
+- [x] task 실행 시작 시 사용한 agent definition hash와 schema version을 run에 기록한다.
+- [x] run prompt에 합성된 `agent.md`와 instruction 내용을 snapshot으로 보존하되 secret 검사를 통과하게 한다.
+- [x] agent 파일이 변경돼도 이미 실행 중인 run의 persona와 instruction은 바뀌지 않게 한다.
+- [x] 기존 DB agent를 `.harness/agent` folder와 Markdown으로 내보내는 idempotent migration을 구현한다.
+- [x] migration은 agent id, assignment, run history와 template 관계를 보존한다.
+- [x] migration 성공 전 기존 DB 원본을 제거하지 않고 rollback과 재실행 경로를 제공한다.
+- [x] project template 적용 시 template agent를 project-local Markdown folder로 materialize한다.
 
 ### 완료 조건
 

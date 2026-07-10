@@ -12,6 +12,7 @@ export type AgentPayload = Pick<
   | "allowedTools"
   | "boundaries"
   | "maxParallel"
+  | "enabled"
 >;
 
 export const agentService = {

@@ -369,6 +369,8 @@ provider process, PID, session id, last sequence와 workspace는 DB에 기록한
 
 현재 `apps/server/src/project-store.ts`가 versioned manifest/config와 표준 `.harness/` directory를 migration하고, process 소유권을 기록하는 atomic writer lock과 stale lock recovery를 제공한다. project DB는 WAL, busy timeout과 schema user version을 설정하며 application/runtime/planning mutation entry는 같은 reentrant lock을 사용한다.
 
+`apps/server/src/agent-store.ts`는 `agent.md`와 명시된 instruction file을 기준 원본으로 읽고 atomic write, content hash 충돌 검사, path/secret validation과 legacy DB materialization을 담당한다. DB의 기존 role/persona column은 호환용 derived cache로만 갱신되며 새 run은 실제 Markdown revision과 합성 snapshot을 기록한다.
+
 ### 3단계: typed IPC와 desktop shell
 
 - Electron main, preload와 packaged renderer를 추가한다.

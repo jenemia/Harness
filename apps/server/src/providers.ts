@@ -28,6 +28,7 @@ export type LlmRunContext = {
   projectMemory: MemoryRecord[];
   taskComments?: CommentRecord[];
   taskRuns?: RunRecord[];
+  agentDefinitionSnapshot?: string;
   timeoutMs?: number;
 };
 
@@ -950,6 +951,7 @@ function buildLlmEnvironment(
   return {
     HARNESS_LLM_PROVIDER: providerId,
     HARNESS_PROMPT_FILE: files.promptFile,
+    HARNESS_AGENT_DEFINITION_FILE: files.agentDefinitionFile,
     HARNESS_GLOBAL_MEMORY: files.globalMemoryText,
     HARNESS_GLOBAL_MEMORY_FILE: files.globalMemoryFile,
     HARNESS_PROJECT_MEMORY: files.projectMemoryText,
@@ -984,6 +986,7 @@ function writePromptFiles(
   const promptDir = path.join(workspace.worktreePath, ".harness");
   mkdirSync(promptDir, { recursive: true });
   const promptFile = path.join(promptDir, "agent-prompt.md");
+  const agentDefinitionFile = path.join(promptDir, "agent-definition.md");
   const globalMemoryFile = path.join(promptDir, "global-memory.md");
   const projectMemoryFile = path.join(promptDir, "project-memory.md");
   const globalMemoryText = formatMemory(context?.globalMemory || []);
@@ -996,6 +999,7 @@ function writePromptFiles(
       : "Work only inside this Harness-managed workspace. Do not assume a Git branch or merge step exists. Report produced artifacts, verification performed, and any blockers.";
   writeFileSync(globalMemoryFile, globalMemoryText, "utf8");
   writeFileSync(projectMemoryFile, projectMemoryText, "utf8");
+  writeFileSync(agentDefinitionFile, context?.agentDefinitionSnapshot || "", "utf8");
   const prompt = [
     `# Harness Agent Task`,
     ``,
@@ -1005,6 +1009,9 @@ function writePromptFiles(
     ``,
     `## Persona`,
     agent.persona,
+    ``,
+    `## Agent Definition Snapshot`,
+    context?.agentDefinitionSnapshot || "(not available)",
     ``,
     `## Allowed Tools`,
     formatList(agent.allowedTools),
@@ -1047,6 +1054,7 @@ function writePromptFiles(
   writeFileSync(promptFile, prompt, "utf8");
   return {
     promptFile,
+    agentDefinitionFile,
     globalMemoryFile,
     projectMemoryFile,
     globalMemoryText,

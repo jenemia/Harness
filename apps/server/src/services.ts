@@ -24,6 +24,7 @@ import {
 } from "./db.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import { withProjectWriterLock } from "./project-store.js";
+import { createAgentDefinition, syncProjectAgentDefinitions, updateAgentDefinition } from "./agent-store.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 export type RegisterProjectInput = {
@@ -110,11 +111,19 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
       allowedTools: normalizeStringList(input.allowedTools),
       boundaries: input.boundaries?.trim() || "",
       maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
+      enabled: input.enabled !== false,
       status: "idle",
       currentTaskId: null,
+      definitionPath: null,
+      definitionHash: null,
+      definitionSchemaVersion: null,
+      parseStatus: "legacy",
+      parseError: null,
       createdAt: timestamp,
       updatedAt: timestamp
     };
+
+    createAgentDefinition(project.path, agent);
 
     db.prepare(`
       INSERT INTO agents (
@@ -137,6 +146,7 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
       agent.createdAt,
       agent.updatedAt
     );
+    syncProjectAgentDefinitions(db, project.path);
     insertEvent(db, {
       taskId: null,
       agentId: agent.id,
@@ -144,7 +154,7 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
       message: `${agent.name} was created.`,
       metadata: { role: agent.role, modelBackend: agent.modelBackend }
     });
-    return agent;
+    return mapAgent(db.prepare("SELECT * FROM agents WHERE id = ?").get(agent.id));
   } finally {
     db.close();
   }
@@ -154,31 +164,14 @@ function updateAgentMutation(project: ProjectRecord, agentId: string, input: Par
   const db = openProjectDb(project.path);
   try {
     const existing = db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId) as
-      | { model_backend: string; cli_command: string | null }
+      | { definition_path: string | null; definition_hash: string | null }
       | undefined;
     if (!existing) {
       throw new Error("Agent not found.");
     }
-    db.prepare(`
-      UPDATE agents
-      SET name = COALESCE(?, name), role = COALESCE(?, role), persona = COALESCE(?, persona),
-          model_backend = ?, cli_command = ?, capabilities = COALESCE(?, capabilities),
-          allowed_tools = COALESCE(?, allowed_tools), boundaries = COALESCE(?, boundaries),
-          max_parallel = COALESCE(?, max_parallel), updated_at = ?
-      WHERE id = ?
-    `).run(
-      input.name?.trim() || null,
-      input.role?.trim() || null,
-      input.persona?.trim() || null,
-      input.modelBackend === undefined ? existing.model_backend : input.modelBackend.trim() || existing.model_backend,
-      input.cliCommand === undefined ? existing.cli_command : input.cliCommand?.trim() || null,
-      Array.isArray(input.capabilities) ? JSON.stringify(normalizeStringList(input.capabilities)) : null,
-      Array.isArray(input.allowedTools) ? JSON.stringify(normalizeStringList(input.allowedTools)) : null,
-      input.boundaries === undefined ? null : input.boundaries.trim(),
-      input.maxParallel === undefined ? null : Math.max(1, Number(input.maxParallel)),
-      now(),
-      agentId
-    );
+    if (!existing.definition_path) throw new Error("Agent definition path is unavailable.");
+    updateAgentDefinition(project.path, existing.definition_path, input, existing.definition_hash);
+    syncProjectAgentDefinitions(db, project.path);
     const agent = mapAgent(db.prepare("SELECT * FROM agents WHERE id = ?").get(agentId));
     insertEvent(db, {
       taskId: null,
