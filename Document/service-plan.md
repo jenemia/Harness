@@ -323,6 +323,8 @@ Default worktree policy:
 
 Initial implementation: pending or conflicted merges can be approved into the main checkout or sent back for changes from the task detail controls, CLI merge commands, or the shared Approvals queue. Requesting changes returns the task to Selected, clears the pending merge state, records the reason, and keeps the task worktree/branch available for another run.
 
+Initial implementation: projects without Git or without a first commit can be initialized from the UI, API, or CLI through the workspace provider. The flow runs `git init` when needed, excludes `.harness/` from Git, and creates a baseline Harness commit so task worktrees have a stable starting `HEAD`.
+
 Benefits:
 
 - Safer parallel execution.
@@ -333,7 +335,7 @@ Benefits:
 
 Open constraints:
 
-- Projects without Git need an initialization flow or a non-Git fallback.
+- Non-Git fallback execution still needs a separate provider strategy.
 - Large repositories may make many worktrees expensive.
 - Merge conflict handling needs a clear UX.
 - Some non-code tasks may not need a worktree.
@@ -479,7 +481,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task reorder, task pause/resume, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation, task updates, task reorder, task pause/resume, task comments, approval decisions, merge decisions, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 

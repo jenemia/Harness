@@ -144,6 +144,28 @@ export function recoverInterruptedRuns(project: ProjectRecord): RecoveryResult {
   }
 }
 
+export async function initializeProjectWorkspace(project: ProjectRecord) {
+  const result = await providers.workspace().initializeProject(project.path);
+  const db = openProjectDb(project.path);
+  try {
+    insertEvent(db, {
+      taskId: null,
+      agentId: null,
+      type: "workspace.initialized",
+      message: result.committed
+        ? "Harness initialized the project Git repository with a baseline commit."
+        : result.output,
+      metadata: {
+        workspaceProvider: providers.workspace().id,
+        ...result
+      }
+    });
+  } finally {
+    db.close();
+  }
+  return result;
+}
+
 export async function startTask(project: ProjectRecord, taskId: string) {
   if (runningTasks.has(taskId)) {
     return { accepted: false, reason: "Task is already running." };

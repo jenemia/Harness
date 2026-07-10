@@ -44,6 +44,7 @@ import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
   decideApproval,
+  initializeProjectWorkspace,
   listRuntimeProviders,
   pauseTask,
   recoverInterruptedRuns,
@@ -232,6 +233,12 @@ const server = http.createServer(async (req, res) => {
 
       if (req.method === "GET" && childPath === "report") {
         sendJson(res, { report: createProjectHealthReport(getProjectOverview(project)) });
+        return;
+      }
+
+      if (req.method === "POST" && childPath === "init-git") {
+        const result = await initializeProjectWorkspace(project);
+        sendJson(res, { result, overview: getProjectOverview(project) }, 201);
         return;
       }
 

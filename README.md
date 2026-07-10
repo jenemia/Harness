@@ -6,6 +6,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 
 - Local project registry with project-local `.harness/` storage.
 - Project root scanning for importing existing Harness folders and Git repositories.
+- Git initialization flow for plain folders that need a baseline commit before agent worktrees can run.
 - Project sidebar summaries for task, blocker, approval, running, and merge counts across local folders.
 - Project health report for blockers, approvals, merges, failed runs, and next recommended action.
 - Project templates for seeding new folders with a useful starter agent team.
@@ -58,6 +59,7 @@ The server package also exposes a local JSON CLI for headless automation:
 pnpm cli projects:list
 pnpm cli projects:register --path ./my-project --name "My Project" --projectTemplate <templateId>
 pnpm cli projects:import-root --root ~/Documents --includePlainFolders false
+pnpm cli projects:init-git --project <projectId>
 pnpm cli projects:update --project <projectId> --path ./moved-project --name "Moved Project"
 pnpm cli projects:unregister --project <projectId>
 pnpm cli projects:report --project <projectId>
@@ -122,6 +124,8 @@ Project lists include folder and `.harness/harness.db` availability so moved or 
 Moved folders can be re-linked with the sidebar relink form, `PATCH /api/projects/:projectId`, or `projects:update`. Updating a registry path does not create a new folder.
 
 The project sidebar can scan the global default project root and import existing Harness folders or Git repositories. The same flow is available through `POST /api/projects/import-root` and `projects:import-root`; plain folders are included only when explicitly requested.
+
+Projects without Git or without an initial commit can be initialized from the sidebar `Init Git` button, `POST /api/projects/:projectId/init-git`, or `projects:init-git`. Harness initializes the repository when needed, excludes `.harness/` from Git, and creates a baseline commit so task worktrees can be created safely.
 
 ## Agents
 

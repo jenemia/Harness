@@ -189,6 +189,12 @@ export function App() {
               await loadOverview(selected.id);
             }
           }}
+          onInitializedGit={async (projectId) => {
+            const response = await api<{ overview: Overview }>(`/api/projects/${projectId}/init-git`, { method: "POST" });
+            await loadProjects();
+            setSelectedProjectId(projectId);
+            setOverview(response.overview);
+          }}
           runAction={runAction}
         />
       </aside>
@@ -522,6 +528,7 @@ function ProjectPanel(props: {
   onRemoved: (id: string) => Promise<void>;
   onUpdated: (id: string, payload: { name?: string; path?: string }) => Promise<void>;
   onImportedRoot: (payload: { root?: string; includePlainFolders?: boolean; seedDefaults?: boolean; projectTemplateId?: string }) => Promise<void>;
+  onInitializedGit: (id: string) => Promise<void>;
   runAction: (action: () => Promise<void>) => Promise<void>;
 }) {
   const [projectPath, setProjectPath] = useState("");
@@ -630,17 +637,23 @@ function ProjectPanel(props: {
         </button>
       </form>
       {selectedProject && (
-        <form className="stack-form relink-form" onSubmit={relink}>
-          <input
-            value={relinkPath}
-            onChange={(event) => setRelinkPath(event.target.value)}
-            placeholder="Relink selected project path"
-          />
-          <button className="secondary-button" type="submit">
-            <Link2 size={16} />
-            <span>Relink</span>
+        <>
+          <form className="stack-form relink-form" onSubmit={relink}>
+            <input
+              value={relinkPath}
+              onChange={(event) => setRelinkPath(event.target.value)}
+              placeholder="Relink selected project path"
+            />
+            <button className="secondary-button" type="submit">
+              <Link2 size={16} />
+              <span>Relink</span>
+            </button>
+          </form>
+          <button className="secondary-button" type="button" onClick={() => void props.runAction(() => props.onInitializedGit(selectedProject.id))}>
+            <GitBranch size={16} />
+            <span>Init Git</span>
           </button>
-        </form>
+        </>
       )}
     </section>
   );

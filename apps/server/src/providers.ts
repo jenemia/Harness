@@ -44,6 +44,7 @@ export type WorkspaceProvider = {
     branchPerTask: boolean;
     mergeIntoMainCheckout: boolean;
   };
+  initializeProject(projectPath: string): Promise<{ initialized: boolean; committed: boolean; head: string | null; output: string }>;
   ensureGitReady(projectPath: string): Promise<void>;
   ensureTaskWorkspace(projectPath: string, task: TaskRecord): Promise<TaskWorkspace>;
   commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null }>;
@@ -392,6 +393,49 @@ function createGitWorktreeWorkspaceProvider(
       gitWorktrees: true,
       branchPerTask: true,
       mergeIntoMainCheckout: true
+    },
+    async initializeProject(projectPath) {
+      const inside = await platformProvider.run("git", ["rev-parse", "--is-inside-work-tree"], projectPath, true);
+      let initialized = false;
+      if (!inside.ok) {
+        await platformProvider.run("git", ["init"], projectPath);
+        initialized = true;
+      }
+
+      await ensureHarnessGitExclude(platformProvider, projectPath);
+
+      const hasHead = await platformProvider.run("git", ["rev-parse", "--verify", "HEAD"], projectPath, true);
+      if (hasHead.ok) {
+        return {
+          initialized,
+          committed: false,
+          head: hasHead.stdout.trim(),
+          output: initialized ? "Initialized Git repository." : "Git repository already has a commit."
+        };
+      }
+
+      await platformProvider.run("git", ["add", "-A"], projectPath);
+      const commit = await platformProvider.run(
+        "git",
+        [
+          "-c",
+          "user.name=Harness Agent",
+          "-c",
+          "user.email=harness@local",
+          "commit",
+          "--allow-empty",
+          "-m",
+          "Initialize Harness project"
+        ],
+        projectPath
+      );
+      const head = await platformProvider.run("git", ["rev-parse", "HEAD"], projectPath);
+      return {
+        initialized,
+        committed: true,
+        head: head.stdout.trim(),
+        output: commit.stdout || "Created initial Harness project commit."
+      };
     },
     async ensureGitReady(projectPath) {
       const inside = await platformProvider.run("git", ["rev-parse", "--is-inside-work-tree"], projectPath, true);

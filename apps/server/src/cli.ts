@@ -41,6 +41,7 @@ import { createProjectHealthReport } from "./report.js";
 import {
   approveMerge,
   decideApproval,
+  initializeProjectWorkspace,
   listRuntimeProviders,
   pauseTask,
   requestMergeChanges,
@@ -62,6 +63,7 @@ const commands: Record<string, CommandHandler> = {
   "projects:update": updateProjectCommand,
   "projects:unregister": unregisterProjectCommand,
   "projects:overview": overviewCommand,
+  "projects:init-git": initializeProjectGitCommand,
   "projects:report": reportCommand,
   "settings:get": getSettingsCommand,
   "settings:update": updateSettingsCommand,
@@ -174,6 +176,12 @@ function updateProjectCommand(args: string[]) {
 function overviewCommand(args: string[]) {
   const project = getRequiredProject(args);
   return getProjectOverview(project);
+}
+
+async function initializeProjectGitCommand(args: string[]) {
+  const project = getRequiredProject(args);
+  const result = await initializeProjectWorkspace(project);
+  return { result, overview: getProjectOverview(project) };
 }
 
 function reportCommand(args: string[]) {
@@ -1273,6 +1281,7 @@ Usage:
   pnpm --filter @harness/server cli projects:update --project <projectId> [--name <name>] [--path <folder>]
   pnpm --filter @harness/server cli projects:unregister --project <projectId>
   pnpm --filter @harness/server cli projects:overview --project <projectId>
+  pnpm --filter @harness/server cli projects:init-git --project <projectId>
   pnpm --filter @harness/server cli projects:report --project <projectId>
   pnpm --filter @harness/server cli settings:get
   pnpm --filter @harness/server cli settings:update [--defaultProjectRoot <folder>] [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--maxRunSeconds 1800] [--providerCommands <json>|--providerCommandsFile <file>]
