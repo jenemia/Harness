@@ -102,6 +102,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       reporter: "pm-agent",
       parentTaskId: null,
       dependencyTaskIds: inputTask.dependencyTaskIds,
+      waivedDependencyTaskIds: [],
       labels: ["pm-plan", `role:${inputTask.role}`],
       acceptanceCriteria: inputTask.acceptanceCriteria,
       taskOrder: nextTaskOrder(db),
@@ -119,9 +120,9 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
+        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -133,6 +134,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       task.reporter,
       task.parentTaskId,
       JSON.stringify(task.dependencyTaskIds),
+      JSON.stringify(task.waivedDependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
       task.taskOrder,

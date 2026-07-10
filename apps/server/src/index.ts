@@ -560,6 +560,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       reporter: input.reporter || "human",
       parentTaskId: input.parentTaskId || null,
       dependencyTaskIds: Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [],
+      waivedDependencyTaskIds: Array.isArray(input.waivedDependencyTaskIds) ? input.waivedDependencyTaskIds : [],
       labels: Array.isArray(input.labels) ? input.labels : [],
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
       taskOrder: nextTaskOrder(db),
@@ -575,9 +576,9 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-        parent_task_id, dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
+        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, acceptance_criteria, task_order, branch_name,
         worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -589,6 +590,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       task.reporter,
       task.parentTaskId,
       JSON.stringify(task.dependencyTaskIds),
+      JSON.stringify(task.waivedDependencyTaskIds),
       JSON.stringify(task.labels),
       task.acceptanceCriteria,
       task.taskOrder,
@@ -637,6 +639,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
           assignee_agent_id = ?,
           parent_task_id = ?,
           dependency_task_ids = COALESCE(?, dependency_task_ids),
+          waived_dependency_task_ids = COALESCE(?, waived_dependency_task_ids),
           labels = COALESCE(?, labels),
           acceptance_criteria = COALESCE(?, acceptance_criteria),
           blocked_reason = ?,
@@ -651,6 +654,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       input.assigneeAgentId === undefined ? (existing as { assignee_agent_id: string | null }).assignee_agent_id : input.assigneeAgentId,
       input.parentTaskId === undefined ? (existing as { parent_task_id: string | null }).parent_task_id : input.parentTaskId,
       Array.isArray(input.dependencyTaskIds) ? JSON.stringify(input.dependencyTaskIds) : null,
+      Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(input.waivedDependencyTaskIds) : null,
       Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
       input.acceptanceCriteria?.trim() || null,
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
@@ -707,6 +711,7 @@ function createFollowUpTasks(project: ProjectRecord, runId: string) {
       reporter: "pm-agent",
       parentTaskId: sourceTaskId,
       dependencyTaskIds: [sourceTaskId],
+      waivedDependencyTaskIds: [],
       labels: ["follow-up"],
       acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale."
     })

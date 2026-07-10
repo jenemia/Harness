@@ -1073,6 +1073,15 @@ textarea {
   font-size: 12px;
 }
 
+.dependency-row span {
+  flex: 1;
+  min-width: 0;
+}
+
+.dependency-row b {
+  white-space: nowrap;
+}
+
 .handoff-row {
   align-items: center;
   background: #f7f8f9;

@@ -18,6 +18,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
 - Workflow templates for reusable PM planning role chains.
 - Ready-task scheduler with agent `maxParallel` capacity checks.
+- Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
 - Git worktree per executable task.
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
@@ -80,6 +81,7 @@ pnpm cli tasks:list --project <projectId> --status Selected,Blocked
 pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
+pnpm cli tasks:update --project <projectId> --task <taskId> --waivedDependencies <dependencyTaskId>
 pnpm cli tasks:move --project <projectId> --task <taskId> --direction up
 pnpm cli tasks:pause --project <projectId> --task <taskId> --reason "Waiting on product decision"
 pnpm cli tasks:resume --project <projectId> --task <taskId>
@@ -136,6 +138,8 @@ When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisit
 Tasks can be paused from the board, task detail drawer, API, or CLI. Paused tasks stay out of scheduler runs until they are resumed back to `Selected`, and pause/resume events are recorded in the task timeline.
 
 Tasks can be moved up or down within their current board column from the board, task detail drawer, API, or `tasks:move`. The scheduler reads the same board order when choosing ready tasks.
+
+Task dependencies can be explicitly waived from the task detail drawer, API, or `tasks:update --waivedDependencies`. Waived dependencies stay visible on the task, but the scheduler no longer blocks on them.
 
 When the server starts, Harness scans registered projects for runs that were left `running` by a previous process. Those runs are closed as failed with an interruption event, affected tasks return to `Selected`, and busy agents are reset to idle.
 

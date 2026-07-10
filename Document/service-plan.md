@@ -176,6 +176,8 @@ Tasks should support dependencies, blockers, and blocked reasons. The board shou
 
 Dependency tracking is required for safe parallelism. A task should not become executable until its required predecessors are done or explicitly waived by the user/PM agent.
 
+Initial implementation: tasks store explicit waived dependency ids. Waived dependencies stay visible in task detail and CLI output, but the scheduler excludes them from readiness blockers so a user or PM decision can unblock work without deleting dependency history.
+
 ### Execution Timeline
 
 Each task should keep a structured timeline:
@@ -277,7 +279,7 @@ Scheduling rules:
 - PM handoff decisions run automatically by default.
 - Users can set concurrency limits per project and per agent.
 
-Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution or when a human manually marks the prerequisite Done. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected. Tasks can be moved up or down within their board column, and the scheduler uses that board order when selecting ready work.
+Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution, when a human manually marks the prerequisite Done, or when a dependency is explicitly waived. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected. Tasks can be moved up or down within their board column, and the scheduler uses that board order when selecting ready work.
 
 ### Sequential Workflow Chains
 

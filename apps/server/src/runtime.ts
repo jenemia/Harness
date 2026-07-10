@@ -181,7 +181,7 @@ export async function startTask(project: ProjectRecord, taskId: string) {
         agentId: task.assigneeAgentId,
         type: "task.blocked",
         message: dependencyBlocker,
-        metadata: { dependencyTaskIds: task.dependencyTaskIds }
+        metadata: { dependencyTaskIds: task.dependencyTaskIds, waivedDependencyTaskIds: task.waivedDependencyTaskIds }
       });
       return { accepted: false, reason: dependencyBlocker };
     }
@@ -1038,13 +1038,19 @@ function getDependencyBlocker(db: DatabaseSync, task: TaskRecord) {
     return null;
   }
 
-  const placeholders = task.dependencyTaskIds.map(() => "?").join(", ");
-  const rows = db.prepare(`SELECT * FROM tasks WHERE id IN (${placeholders})`).all(...task.dependencyTaskIds).map(mapTask);
+  const waivedIds = new Set(task.waivedDependencyTaskIds);
+  const activeDependencyIds = task.dependencyTaskIds.filter((id) => !waivedIds.has(id));
+  if (!activeDependencyIds.length) {
+    return null;
+  }
+
+  const placeholders = activeDependencyIds.map(() => "?").join(", ");
+  const rows = db.prepare(`SELECT * FROM tasks WHERE id IN (${placeholders})`).all(...activeDependencyIds).map(mapTask);
   const doneIds = new Set(rows.filter((dependency) => dependency.status === "Done").map((dependency) => dependency.id));
-  const missingIds = task.dependencyTaskIds.filter((id) => !rows.some((dependency) => dependency.id === id));
+  const missingIds = activeDependencyIds.filter((id) => !rows.some((dependency) => dependency.id === id));
   const blocked = rows.filter((dependency) => dependency.status !== "Done");
 
-  if (!missingIds.length && !blocked.length && doneIds.size === task.dependencyTaskIds.length) {
+  if (!missingIds.length && !blocked.length && doneIds.size === activeDependencyIds.length) {
     return null;
   }
 

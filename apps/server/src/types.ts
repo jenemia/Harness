@@ -172,6 +172,7 @@ export type TaskRecord = {
   reporter: string;
   parentTaskId: string | null;
   dependencyTaskIds: string[];
+  waivedDependencyTaskIds: string[];
   labels: string[];
   acceptanceCriteria: string;
   taskOrder: number;

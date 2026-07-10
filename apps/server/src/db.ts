@@ -805,6 +805,7 @@ export function openProjectDb(projectPath: string) {
       reporter TEXT NOT NULL,
       parent_task_id TEXT,
       dependency_task_ids TEXT NOT NULL DEFAULT '[]',
+      waived_dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       labels TEXT NOT NULL,
       acceptance_criteria TEXT NOT NULL,
       task_order INTEGER NOT NULL DEFAULT 0,
@@ -899,6 +900,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "agents", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "agents", "boundaries", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "tasks", "waived_dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "model_backend", "TEXT");
   ensureColumn(db, "tasks", "task_order", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
@@ -1561,6 +1563,7 @@ export function mapTask(row: unknown): TaskRecord {
     reporter: String(r.reporter),
     parentTaskId: r.parent_task_id ? String(r.parent_task_id) : null,
     dependencyTaskIds: JSON.parse(String(r.dependency_task_ids || "[]")) as string[],
+    waivedDependencyTaskIds: JSON.parse(String(r.waived_dependency_task_ids || "[]")) as string[],
     labels: JSON.parse(String(r.labels)) as string[],
     acceptanceCriteria: String(r.acceptance_criteria),
     taskOrder: Number(r.task_order || 0),

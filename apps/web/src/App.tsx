@@ -1270,6 +1270,22 @@ function TaskDetailDrawer(props: {
     });
   }
 
+  async function toggleDependencyWaiver(dependencyId: string) {
+    const waived = new Set(props.task.waivedDependencyTaskIds);
+    if (waived.has(dependencyId)) {
+      waived.delete(dependencyId);
+    } else {
+      waived.add(dependencyId);
+    }
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ waivedDependencyTaskIds: Array.from(waived) })
+      });
+      await props.onChanged();
+    });
+  }
+
   async function saveTask(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
@@ -1490,12 +1506,22 @@ function TaskDetailDrawer(props: {
           <section className="drawer-section">
             <h3>Dependencies</h3>
             <div className="dependency-list">
-              {dependencies.map((dependency) => (
-                <div className="dependency-row" key={dependency.id}>
-                  <span>{dependency.title}</span>
-                  <b>{dependency.status}</b>
-                </div>
-              ))}
+              {dependencies.map((dependency) => {
+                const isWaived = props.task.waivedDependencyTaskIds.includes(dependency.id);
+                return (
+                  <div className="dependency-row" key={dependency.id}>
+                    <span>{dependency.title}</span>
+                    <b>{isWaived ? "Waived" : dependency.status}</b>
+                    <button
+                      className="secondary-button inline"
+                      type="button"
+                      onClick={() => void toggleDependencyWaiver(dependency.id)}
+                    >
+                      {isWaived ? "Restore" : "Waive"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}

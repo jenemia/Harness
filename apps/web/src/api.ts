@@ -163,6 +163,7 @@ export type Task = {
   reporter: string;
   parentTaskId: string | null;
   dependencyTaskIds: string[];
+  waivedDependencyTaskIds: string[];
   labels: string[];
   acceptanceCriteria: string;
   taskOrder: number;
