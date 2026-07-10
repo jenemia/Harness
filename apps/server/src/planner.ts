@@ -39,35 +39,34 @@ export type PlanPreviewResult = {
   warnings: string[];
 };
 
-export function previewPlan(input: PlanRequest): PlanPreviewResult {
-  const goal = input.goal?.trim();
-  if (!goal) {
-    throw new Error("Planning goal is required.");
-  }
-
-  const mode = input.mode || "sequential";
-  const workflowTemplate = input.workflowTemplateId ? getWorkflowTemplate(input.workflowTemplateId) : null;
-  if (input.workflowTemplateId && !workflowTemplate) {
-    throw new Error("Workflow template not found.");
-  }
-  const planItems = buildPlanItems(goal, mode, workflowTemplate);
-  const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
-  const warnings = buildPlanWarnings(planItems.length, largePlanTaskThreshold);
-
-  return {
-    goal,
-    mode,
-    workflowTemplateId: workflowTemplate?.id || null,
-    tasks: planItems.map<PlanPreviewTask>((item, index) => ({
-      title: item.title,
-      role: item.role,
-      description: item.description,
-      acceptanceCriteria: item.acceptanceCriteria,
-      dependencyIndexes: mode === "sequential" && index > 0 ? [index - 1] : [],
-      status: mode === "sequential" && index > 0 ? "Blocked" : "Selected"
-    })),
-    warnings
+export type PlanningProviderDefinition = {
+  id: string;
+  label: string;
+  kind: "deterministic-local";
+  description: string;
+  capabilities: {
+    explicitItems: boolean;
+    workflowTemplates: boolean;
+    sequentialDependencies: boolean;
+    parallelMode: boolean;
+    largePlanWarnings: boolean;
   };
+};
+
+type PlanningProvider = {
+  id: string;
+  definition: PlanningProviderDefinition;
+  preview(input: PlanRequest): PlanPreviewResult;
+};
+
+const planningProvider = createDeterministicPlanningProvider();
+
+export function getPlanningProviderDefinition() {
+  return planningProvider.definition;
+}
+
+export function previewPlan(input: PlanRequest): PlanPreviewResult {
+  return planningProvider.preview(input);
 }
 
 export function createPlan(project: ProjectRecord, input: PlanRequest) {
@@ -216,6 +215,56 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
 
     return mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(task.id));
   }
+}
+
+function createDeterministicPlanningProvider(): PlanningProvider {
+  return {
+    id: "deterministic-local",
+    definition: {
+      id: "deterministic-local",
+      label: "Deterministic Local Planner",
+      kind: "deterministic-local",
+      description: "Creates local PM task previews from workflow templates, explicit lists, or a default role sequence.",
+      capabilities: {
+        explicitItems: true,
+        workflowTemplates: true,
+        sequentialDependencies: true,
+        parallelMode: true,
+        largePlanWarnings: true
+      }
+    },
+
+    preview(input) {
+      const goal = input.goal?.trim();
+      if (!goal) {
+        throw new Error("Planning goal is required.");
+      }
+
+      const mode = input.mode || "sequential";
+      const workflowTemplate = input.workflowTemplateId ? getWorkflowTemplate(input.workflowTemplateId) : null;
+      if (input.workflowTemplateId && !workflowTemplate) {
+        throw new Error("Workflow template not found.");
+      }
+      const planItems = buildPlanItems(goal, mode, workflowTemplate);
+      const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
+      const warnings = buildPlanWarnings(planItems.length, largePlanTaskThreshold);
+
+      return {
+        goal,
+        mode,
+        workflowTemplateId: workflowTemplate?.id || null,
+        tasks: planItems.map<PlanPreviewTask>((item, index) => ({
+          title: item.title,
+          role: item.role,
+          description: item.description,
+          acceptanceCriteria: item.acceptanceCriteria,
+          dependencyIndexes: mode === "sequential" && index > 0 ? [index - 1] : [],
+          status: mode === "sequential" && index > 0 ? "Blocked" : "Selected"
+        })),
+        warnings
+      };
+    }
+  };
 }
 
 function buildPlanItems(goal: string, mode: PlanningMode, workflowTemplate: WorkflowTemplateRecord | null) {

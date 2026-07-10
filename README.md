@@ -29,7 +29,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
 - Configurable run timeout for command-backed providers.
-- Provider-based platform, workspace, approval, policy, and LLM adapters.
+- Provider-based platform, workspace, planning, approval, policy, and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Task-level model backend overrides for routing specific work to a different provider.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, large plan confirmation threshold, and command approval policy.
@@ -125,7 +125,7 @@ Provider commands are a provider-to-command map. Agent-specific `cliCommand` val
 
 Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. Dynamic handoffs with risk or error signals pause for human approval before the next agent starts. If no configured or dynamic handoff applies, the task moves to Done.
 
-The provider catalog exposes the active OS platform provider, workspace isolation provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including command, merge, and handoff approval capabilities.
+The provider catalog exposes the active OS platform provider, workspace isolation provider, planning provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including planning and approval capabilities.
 
 ## Project Templates
 
@@ -149,7 +149,7 @@ Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` 
 
 ## PM Planning
 
-Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition before any tasks are written. Plans at or above the project's large plan threshold require preview confirmation before creation; API and CLI callers pass `allowLargePlan` after reviewing the preview. The first implementation is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
+Use the PM Plan panel or `POST /api/projects/:projectId/plan` to turn a goal into board tasks. The same panel's Preview action, `POST /api/projects/:projectId/plan-preview`, and `plans:preview` inspect the same decomposition before any tasks are written. Plans at or above the project's large plan threshold require preview confirmation before creation; API and CLI callers pass `allowLargePlan` after reviewing the preview. The first planning provider is deterministic and local: it creates requirement, design, implementation, and review tasks, assigns them by agent role, and links sequential dependencies when requested.
 
 Select a workflow template to make PM planning follow a reusable role chain. Harness seeds `Plan, Build, Review` and `Build and Review` templates, and exposes `/api/workflow-templates` for custom templates.
 

@@ -2567,6 +2567,15 @@ function SettingsPanel(props: {
             {props.providerCatalog.workspace.capabilities.branchPerTask ? "on" : "off"} | harness workspace{" "}
             {props.providerCatalog.workspace.capabilities.harnessWorkspaces ? "on" : "off"}
           </span>
+          <strong>{props.providerCatalog.planning.label}</strong>
+          <span>
+            {props.providerCatalog.planning.id} | {props.providerCatalog.planning.description}
+          </span>
+          <span>
+            workflow templates {props.providerCatalog.planning.capabilities.workflowTemplates ? "on" : "off"} | explicit
+            lists {props.providerCatalog.planning.capabilities.explicitItems ? "on" : "off"} | large plan warnings{" "}
+            {props.providerCatalog.planning.capabilities.largePlanWarnings ? "on" : "off"}
+          </span>
           <strong>{props.providerCatalog.approval.label}</strong>
           <span>
             {props.providerCatalog.approval.id} | {props.providerCatalog.approval.description}

@@ -292,6 +292,19 @@ export type ProviderCatalog = {
       mergeIntoMainCheckout: boolean;
     };
   };
+  planning: {
+    id: string;
+    label: string;
+    kind: "deterministic-local";
+    description: string;
+    capabilities: {
+      explicitItems: boolean;
+      workflowTemplates: boolean;
+      sequentialDependencies: boolean;
+      parallelMode: boolean;
+      largePlanWarnings: boolean;
+    };
+  };
   approval: {
     id: string;
     label: string;

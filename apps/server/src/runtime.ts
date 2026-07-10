@@ -15,6 +15,7 @@ import {
   projectHarnessDir
 } from "./db.js";
 import { createDefaultProviders } from "./providers.js";
+import { getPlanningProviderDefinition } from "./planner.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 
 const runningTasks = new Set<string>();
@@ -40,6 +41,7 @@ export function listRuntimeProviders() {
       description: providers.workspace().description,
       capabilities: providers.workspace().capabilities
     },
+    planning: getPlanningProviderDefinition(),
     approval: providers.approval().definition,
     policy: providers.policy().definition,
     llmProviders: providers.llmDefinitions()
