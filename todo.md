@@ -1,5 +1,40 @@
 # Harness TODO
 
+## 0. 최우선: `.harness/` 중심 local desktop 구조
+
+> 구현 기준 문서: [Harness Local Desktop Architecture](Document/local-desktop-architecture.md)
+
+이후 `todo 진행해줘` 요청으로 이 section 또는 아래 provider, interaction, MCP, review 기능을 구현할 때는 먼저 위 아키텍처 문서를 읽고 service 경계, `.harness/` layout, IPC와 인증 원칙을 따른다. 구조를 변경해야 하면 코드보다 기준 문서를 먼저 또는 같은 작업에서 갱신한다.
+
+### 구조 원칙
+
+- [ ] Harness application은 한 번 설치하고 project별 상태와 산출물은 project root의 `.harness/`에 구성한다.
+- [ ] application binary와 UI bundle을 project마다 `.harness/`에 복사하지 않는다.
+- [ ] Electron main process가 SQLite, Git, provider process, scheduler와 policy를 담당하고 React renderer는 typed IPC만 사용한다.
+- [ ] production desktop은 packaged web asset을 열고 별도의 persistent HTTP server를 자동 시작하지 않는다.
+- [ ] HTTP transport는 headless 또는 remote 사용을 위한 명시적 선택 기능으로만 남긴다.
+- [ ] HTTP route, IPC, CLI와 MCP가 transport별 business logic을 갖지 않고 같은 application service를 호출하게 한다.
+- [ ] project lock, SQLite WAL, stale process와 interrupted run recovery를 구현한다.
+- [ ] desktop이 실행 중일 때 CLI와 MCP는 Unix domain socket 또는 Windows named pipe로 동일 service를 호출한다.
+- [ ] desktop이 꺼져 있을 때 CLI와 MCP는 project writer lock을 획득한 경우에만 직접 mutation을 수행한다.
+
+### 인증 원칙
+
+- [ ] Codex, Claude와 Cursor provider는 각 CLI의 기존 login session을 재사용하고 Harness가 별도 API token 입력을 요구하지 않게 한다.
+- [ ] Harness는 CLI credential을 복사하거나 `.harness/`, global DB, prompt, log와 event에 저장하지 않는다.
+- [ ] 로그인되지 않은 provider에는 공식 CLI login command와 상태 확인 방법을 안내한다.
+- [ ] Harness가 provider API에 직접 접근해야 하는 예외 기능만 OAuth 2.1 PKCE 또는 device authorization을 사용한다.
+- [ ] OAuth credential은 OS keychain에 저장하고 `.harness/`에는 account reference와 비민감 metadata만 기록한다.
+- [ ] MCP 기본 연결은 stdio와 OS-local socket permission을 사용하고 persistent bearer token이나 API token을 요구하지 않는다.
+
+### 완료 조건
+
+- project folder와 `.harness/`만 이동해 다른 위치에서 기존 project 상태를 다시 열 수 있다.
+- desktop의 핵심 기능이 별도 persistent HTTP listening port 없이 동작한다.
+- desktop, CLI와 MCP가 동일한 validation, approval, scheduler와 audit 규칙을 사용한다.
+- Codex, Claude와 Cursor CLI를 Harness credential 입력 없이 기존 login 상태로 실행할 수 있다.
+- provider credential이 project 파일, 실행 event, 완료 보고서와 telemetry에 나타나지 않는다.
+
 ## 목표
 
 Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조에서 사람과 여러 에이전트가 같은 맥락 안에서 협업하는 구조로 확장한다.
@@ -230,7 +265,8 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 ### MCP server
 
 - [ ] 로컬 stdio 기반 `harness-mcp-server` entry point를 추가한다.
-- [ ] desktop 또는 별도 process 연결이 필요한 경우에만 loopback tool bridge와 일회성 bearer token을 사용한다.
+- [ ] desktop이 실행 중이면 Unix domain socket 또는 Windows named pipe로 application service에 연결한다.
+- [ ] desktop이 꺼져 있으면 project lock을 확인하고 허용된 read 또는 write service만 직접 호출한다.
 - [ ] MCP tool input과 output schema를 versioning하고 기존 Harness API·CLI service를 재사용한다.
 - [ ] read tool과 write tool의 권한 scope를 분리한다.
 - [ ] project와 task 범위를 벗어나는 요청을 차단하고 호출 client, tool, 대상과 결과를 audit event로 기록한다.
@@ -297,14 +333,16 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 ### 설치 및 연결 안내
 
 - [ ] Node.js, pnpm, Git과 최소 한 개의 LLM CLI 등 필수 prerequisite와 지원 version을 명시한다.
-- [ ] source 설치를 `git clone` → `pnpm install` → `pnpm dev` 순서로 안내한다.
-- [ ] production build와 단일 local server 실행을 `pnpm build` → `pnpm start` 순서로 안내한다.
+- [ ] source 설치를 `git clone` → `pnpm install` → 실제 desktop development command 순서로 안내하고 web-only 개발 command와 구분한다.
+- [ ] desktop build·설치·실행 command를 기본 경로로 안내하고 `pnpm start` 기반 HTTP server는 선택적 headless 경로로 구분한다.
 - [ ] macOS, Windows, Linux별 폴더 선택기와 필요한 system dependency 차이를 설명한다.
 - [ ] Codex, Claude Code, Gemini, Ollama와 Cursor CLI의 설치·로그인·provider 설정 예시를 제공한다.
+- [ ] Codex, Claude와 Cursor는 Harness에 token을 입력하는 대신 각 CLI의 기존 login session을 재사용한다는 점을 안내한다.
+- [ ] 직접 provider 인증이 필요한 예외 기능은 OAuth와 OS keychain을 사용하고 project 파일에는 credential을 저장하지 않는다고 설명한다.
 - [ ] provider command가 OS별 key에서 어떻게 선택되는지 최소 예시와 확인 command를 제공한다.
 - [ ] Cursor와 다른 client에 Harness MCP server를 등록하는 설정 예시를 제공한다.
 - [ ] 첫 project 등록, Git 초기화, 첫 agent 생성, 첫 task 실행과 승인까지의 quick start를 작성한다.
-- [ ] port 충돌, provider executable 미탐지, 로그인 실패, Git 초기 commit 부재와 MCP 연결 실패 해결법을 추가한다.
+- [ ] 개발 server 또는 선택적 HTTP transport의 port 충돌, provider executable 미탐지, 로그인 실패, Git 초기 commit 부재와 MCP 연결 실패 해결법을 추가한다.
 - [ ] 아직 제공되지 않는 desktop 설치 방법은 지원되는 것처럼 작성하지 않고 source/local server 설치와 구분한다.
 
 ### README 완료 조건
@@ -330,24 +368,31 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ## 권장 구현 순서
 
-1. 공통 provider capability와 versioned 실시간 event 계약
-2. Cursor CLI provider와 provider event adapter
-3. draft 세션, revision, 코멘트 데이터 모델
-4. 기획 리뷰어·예외 상황 감지 에이전트와 실시간 코멘트 UI
-5. 기획 에이전트의 `내용 반영` 및 diff·승인·되돌리기
-6. 범용 interaction 모델과 `suspended` run 상태
-7. 질문·승인·권한 요청 후 실행 재개
-8. 구현 완료 HTML 보고서, 변경량 지표와 완료 후 side diff 리뷰
-9. worktree 경계 감지, pre-push hook과 다층 보호
-10. Harness MCP server와 Cursor 연결
-11. 주요 실행 구간 OpenTelemetry 계측
-12. 완성된 실제 흐름과 검증된 설치 방법을 기준으로 README 개편
+1. [Local Desktop Architecture](Document/local-desktop-architecture.md)에 따른 application service, store와 runtime 경계 분리
+2. project `.harness/` layout, lock, migration과 recovery 확정
+3. Electron main, preload, typed IPC와 packaged React renderer
+4. persistent HTTP server 기본 비활성화와 선택적 HTTP transport 분리
+5. CLI-owned provider 인증 재사용과 OAuth 예외 경로 정리
+6. 공통 provider capability와 versioned 실시간 event 계약
+7. Cursor CLI provider와 provider event adapter
+8. draft 세션, revision, 코멘트 데이터 모델
+9. 기획 리뷰어·예외 상황 감지 에이전트와 실시간 코멘트 UI
+10. 기획 에이전트의 `내용 반영` 및 diff·승인·되돌리기
+11. 범용 interaction 모델과 `suspended` run 상태
+12. 질문·승인·권한 요청 후 실행 재개
+13. 구현 완료 HTML 보고서, 변경량 지표와 완료 후 side diff 리뷰
+14. worktree 경계 감지, pre-push hook과 다층 보호
+15. Harness MCP server, local socket bridge와 Cursor 연결
+16. 주요 실행 구간 OpenTelemetry 계측
+17. 완성된 실제 흐름과 검증된 설치 방법을 기준으로 README 개편
 
 `진행하면 좋은 것들`의 Worktree 개발 서버 Preview는 위 순서에 포함하지 않는다.
 
 ## 전체 완료 정의
 
 - 카드 작성 단계와 실행 단계 모두에서 인간과 에이전트의 대화가 task 맥락에 영속화된다.
+- desktop 기본 경로가 별도 persistent HTTP server 없이 project `.harness/`를 직접 사용한다.
+- CLI provider는 별도 Harness API token 없이 각 CLI의 기존 login session을 재사용한다.
 - 사용자의 명시적 결정 없이 에이전트가 초안 변경이나 위험 작업을 수행하지 않는다.
 - 서버 재시작 후에도 draft, interaction, suspended run을 복구할 수 있다.
 - Cursor CLI와 기존 provider가 공통 event 계약 또는 안전한 fallback으로 실행된다.
