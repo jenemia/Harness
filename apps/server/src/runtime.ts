@@ -855,7 +855,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
 
   const settings = getProjectSettingsFromDb(db);
   const evaluation = evaluateCompletion(db, task, completedBy);
-  const nextRole = settings.handoffRules[completedBy.role];
+  const handoffDecision = chooseNextHandoff(db, task, completedBy, settings, evaluation);
   insertEvent(db, {
     taskId: task.id,
     agentId: completedBy.id,
@@ -863,17 +863,20 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
     message: evaluation.summary,
     metadata: evaluation
   });
-  if (nextRole) {
-    const nextAgent = findAgentForHandoff(db, nextRole, completedBy.id);
+  if (handoffDecision) {
+    const nextAgent = findAgentForHandoff(db, handoffDecision.role, completedBy.id);
     if (!nextAgent) {
-      const reason = `PM handoff rule needs a ${nextRole} agent, but none is available.`;
+      const reason =
+        handoffDecision.source === "configured"
+          ? `PM handoff rule needs a ${handoffDecision.role} agent, but none is available.`
+          : `PM dynamic handoff selected ${handoffDecision.role}, but no matching agent is available.`;
       setTaskBlocked(db, task.id, reason);
       insertEvent(db, {
         taskId: task.id,
         agentId: completedBy.id,
         type: "handoff.blocked",
         message: reason,
-        metadata: { fromRole: completedBy.role, toRole: nextRole }
+        metadata: { fromRole: completedBy.role, toRole: handoffDecision.role, decision: handoffDecision }
       });
       return;
     }
@@ -885,7 +888,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
       task.id,
       completedBy.id,
       nextAgent.id,
-      `PM auto-handoff rule: ${completedBy.role} -> ${nextRole}. ${evaluation.summary}`,
+      `${handoffDecision.reason} ${evaluation.summary}`,
       now()
     );
     insertEvent(db, {
@@ -897,7 +900,9 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
         fromAgentId: completedBy.id,
         toAgentId: nextAgent.id,
         fromRole: completedBy.role,
-        toRole: nextRole,
+        toRole: handoffDecision.role,
+        decisionSource: handoffDecision.source,
+        decisionReason: handoffDecision.reason,
         evaluation
       }
     });
@@ -935,6 +940,34 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   scheduleReadyDependents(project, db, task.id);
 }
 
+function chooseNextHandoff(
+  db: DatabaseSync,
+  task: TaskRecord,
+  completedBy: AgentRecord,
+  settings: ProjectSettings,
+  evaluation: ReturnType<typeof evaluateCompletion>
+) {
+  const configuredRole = settings.handoffRules[completedBy.role];
+  if (configuredRole) {
+    return {
+      role: configuredRole,
+      source: "configured",
+      reason: `PM auto-handoff rule: ${completedBy.role} -> ${configuredRole}.`
+    };
+  }
+
+  const dynamicRole = inferDynamicHandoffRole(db, task, completedBy, evaluation);
+  if (!dynamicRole) {
+    return null;
+  }
+
+  return {
+    role: dynamicRole,
+    source: "dynamic",
+    reason: `PM dynamic handoff: ${completedBy.role} -> ${dynamicRole}.`
+  };
+}
+
 function evaluateCompletion(db: DatabaseSync, task: TaskRecord, completedBy: AgentRecord) {
   const row = db
     .prepare("SELECT * FROM runs WHERE task_id = ? AND agent_id = ? AND status = ? ORDER BY completed_at DESC LIMIT 1")
@@ -959,6 +992,52 @@ function evaluateCompletion(db: DatabaseSync, task: TaskRecord, completedBy: Age
   };
 }
 
+function inferDynamicHandoffRole(
+  db: DatabaseSync,
+  task: TaskRecord,
+  completedBy: AgentRecord,
+  evaluation: ReturnType<typeof evaluateCompletion>
+) {
+  const completedRole = completedBy.role.toLowerCase();
+  if (["reviewer", "qa", "editor"].includes(completedRole)) {
+    return null;
+  }
+
+  const signals = new Set(evaluation.signals);
+  const text = [task.title, task.description, task.acceptanceCriteria, task.labels.join(" "), evaluation.outputExcerpt]
+    .join("\n")
+    .toLowerCase();
+  const candidates: string[] = [];
+
+  if (completedRole === "researcher") {
+    candidates.push("analyst", "writer");
+  }
+  if (completedRole === "analyst") {
+    candidates.push("writer");
+  }
+  if (completedRole === "writer") {
+    candidates.push("editor", "editing", "reviewer");
+  }
+
+  if (signals.has("risk") || signals.has("error-mentioned") || evaluation.changedFiles.length > 0) {
+    candidates.push("reviewer", "qa", "quality");
+  }
+  if (/(document|docs|write|writer|summary|release notes|brief|article|copy)/.test(text) && completedRole !== "writer") {
+    candidates.push("writer");
+  }
+  if (/(research|source|evidence|synthesis|analysis|analyst)/.test(text) && completedRole === "researcher") {
+    candidates.push("analyst");
+  }
+
+  for (const candidate of unique(candidates)) {
+    if (findAgentForHandoff(db, candidate, completedBy.id)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 function detectCompletionSignals(output: string, changedFiles: string[]) {
   const signals = new Set<string>();
   const text = output.toLowerCase();
@@ -978,6 +1057,10 @@ function detectCompletionSignals(output: string, changedFiles: string[]) {
     signals.add("error-mentioned");
   }
   return Array.from(signals);
+}
+
+function unique(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 function excerpt(value: string, maxLength = 700) {

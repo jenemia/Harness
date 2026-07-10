@@ -24,7 +24,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Git worktree per executable task.
 - Harness workspace mode for non-code tasks that do not need Git worktrees.
 - Automatic workspace mode selection for common code, docs, planning, and research task signals.
-- Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
+- Automatic PM-driven handoff with project-level handoff rules, dynamic fallback routing, and approval gates for LLM CLI command execution and merge.
 - PM completion evaluation events before automatic handoffs or Done transitions.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
@@ -118,7 +118,7 @@ Each project also has project-local settings stored inside `<project>/.harness/h
 
 Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
-Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`; roles without a matching rule move to Done after successful completion.
+Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. If no configured or dynamic handoff applies, the task moves to Done.
 
 The provider catalog exposes the active OS platform provider, workspace isolation provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`.
 
@@ -152,7 +152,7 @@ Set `autoStart` on the planning request or use `POST /api/projects/:projectId/sc
 
 When a task is marked `Done`, Harness unblocks dependent tasks whose prerequisites are now complete and queues them for scheduling.
 
-After a successful run, the PM runtime inspects the latest output and changed files before deciding the configured handoff or Done transition. The resulting `pm.evaluated` event appears in the task timeline and is included in handoff metadata.
+After a successful run, the PM runtime inspects the latest output and changed files before deciding the configured handoff, dynamic fallback handoff, or Done transition. The resulting `pm.evaluated` event appears in the task timeline and is included in handoff metadata.
 
 Tasks can be paused from the board, task detail drawer, API, or CLI. Paused tasks stay out of scheduler runs until they are resumed back to `Selected`, and pause/resume events are recorded in the task timeline.
 

@@ -120,6 +120,8 @@ Initial implementation: project settings include role-to-role handoff rules. By 
 
 Initial implementation: after each successful run, the PM runtime inspects the latest completion output and changed files before choosing the role-to-role handoff or Done transition. It records a `pm.evaluated` timeline event with output excerpt, changed files, detected follow-up/risk/verification signals, and includes the evaluation summary in automatic handoff metadata.
 
+Initial implementation: when no configured handoff rule matches the completed agent role, the PM runtime can choose a dynamic fallback handoff from the completed role, task text, completion signals, changed files, and available agent capabilities. The first fallback routes support research chains such as `researcher -> analyst -> writer`, writing to editor/reviewer, and risky or changed work to reviewer/QA-style agents. Handoff events record whether the decision came from a configured rule or dynamic fallback.
+
 Initial implementation: shell-backed LLM providers create a command execution approval request before any configured CLI command runs. The task is blocked until the user approves or rejects the request from the Approvals panel. Approved tasks resume automatically; rejected tasks remain blocked and the decision is recorded in the timeline.
 
 Initial implementation: completed task worktree changes create merge approval requests in the same approval queue. Approving a merge request merges the task branch into the main checkout; rejecting it sends the task back to Selected with requested changes recorded in the timeline.
@@ -289,7 +291,7 @@ Scheduling rules:
 - PM handoff decisions run automatically by default.
 - Users can set concurrency limits per project and per agent.
 
-Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution, when a human manually marks the prerequisite Done, or when a dependency is explicitly waived. The PM runtime records completion-output evaluations before handoff decisions. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected. Tasks can be moved up or down within their board column, and the scheduler uses that board order when selecting ready work. Parent tasks can be decomposed into parallel or sequential child tasks so large work can become a visible dependency graph without leaving the task drawer.
+Initial implementation: the scheduler can start all ready tasks while respecting each agent's `maxParallel` limit. PM planning can optionally auto-start ready tasks after creating the plan. Dependent tasks are unblocked automatically when prerequisites complete through agent execution, when a human manually marks the prerequisite Done, or when a dependency is explicitly waived. The PM runtime records completion-output evaluations before configured or dynamic handoff decisions. Tasks can also be paused and resumed through the UI, API, and CLI; paused tasks stay out of scheduler runs until resumed to Selected. Tasks can be moved up or down within their board column, and the scheduler uses that board order when selecting ready work. Parent tasks can be decomposed into parallel or sequential child tasks so large work can become a visible dependency graph without leaving the task drawer.
 
 ### Sequential Workflow Chains
 
@@ -305,7 +307,7 @@ The system should support explicit workflow templates, but the PM agent should a
 
 Default behavior: sequential workflow chains advance automatically after each agent finishes unless a risk boundary requires approval.
 
-Initial implementation: global workflow templates are stored in the app-wide Harness database. PM planning and document-based planning can select a reusable template such as `Plan, Build, Review` or `Build and Review`, then create tasks from each step's role, title template, description template, and acceptance criteria.
+Initial implementation: global workflow templates are stored in the app-wide Harness database. PM planning and document-based planning can select a reusable template such as `Plan, Build, Review` or `Build and Review`, then create tasks from each step's role, title template, description template, and acceptance criteria. Outside explicit templates and configured role maps, PM dynamic fallback handoffs can still choose the next available specialist from task and completion signals.
 
 ### Agent Workspaces
 
