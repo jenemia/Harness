@@ -1,18 +1,24 @@
 #!/usr/bin/env node
 import readline from "node:readline";
 import { handleMcpMessage } from "./mcp.js";
+import { initializeTelemetry, shutdownTelemetry } from "./telemetry.js";
+
+initializeTelemetry();
 
 const clientId = readArgument("--client") || process.env.HARNESS_MCP_CLIENT_ID || "local-readonly";
 const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity, terminal: false });
+let pending = Promise.resolve();
 
 input.on("line", (line) => {
   const value = line.trim();
   if (!value) return;
-  void processLine(value);
+  pending = pending.then(() => processLine(value));
 });
 
 input.on("close", () => {
+  void pending.finally(() => shutdownTelemetry()).then(() => {
   process.exitCode = 0;
+  });
 });
 
 async function processLine(line: string) {

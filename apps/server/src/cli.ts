@@ -42,6 +42,7 @@ import {
 } from "./runtime.js";
 import { listInteractions } from "./interactions.js";
 import { applicationBridgeDiagnostics } from "./application-bridge.js";
+import { correlationAttributes, initializeTelemetry, operationSpanName, shutdownTelemetry, withTelemetrySpan } from "./telemetry.js";
 import { parseWorkspaceModeOption } from "./workspace-mode.js";
 import { withProjectWriterLockAsync } from "./project-store.js";
 import {
@@ -172,14 +173,23 @@ async function main() {
     throw new Error(`Unknown command: ${commandName}`);
   }
 
-  const projectId = parseOptions(args).project;
+  const options = parseOptions(args);
+  const projectId = options.project;
   const project = projectId && projectMutationCommands.has(commandName) ? getProject(projectId) : null;
   if (projectId && projectMutationCommands.has(commandName) && !project) {
     throw new Error(`Project not found: ${projectId}`);
   }
-  const result = project
-    ? await withProjectWriterLockAsync(project.path, async () => command(args))
-    : await command(args);
+  const result = await withTelemetrySpan(operationSpanName(commandName), correlationAttributes({
+    projectId,
+    taskId: options.task,
+    runId: options.run,
+    interactionId: options.interaction
+  }, commandName), async (span) => {
+    if (/retry|resume/.test(commandName)) span.addEvent("operation.resumed", { "harness.resume.count": 1 });
+    return project
+      ? withProjectWriterLockAsync(project.path, async () => command(args))
+      : command(args);
+  });
   if (result !== undefined) {
     console.log(JSON.stringify(result, null, 2));
   }
@@ -1190,7 +1200,8 @@ All commands print JSON and use HARNESS_HOME when set.
 `);
 }
 
+initializeTelemetry();
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
-});
+}).finally(() => shutdownTelemetry());

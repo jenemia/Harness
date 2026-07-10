@@ -10,7 +10,8 @@
   },
   "exports": {
     "./application": "./dist/application.js",
-    "./bridge": "./dist/application-bridge.js"
+    "./bridge": "./dist/application-bridge.js",
+    "./telemetry": "./dist/telemetry.js"
   },
   "scripts": {
     "cli": "tsx src/cli.ts",
@@ -23,6 +24,12 @@
   },
   "dependencies": {
     "@harness/core": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "tsx": "^4.20.3",
     "yaml": "^2.9.0"
   },

@@ -36,6 +36,7 @@ import {
   type WorkspaceViolation
 } from "./workspace-protection.js";
 import type { AgentRecord, ApprovalRecord, ProjectRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
+import { withTelemetrySpan } from "./telemetry.js";
 
 const runningTasks = new Set<string>();
 const resumingInteractions = new Set<string>();
@@ -1212,7 +1213,16 @@ async function executeTask(
       : captureProjectSnapshot(project.path);
     let result = activeWorkspaceViolations.length > 0
       ? workspaceViolationRunResult(settings.workspaceProtectionMode, activeWorkspaceViolations[0], workspace)
-      : await selectedProvider.run(executionAgent, freshTask, workspace, {
+      : await withTelemetrySpan("provider.run", {
+          "harness.project.id": project.id,
+          "harness.task.id": task.id,
+          "harness.run.id": runId,
+          "harness.agent.id": agent.id,
+          "harness.provider.id": selectedProvider.definition.id,
+          "harness.run.resumed": Boolean(resumeContext)
+        }, async (span) => {
+          if (resumeContext) span.addEvent("interaction.resumed", { "harness.resume.count": 1 });
+          const providerResult = await selectedProvider.run(executionAgent, freshTask, workspace, {
           globalMemory,
           projectMemory,
           taskComments,
@@ -1254,6 +1264,12 @@ async function executeTask(
             });
             processWorkspaceViolations(evaluateToolEvent(workspace.worktreePath, safeEvent));
           }
+          });
+          span.setAttribute("harness.run.status", providerResult.status);
+          if (providerResult.status === "failed") {
+            span.addEvent(/timed?\s*out/i.test(providerResult.error || "") ? "provider.timeout" : "provider.failed");
+          }
+          return providerResult;
         });
     if (projectSnapshot) {
       processWorkspaceViolations(compareProjectSnapshot(projectSnapshot, project.path));
@@ -1348,10 +1364,15 @@ async function executeTask(
     }
 
     const commitResult = result.status === "completed" && workspace.kind === "git-worktree"
-      ? await providers.workspace().commitAll(
+      ? await withTelemetrySpan("workspace.commit", {
+          "harness.project.id": project.id,
+          "harness.task.id": task.id,
+          "harness.run.id": runId,
+          "harness.agent.id": agent.id
+        }, () => providers.workspace().commitAll(
           workspace.worktreePath,
           `Harness task ${task.id.slice(0, 8)}: ${task.title}`
-        )
+        ))
       : { committed: false, output: "", error: null };
 
     db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, changed_files = ?, completed_at = ? WHERE id = ?").run(
@@ -1460,6 +1481,11 @@ async function collectChangedFiles(worktreePath: string) {
 }
 
 async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: string, completedBy: AgentRecord) {
+  return withTelemetrySpan("handoff.evaluate", {
+    "harness.project.id": project.id,
+    "harness.task.id": taskId,
+    "harness.agent.id": completedBy.id
+  }, async (span) => {
   const task = getTask(db, taskId);
   if (!task) {
     return;
@@ -1468,6 +1494,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   const settings = getProjectSettingsFromDb(db);
   const evaluation = evaluateCompletion(db, task, completedBy);
   const handoffDecision = chooseNextHandoff(db, task, completedBy, settings, evaluation);
+  span.setAttribute("harness.handoff.required", Boolean(handoffDecision));
   insertEvent(db, {
     taskId: task.id,
     agentId: completedBy.id,
@@ -1532,6 +1559,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   }
 
   scheduleReadyDependents(project, db, task.id);
+  });
 }
 
 function performHandoff(

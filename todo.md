@@ -297,21 +297,21 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### 계측 범위
 
-- [ ] trace와 span 명명 규칙 및 공통 attribute를 정의한다.
-- [ ] `plan.create`, `draft.review`, `draft.apply`를 계측한다.
-- [ ] `scheduler.dispatch`, `provider.run`, `provider.event`, `interaction.wait`, `interaction.resume`을 계측한다.
-- [ ] `review.open`, `review.comment`, `mcp.tool`, `handoff.evaluate`, `workspace.commit`, `merge.apply`, `recovery.audit`를 계측한다.
-- [ ] project, task, run, agent, provider id를 민감하지 않은 correlation attribute로 기록한다.
-- [ ] 실패, timeout, 사용자 거절, 재시도와 재개 횟수를 span event로 기록한다.
+- [x] trace와 span 명명 규칙 및 공통 attribute를 정의한다.
+- [x] `plan.create`, `draft.review`, `draft.apply`를 계측한다.
+- [x] `scheduler.dispatch`, `provider.run`, `provider.event`, `interaction.wait`, `interaction.resume`을 계측한다.
+- [x] `review.open`, `review.comment`, `mcp.tool`, `handoff.evaluate`, `workspace.commit`, `merge.apply`, `recovery.audit`를 계측한다.
+- [x] project, task, run, agent, provider id를 민감하지 않은 correlation attribute로 기록한다.
+- [x] 실패, timeout, 사용자 거절, 재시도와 재개 횟수를 span event로 기록한다.
 
 ### 운영과 보안
 
-- [ ] OpenTelemetry는 기본 비활성화하고 설정 또는 환경변수로 활성화한다.
-- [ ] OTLP exporter를 지원하되 Jaeger나 Phoenix를 필수 의존성으로 만들지 않는다.
-- [ ] prompt, 코멘트, 파일 내용, API key와 명령 전문은 기본적으로 trace에 저장하지 않는다.
-- [ ] 로컬 SQLite audit event와 trace id를 연결해 UI 기록에서 외부 trace를 찾을 수 있게 한다.
-- [ ] exporter 장애가 작업 실행을 실패시키지 않도록 비차단 방식과 timeout을 적용한다.
-- [ ] 개발용 선택적 observability compose 구성을 제공한다.
+- [x] OpenTelemetry는 기본 비활성화하고 설정 또는 환경변수로 활성화한다.
+- [x] OTLP exporter를 지원하되 Jaeger나 Phoenix를 필수 의존성으로 만들지 않는다.
+- [x] prompt, 코멘트, 파일 내용, API key와 명령 전문은 기본적으로 trace에 저장하지 않는다.
+- [x] 로컬 SQLite audit event와 trace id를 연결해 UI 기록에서 외부 trace를 찾을 수 있게 한다.
+- [x] exporter 장애가 작업 실행을 실패시키지 않도록 비차단 방식과 timeout을 적용한다.
+- [x] 개발용 선택적 observability compose 구성을 제공한다.
 
 ### 완료 조건
 

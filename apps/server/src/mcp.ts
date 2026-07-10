@@ -13,6 +13,7 @@ import {
 import { redactCredentialMaterial } from "./credential-security.js";
 import { withProjectWriterLock } from "./project-store.js";
 import type { McpClientRecord } from "./types.js";
+import { withTelemetrySpan } from "./telemetry.js";
 
 export const harnessMcpProtocolVersion = "2025-06-18";
 export const harnessMcpSchemaVersion = 1;
@@ -99,6 +100,13 @@ export async function handleMcpMessage(message: unknown, clientId = "local-reado
 }
 
 export async function callMcpTool(clientId: string, toolName: string, args: Record<string, unknown>) {
+  return withTelemetrySpan("mcp.tool", {
+    "harness.mcp.client.id": clientId,
+    "harness.mcp.tool": toolName,
+    "harness.project.id": typeof args.projectId === "string" ? args.projectId : undefined,
+    "harness.task.id": typeof args.taskId === "string" ? args.taskId : undefined,
+    "harness.mcp.dry_run": args.dryRun === true
+  }, async (span) => {
   const client = requiredMcpClient(clientId);
   const tool = harnessMcpTools.find((item) => item.name === toolName);
   if (!tool) throw mcpError(-32602, `Unknown Harness tool: ${toolName}`);
@@ -115,12 +123,15 @@ export async function callMcpTool(clientId: string, toolName: string, args: Reco
   try {
     result = await dispatchTool(toolName, args, client, isDryRun);
     auditTool(client.id, toolName, args, isDryRun, true, null);
+    span.setAttribute("harness.mcp.ok", true);
     return result;
   } catch (error) {
     const message = redactCredentialMaterial(error instanceof Error ? error.message : String(error));
     auditTool(client.id, toolName, args, isDryRun, false, message);
+    span.setAttribute("harness.mcp.ok", false);
     throw error;
   }
+  });
 }
 
 async function dispatchTool(toolName: string, args: Record<string, unknown>, client: McpClientRecord, isDryRun: boolean) {

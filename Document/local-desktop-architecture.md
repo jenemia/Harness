@@ -310,6 +310,10 @@ Cursor / Claude Desktop / Codex
 - MCP 호출은 tool, client, project, task와 결과를 audit event로 기록한다.
 - local stdio와 OS user permission을 신뢰 경계로 사용하며 장기 API token을 요구하지 않는다.
 
+## OpenTelemetry 연결
+
+OpenTelemetry SDK는 기본 비활성이고 `HARNESS_TELEMETRY_ENABLED=true` 또는 표준 OTLP 환경변수가 있을 때만 OTLP/HTTP batch exporter를 등록한다. application command, provider runtime, interaction, MCP, handoff, workspace commit, merge와 recovery가 schema v1의 고정 span 이름을 사용한다. project/task/run/agent/provider 같은 비민감 식별자만 correlation attribute로 기록하고 prompt, comment, file content, command 전문, provider output과 exception message는 span에 싣지 않는다. 활성 span 안에서 생성된 project event에는 `traceId`와 `spanId`를 metadata로 추가한다. exporter는 bounded queue와 짧은 timeout을 사용하며 실패가 application operation에 전파되지 않는다. 설정과 선택형 local collector는 `Document/observability.md`를 따른다.
+
 ## Provider 인증 설계
 
 ### 기본: CLI 소유 인증 재사용

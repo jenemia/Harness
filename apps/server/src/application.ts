@@ -82,6 +82,7 @@ import {
 } from "./drafts.js";
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
 import { listInteractions } from "./interactions.js";
+import { correlationAttributes, operationSpanName, withTelemetrySpan } from "./telemetry.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -106,7 +107,7 @@ export function subscribeApplicationDraftEvents(
 }
 
 export function recoverApplicationState() {
-  return listProjects().map((project) => {
+  return withTelemetrySpan("recovery.audit", { "harness.operation": "application.recover" }, () => listProjects().map((project) => {
     try {
       return {
         projectId: project.id,
@@ -122,10 +123,24 @@ export function recoverApplicationState() {
         error: error instanceof Error ? error.message : String(error)
       };
     }
-  });
+  }));
 }
 
 export async function invokeApplicationCommand<C extends HarnessCommand>(
+  command: C,
+  payload: HarnessCommandInputs[C]
+): Promise<unknown> {
+  return withTelemetrySpan(operationSpanName(command), correlationAttributes(payload, command), (span) => {
+    if (/retry|resume/.test(command) || command === "interactions:respond") {
+      span.addEvent("operation.resumed", { "harness.resume.count": 1 });
+    }
+    const value = input(payload);
+    if (value.action === "reject" || value.decision === "rejected") span.addEvent("operation.rejected");
+    return invokeApplicationCommandInner(command, payload);
+  });
+}
+
+async function invokeApplicationCommandInner<C extends HarnessCommand>(
   command: C,
   payload: HarnessCommandInputs[C]
 ): Promise<unknown> {

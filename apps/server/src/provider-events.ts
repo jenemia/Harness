@@ -5,6 +5,7 @@ import { providerEventVersion } from "@harness/core";
 import { redactCredentialMaterial } from "./credential-security.js";
 import { openProjectDb } from "./db.js";
 import type { ProjectRecord } from "./types.js";
+import { withTelemetrySpan } from "./telemetry.js";
 
 const eventBus = new EventEmitter();
 eventBus.setMaxListeners(100);
@@ -15,6 +16,14 @@ export type AppendProviderEventInput = Omit<ProviderEventEnvelope, "version" | "
 };
 
 export function appendProviderEvent(project: ProjectRecord, input: AppendProviderEventInput) {
+  return withTelemetrySpan("provider.event", {
+    "harness.project.id": project.id,
+    "harness.task.id": input.taskId,
+    "harness.run.id": input.runId,
+    "harness.provider.id": input.providerId,
+    "harness.provider.event_type": input.type,
+    "harness.provider.sequence": input.sequence
+  }, () => {
   if (!Number.isSafeInteger(input.sequence) || input.sequence < 1) throw new Error("Provider event sequence must be a positive integer.");
   if (input.projectId !== project.id) throw new Error("Provider event project does not match the target project.");
   const event: ProviderEventEnvelope = {
@@ -46,6 +55,7 @@ export function appendProviderEvent(project: ProjectRecord, input: AppendProvide
   }
   eventBus.emit("event", event);
   return { inserted: true, event };
+  });
 }
 
 export function replayProviderEvents(project: ProjectRecord, input: { runId?: string; afterSequence?: number; limit?: number } = {}) {

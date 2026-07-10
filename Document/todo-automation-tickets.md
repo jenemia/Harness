@@ -240,11 +240,15 @@ Status: 완료
 
 Depends on: A07, A12, A14, A16
 
+Status: 완료
+
 - plan부터 merge/recovery까지 span naming, correlation attribute와 event를 계측한다.
 - 기본 비활성, 선택적 OTLP exporter, timeout과 non-blocking failure를 구현한다.
 - content·credential 비수집과 SQLite audit trace 연결을 테스트한다.
 
 완료 조건: 전체 실행 계보를 추적할 수 있고 telemetry off 환경에는 별도 인프라가 필요 없다.
+
+검증: in-memory OpenTelemetry exporter로 parent/child trace 계보, schema v1 span 이름, prompt·오류 내용 비수집, SQLite audit의 trace/span ID 연결을 검증했다. 기본 비활성 상태와 OTLP HTTP batch exporter의 bounded queue·timeout·실패 비전파를 확인하고 선택형 Jaeger compose와 실행 명령을 문서화했다.
 
 ### A18: Scenario-first README와 verified setup
 

@@ -48,6 +48,7 @@ import { createDraftReply, createDraftSession, decideDraftApply, getDraftSnapsho
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
 import { listInteractions } from "./interactions.js";
 import { applicationBridgeDiagnostics } from "./application-bridge.js";
+import { initializeTelemetry, shutdownTelemetry, withTelemetrySpan } from "./telemetry.js";
 import {
   createInlineReviewComment,
   createReviewFollowUp,
@@ -670,6 +671,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+initializeTelemetry();
 ensureDraftReviewAgentRuntime();
 recoverRegisteredProjects();
 
@@ -677,26 +679,37 @@ server.listen(port, () => {
   console.log(`Harness server listening on http://localhost:${port}`);
 });
 
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    server.close(() => {
+      void shutdownTelemetry().finally(() => { process.exitCode = 0; });
+    });
+  });
+}
+
 function recoverRegisteredProjects() {
-  const results = listProjects().map((project) => {
-    try {
-      const runtime = recoverInterruptedRuns(project);
-      const drafts = recoverDraftReviewRequests(project);
-      return { ...runtime, drafts };
-    } catch (error) {
-      console.error(`Failed to recover project ${project.name}: ${error instanceof Error ? error.message : String(error)}`);
-      return null;
+  return withTelemetrySpan("recovery.audit", { "harness.operation": "server.recover" }, () => {
+    const results = listProjects().map((project) => {
+      try {
+        const runtime = recoverInterruptedRuns(project);
+        const drafts = recoverDraftReviewRequests(project);
+        return { ...runtime, drafts };
+      } catch (error) {
+        console.error(`Failed to recover project ${project.name}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    }).filter(Boolean);
+    const interruptedRuns = results.reduce((count, result) => count + (result?.interruptedRuns.length || 0), 0);
+    const resetTasks = results.reduce((count, result) => count + (result?.resetTasks.length || 0), 0);
+    const resetAgents = results.reduce((count, result) => count + (result?.resetAgents.length || 0), 0);
+    const recoveredDraftReviews = results.reduce((count, result) => count + (result?.drafts.recovered || 0), 0);
+    if (interruptedRuns || resetTasks || resetAgents || recoveredDraftReviews) {
+      console.log(
+        `Recovered ${interruptedRuns} interrupted run(s), ${resetTasks} task(s), ${resetAgents} agent(s), and ${recoveredDraftReviews} draft review(s).`
+      );
     }
-  }).filter(Boolean);
-  const interruptedRuns = results.reduce((count, result) => count + (result?.interruptedRuns.length || 0), 0);
-  const resetTasks = results.reduce((count, result) => count + (result?.resetTasks.length || 0), 0);
-  const resetAgents = results.reduce((count, result) => count + (result?.resetAgents.length || 0), 0);
-  const recoveredDraftReviews = results.reduce((count, result) => count + (result?.drafts.recovered || 0), 0);
-  if (interruptedRuns || resetTasks || resetAgents || recoveredDraftReviews) {
-    console.log(
-      `Recovered ${interruptedRuns} interrupted run(s), ${resetTasks} task(s), ${resetAgents} agent(s), and ${recoveredDraftReviews} draft review(s).`
-    );
-  }
+    return results;
+  });
 }
 
 function setCors(res: http.ServerResponse) {

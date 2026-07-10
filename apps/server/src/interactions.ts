@@ -9,6 +9,7 @@ import type {
   InteractionStatus,
   ProjectRecord
 } from "./types.js";
+import { withTelemetrySpan } from "./telemetry.js";
 
 const interactionKinds = new Set<InteractionKind>(["question", "approval", "permission", "review"]);
 const terminalStatuses = new Set<InteractionStatus>(["resolved", "rejected", "expired"]);
@@ -90,6 +91,13 @@ export function suspendRunForInteractionInDb(
 }
 
 export function createInteractionInDb(db: DatabaseSync, projectId: string, input: CreateInteractionInput) {
+  return withTelemetrySpan("interaction.wait", {
+    "harness.project.id": projectId,
+    "harness.task.id": input.taskId || undefined,
+    "harness.run.id": input.runId || undefined,
+    "harness.agent.id": input.agentId || undefined,
+    "harness.interaction.kind": input.kind
+  }, (span) => {
   validateCreateInput(input);
   const existing = db.prepare(
     "SELECT * FROM interactions WHERE project_id = ? AND correlation_id = ? AND kind = ?"
@@ -122,6 +130,7 @@ export function createInteractionInDb(db: DatabaseSync, projectId: string, input
     null
   );
   const interaction = mapInteraction(db.prepare("SELECT * FROM interactions WHERE id = ?").get(id));
+  span.setAttribute("harness.interaction.id", interaction.id);
   insertEvent(db, {
     taskId: interaction.taskId,
     agentId: interaction.agentId,
@@ -136,6 +145,7 @@ export function createInteractionInDb(db: DatabaseSync, projectId: string, input
     }
   });
   return interaction;
+  });
 }
 
 export function createApprovalRecordInDb(db: DatabaseSync, input: {
@@ -254,6 +264,10 @@ export function respondInteractionState(project: ProjectRecord, interactionId: s
 }
 
 export function respondInteractionInDb(db: DatabaseSync, interactionId: string, input: RespondInteractionInput) {
+  return withTelemetrySpan("interaction.resume", {
+    "harness.interaction.id": interactionId,
+    "harness.interaction.action": input.action
+  }, (span) => {
   if (input.action !== "resolve" && input.action !== "reject") throw new Error("Interaction response action is invalid.");
   const key = input.idempotencyKey?.trim();
   if (!key) throw new Error("Interaction response idempotency key is required.");
@@ -295,6 +309,9 @@ export function respondInteractionInDb(db: DatabaseSync, interactionId: string, 
     throw new Error(`Interaction run is ${run.status} and cannot be resumed.`);
   }
   const status: InteractionStatus = input.action === "resolve" ? "resolved" : "rejected";
+  span.addEvent(status === "rejected" ? "interaction.rejected" : "interaction.resumed", {
+    "harness.resume.count": status === "resolved" ? 1 : 0
+  });
   const shouldResume = status === "resolved" && Boolean(run);
   db.prepare(`
     UPDATE interactions
@@ -325,6 +342,7 @@ export function respondInteractionInDb(db: DatabaseSync, interactionId: string, 
     }
   });
   return { interaction: updated, shouldResume, deduplicated: false };
+  });
 }
 
 export function listInteractions(project: ProjectRecord, filter: {

@@ -7,6 +7,7 @@ import type { ProviderEventEnvelope, ProviderEventType } from "@harness/core";
 import { ensureProjectLayout, projectHarnessPath, withProjectWriterLock } from "./project-store.js";
 import { syncProjectAgentDefinitions } from "./agent-store.js";
 import { assertNoCredentialMaterial, containsCredentialMaterial, redactCredentialMaterial } from "./credential-security.js";
+import { currentTraceContext } from "./telemetry.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -2194,13 +2195,14 @@ export function insertEvent(
     metadata: Record<string, unknown>;
   }
 ) {
+  const traceContext = currentTraceContext();
   db.prepare("INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?)").run(
     randomUUID(),
     input.taskId,
     input.agentId,
     input.type,
     input.message,
-    JSON.stringify(input.metadata),
+    JSON.stringify(traceContext ? { ...input.metadata, traceId: traceContext.traceId, spanId: traceContext.spanId } : input.metadata),
     now()
   );
 }
