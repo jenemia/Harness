@@ -49,6 +49,7 @@ import {
   pauseTask,
   recoverInterruptedRuns,
   requestMergeChanges,
+  resolveMerge,
   resumeTask,
   startReadyTasks,
   startTask,
@@ -350,6 +351,12 @@ const server = http.createServer(async (req, res) => {
 
         if (req.method === "POST" && action === "merge") {
           const result = await approveMerge(project, taskId);
+          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          return;
+        }
+
+        if (req.method === "POST" && action === "resolve-merge") {
+          const result = await resolveMerge(project, taskId);
           sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
           return;
         }

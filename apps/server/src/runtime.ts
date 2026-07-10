@@ -409,7 +409,14 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
       return { ok: false, reason: "Task has no branch to merge." };
     }
 
-    if (task.mergeStatus !== "pending" && task.mergeStatus !== "conflict") {
+    if (task.mergeStatus === "conflict") {
+      return {
+        ok: false,
+        reason: "Task merge has conflicts. Resolve them in the main checkout, then finalize the merge resolution."
+      };
+    }
+
+    if (task.mergeStatus !== "pending") {
       return { ok: false, reason: `Task merge status is ${task.mergeStatus}.` };
     }
 
@@ -424,7 +431,6 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
       `Merge Harness task ${task.id.slice(0, 8)}`
     );
     if (!merge.ok) {
-      await providers.platform().run("git", ["merge", "--abort"], project.path, true);
       db.prepare("UPDATE tasks SET merge_status = ?, merge_error = ?, updated_at = ? WHERE id = ?").run(
         "conflict",
         merge.stderr || merge.stdout || "Merge failed.",
@@ -435,10 +441,10 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
         taskId: task.id,
         agentId: task.assigneeAgentId,
         type: "merge.conflict",
-        message: "Merge approval hit a conflict and was aborted.",
+        message: "Merge approval hit a conflict. Resolve conflicts in the main checkout, then finalize the merge.",
         metadata: { stderr: merge.stderr, stdout: merge.stdout }
       });
-      return { ok: false, reason: "Merge failed and was aborted." };
+      return { ok: false, reason: "Merge conflict needs manual resolution." };
     }
 
     db.prepare("UPDATE tasks SET merge_status = ?, merge_error = ?, updated_at = ? WHERE id = ?").run(
@@ -468,6 +474,82 @@ export async function approveMerge(project: ProjectRecord, taskId: string) {
   }
 }
 
+export async function resolveMerge(project: ProjectRecord, taskId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    if (!task) {
+      return { ok: false, reason: "Task not found." };
+    }
+
+    if (!task.branchName) {
+      return { ok: false, reason: "Task has no branch to resolve." };
+    }
+
+    if (task.mergeStatus !== "conflict") {
+      return { ok: false, reason: `Task merge status is ${task.mergeStatus}.` };
+    }
+
+    const state = await providers.workspace().mergeState(project.path, task.branchName);
+    if (state.unmergedFiles.length > 0) {
+      return {
+        ok: false,
+        reason: `Resolve and stage these conflicted files first: ${state.unmergedFiles.join(", ")}.`
+      };
+    }
+
+    if (state.inProgress) {
+      const finalized = await providers.workspace().finalizeMerge(project.path);
+      if (!finalized.ok) {
+        db.prepare("UPDATE tasks SET merge_error = ?, updated_at = ? WHERE id = ?").run(
+          finalized.stderr || finalized.stdout || "Merge resolution commit failed.",
+          now(),
+          task.id
+        );
+        insertEvent(db, {
+          taskId: task.id,
+          agentId: task.assigneeAgentId,
+          type: "merge.resolve_failed",
+          message: "Harness could not finalize the merge resolution.",
+          metadata: { stdout: finalized.stdout, stderr: finalized.stderr }
+        });
+        return { ok: false, reason: "Merge resolution commit failed." };
+      }
+    }
+
+    const resolvedState = await providers.workspace().mergeState(project.path, task.branchName);
+    if (!resolvedState.branchMerged) {
+      return { ok: false, reason: "Task branch is not merged into the main checkout yet." };
+    }
+    if (resolvedState.status.trim()) {
+      return { ok: false, reason: "Main project checkout still has uncommitted changes after merge resolution." };
+    }
+
+    db.prepare("UPDATE tasks SET merge_status = ?, merge_error = ?, updated_at = ? WHERE id = ?").run(
+      "merged",
+      null,
+      now(),
+      task.id
+    );
+    db.prepare(`
+      UPDATE approvals
+      SET status = ?, decided_at = ?
+      WHERE task_id = ? AND kind = ? AND status IN (?, ?)
+    `).run("approved", now(), task.id, mergeApprovalKind, "pending", "approved");
+    insertEvent(db, {
+      taskId: task.id,
+      agentId: task.assigneeAgentId,
+      type: "merge.resolved",
+      message: `Resolved merge conflicts and finalized ${task.branchName}.`,
+      metadata: { branchName: task.branchName, worktreePath: task.worktreePath }
+    });
+
+    return { ok: true };
+  } finally {
+    db.close();
+  }
+}
+
 export async function requestMergeChanges(project: ProjectRecord, taskId: string, reason = "Human requested changes before merge.") {
   const db = openProjectDb(project.path);
   try {
@@ -480,18 +562,26 @@ export async function requestMergeChanges(project: ProjectRecord, taskId: string
       return { ok: false, reason: `Task merge status is ${task.mergeStatus}.` };
     }
 
+    if (task.mergeStatus === "conflict" && task.branchName) {
+      const state = await providers.workspace().mergeState(project.path, task.branchName);
+      if (state.inProgress) {
+        const abort = await providers.workspace().abortMerge(project.path);
+        if (!abort.ok) {
+          return { ok: false, reason: abort.stderr || abort.stdout || "Could not abort the conflicted merge." };
+        }
+      }
+    }
+
     db.prepare(`
       UPDATE tasks
       SET status = ?, merge_status = ?, merge_error = ?, blocked_reason = ?, updated_at = ?
       WHERE id = ?
     `).run("Selected", "none", null, reason, now(), task.id);
-    db.prepare("UPDATE approvals SET status = ?, decided_at = ? WHERE task_id = ? AND kind = ? AND status = ?").run(
-      "rejected",
-      now(),
-      task.id,
-      mergeApprovalKind,
-      "pending"
-    );
+    db.prepare(`
+      UPDATE approvals
+      SET status = ?, decided_at = ?
+      WHERE task_id = ? AND kind = ? AND status IN (?, ?)
+    `).run("rejected", now(), task.id, mergeApprovalKind, "pending", "approved");
 
     insertEvent(db, {
       taskId: task.id,

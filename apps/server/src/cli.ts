@@ -45,6 +45,7 @@ import {
   listRuntimeProviders,
   pauseTask,
   requestMergeChanges,
+  resolveMerge,
   resumeTask,
   startReadyTasks,
   startTask,
@@ -102,6 +103,7 @@ const commands: Record<string, CommandHandler> = {
   "tasks:update": updateTaskCommand,
   "tasks:comment": commentTaskCommand,
   "tasks:merge": mergeTaskCommand,
+  "tasks:resolve-merge": resolveTaskMergeCommand,
   "tasks:request-changes": requestTaskChangesCommand,
   "tasks:move": moveTaskCommand,
   "tasks:pause": pauseTaskCommand,
@@ -663,6 +665,14 @@ async function mergeTaskCommand(args: string[]) {
   const project = getRequiredProject(args);
   const taskId = getRequiredOption(options, "task");
   const result = await approveMerge(project, taskId);
+  return { result, overview: getProjectOverview(project) };
+}
+
+async function resolveTaskMergeCommand(args: string[]) {
+  const options = parseOptions(args);
+  const project = getRequiredProject(args);
+  const taskId = getRequiredOption(options, "task");
+  const result = await resolveMerge(project, taskId);
   return { result, overview: getProjectOverview(project) };
 }
 
@@ -1321,6 +1331,7 @@ Usage:
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
   pnpm --filter @harness/server cli tasks:move --project <projectId> --task <taskId> --direction up|down
   pnpm --filter @harness/server cli tasks:merge --project <projectId> --task <taskId>
+  pnpm --filter @harness/server cli tasks:resolve-merge --project <projectId> --task <taskId>
   pnpm --filter @harness/server cli tasks:request-changes --project <projectId> --task <taskId> [--reason <text>|--reasonFile <file>]
   pnpm --filter @harness/server cli tasks:pause --project <projectId> --task <taskId> [--reason <text>|--reasonFile <file>]
   pnpm --filter @harness/server cli tasks:resume --project <projectId> --task <taskId>

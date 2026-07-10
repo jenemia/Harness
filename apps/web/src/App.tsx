@@ -1099,6 +1099,13 @@ function TaskCard(props: {
     });
   }
 
+  async function resolveMerge() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/resolve-merge`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
   async function requestChanges() {
     await props.runAction(async () => {
       await api(`/api/projects/${props.projectId}/tasks/${props.task.id}/request-changes`, {
@@ -1199,10 +1206,17 @@ function TaskCard(props: {
         )}
         {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
           <>
-            <button className="merge-button" type="button" onClick={() => void merge()}>
-              <GitMerge size={16} />
-              <span>Merge</span>
-            </button>
+            {props.task.mergeStatus === "pending" ? (
+              <button className="merge-button" type="button" onClick={() => void merge()}>
+                <GitMerge size={16} />
+                <span>Merge</span>
+              </button>
+            ) : (
+              <button className="merge-button" type="button" onClick={() => void resolveMerge()}>
+                <CheckCircle2 size={16} />
+                <span>Resolve</span>
+              </button>
+            )}
             <button className="request-changes-button" type="button" onClick={() => void requestChanges()}>
               <RefreshCcw size={16} />
               <span>Changes</span>
@@ -1293,6 +1307,13 @@ function TaskDetailDrawer(props: {
   async function merge() {
     await props.runAction(async () => {
       await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/merge`, { method: "POST" });
+      await props.onChanged();
+    });
+  }
+
+  async function resolveMerge() {
+    await props.runAction(async () => {
+      await api(`/api/projects/${props.overview.project.id}/tasks/${props.task.id}/resolve-merge`, { method: "POST" });
       await props.onChanged();
     });
   }
@@ -1404,10 +1425,17 @@ function TaskDetailDrawer(props: {
           )}
           {(props.task.mergeStatus === "pending" || props.task.mergeStatus === "conflict") && (
             <>
-              <button className="merge-button inline" type="button" onClick={() => void merge()}>
-                <GitMerge size={16} />
-                <span>Merge</span>
-              </button>
+              {props.task.mergeStatus === "pending" ? (
+                <button className="merge-button inline" type="button" onClick={() => void merge()}>
+                  <GitMerge size={16} />
+                  <span>Merge</span>
+                </button>
+              ) : (
+                <button className="merge-button inline" type="button" onClick={() => void resolveMerge()}>
+                  <CheckCircle2 size={16} />
+                  <span>Resolve merge</span>
+                </button>
+              )}
               <button className="request-changes-button inline" type="button" onClick={() => void requestChanges()}>
                 <RefreshCcw size={16} />
                 <span>Request changes</span>

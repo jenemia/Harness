@@ -41,6 +41,8 @@ Shell-backed providers also require human approval before their configured comma
 
 Completed task worktree changes create merge approval requests. Approving the request merges the task branch into the main checkout; rejecting it sends the task back to `Selected` with changes requested.
 
+If a merge hits conflicts, Harness leaves the conflicted merge in the main checkout, marks the task as `conflict`, and keeps the branch/worktree attached to the task. Resolve and stage the conflicted files locally, then use `tasks:resolve-merge` or the task's `Resolve merge` action to finalize the merge commit. Requesting changes from a conflicted task aborts the in-progress merge and returns the task to `Selected`.
+
 ## Development
 
 ```bash
@@ -93,6 +95,7 @@ pnpm cli tasks:comment --project <projectId> --task <taskId> --body "Reviewed fr
 pnpm cli approvals:list --project <projectId>
 pnpm cli approvals:approve --project <projectId> --approval <approvalId>
 pnpm cli tasks:merge --project <projectId> --task <taskId>
+pnpm cli tasks:resolve-merge --project <projectId> --task <taskId>
 pnpm cli tasks:request-changes --project <projectId> --task <taskId> --reason "Needs another pass"
 pnpm cli tasks:schedule --project <projectId>
 ```

@@ -15,6 +15,13 @@ export type TaskWorkspace = {
   worktreePath: string;
 };
 
+export type MergeState = {
+  inProgress: boolean;
+  branchMerged: boolean;
+  status: string;
+  unmergedFiles: string[];
+};
+
 export type LlmRunContext = {
   globalMemory: MemoryRecord[];
   projectMemory: MemoryRecord[];
@@ -49,6 +56,9 @@ export type WorkspaceProvider = {
   ensureTaskWorkspace(projectPath: string, task: TaskRecord): Promise<TaskWorkspace>;
   commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null }>;
   mergeBranch(projectPath: string, branchName: string, message: string): Promise<CommandResult>;
+  mergeState(projectPath: string, branchName: string): Promise<MergeState>;
+  finalizeMerge(projectPath: string): Promise<CommandResult>;
+  abortMerge(projectPath: string): Promise<CommandResult>;
   workingTreeStatus(projectPath: string): Promise<string>;
   snapshotRef(cwd: string): Promise<string>;
   changedFiles(cwd: string): Promise<string[]>;
@@ -504,6 +514,40 @@ function createGitWorktreeWorkspaceProvider(
 
     mergeBranch(projectPath, branchName, message) {
       return platformProvider.run("git", ["merge", "--no-ff", branchName, "-m", message], projectPath, true);
+    },
+
+    async mergeState(projectPath, branchName) {
+      const mergeHead = await platformProvider.run("git", ["rev-parse", "-q", "--verify", "MERGE_HEAD"], projectPath, true);
+      const branchMerged = await platformProvider.run("git", ["merge-base", "--is-ancestor", branchName, "HEAD"], projectPath, true);
+      const unmerged = await platformProvider.run("git", ["diff", "--name-only", "--diff-filter=U"], projectPath, true);
+      const status = await platformProvider.run("git", ["status", "--porcelain"], projectPath, true);
+      return {
+        inProgress: mergeHead.ok,
+        branchMerged: branchMerged.ok,
+        status: status.stdout,
+        unmergedFiles: unmerged.stdout.split("\n").map((line) => line.trim()).filter(Boolean)
+      };
+    },
+
+    async finalizeMerge(projectPath) {
+      await platformProvider.run("git", ["add", "-A"], projectPath);
+      return platformProvider.run(
+        "git",
+        [
+          "-c",
+          "user.name=Harness Agent",
+          "-c",
+          "user.email=harness@local",
+          "commit",
+          "--no-edit"
+        ],
+        projectPath,
+        true
+      );
+    },
+
+    abortMerge(projectPath) {
+      return platformProvider.run("git", ["merge", "--abort"], projectPath, true);
     },
 
     async workingTreeStatus(projectPath) {
