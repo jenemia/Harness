@@ -241,6 +241,8 @@ function createAgentTemplateCommand(args: string[]) {
     modelBackend: options.modelBackend,
     cliCommand: options.cliCommand || null,
     capabilities: parseCsv(options.capabilities),
+    allowedTools: parseCsv(options.allowedTools),
+    boundaries: readOptionalText(options, "boundaries", "boundariesFile") || "",
     maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
   });
   return { template, templates: listAgentTemplates() };
@@ -288,6 +290,8 @@ function createAgentCommand(args: string[]) {
     modelBackend: options.modelBackend || undefined,
     cliCommand: options.cliCommand || null,
     capabilities: parseCsv(options.capabilities),
+    allowedTools: parseCsv(options.allowedTools),
+    boundaries: readOptionalText(options, "boundaries", "boundariesFile") || "",
     maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
   });
   return { agent, overview: getProjectOverview(project) };
@@ -304,6 +308,8 @@ function updateAgentCommand(args: string[]) {
     modelBackend: options.modelBackend,
     cliCommand: optionPatchValue(options, "cliCommand", "clearCliCommand"),
     capabilities: options.capabilities !== undefined ? parseCsv(options.capabilities) : undefined,
+    allowedTools: options.allowedTools !== undefined ? parseCsv(options.allowedTools) : undefined,
+    boundaries: readOptionalText(options, "boundaries", "boundariesFile"),
     maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
   });
   return { agent, overview: getProjectOverview(project) };
@@ -720,7 +726,7 @@ function createCliAgent(
   project: ProjectRecord,
   input: Pick<
     AgentRecord,
-    "name" | "role" | "persona" | "cliCommand" | "capabilities"
+    "name" | "role" | "persona" | "cliCommand" | "capabilities" | "allowedTools" | "boundaries"
   > & {
     modelBackend?: string;
     maxParallel?: number;
@@ -742,6 +748,8 @@ function createCliAgent(
       modelBackend: input.modelBackend?.trim() || settings.defaultModelBackend,
       cliCommand: input.cliCommand?.trim() || null,
       capabilities: input.capabilities,
+      allowedTools: input.allowedTools,
+      boundaries: input.boundaries.trim(),
       maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
       status: "idle",
       currentTaskId: null,
@@ -752,8 +760,8 @@ function createCliAgent(
     db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       agent.id,
       agent.name,
@@ -762,6 +770,8 @@ function createCliAgent(
       agent.modelBackend,
       agent.cliCommand,
       JSON.stringify(agent.capabilities),
+      JSON.stringify(agent.allowedTools),
+      agent.boundaries,
       agent.maxParallel,
       agent.status,
       agent.currentTaskId,
@@ -774,7 +784,13 @@ function createCliAgent(
       agentId: agent.id,
       type: "agent.created",
       message: `${agent.name} was created from CLI.`,
-      metadata: { role: agent.role, modelBackend: agent.modelBackend, capabilities: agent.capabilities }
+      metadata: {
+        role: agent.role,
+        modelBackend: agent.modelBackend,
+        capabilities: agent.capabilities,
+        allowedTools: agent.allowedTools,
+        boundaries: agent.boundaries
+      }
     });
 
     return agent;
@@ -799,6 +815,8 @@ function updateCliAgent(project: ProjectRecord, agentId: string, input: Partial<
           model_backend = ?,
           cli_command = ?,
           capabilities = COALESCE(?, capabilities),
+          allowed_tools = COALESCE(?, allowed_tools),
+          boundaries = COALESCE(?, boundaries),
           max_parallel = COALESCE(?, max_parallel),
           updated_at = ?
       WHERE id = ?
@@ -809,6 +827,8 @@ function updateCliAgent(project: ProjectRecord, agentId: string, input: Partial<
       input.modelBackend === undefined ? (existing as { model_backend: string }).model_backend : input.modelBackend.trim(),
       input.cliCommand === undefined ? (existing as { cli_command: string | null }).cli_command : input.cliCommand?.trim() || null,
       Array.isArray(input.capabilities) ? JSON.stringify(input.capabilities) : null,
+      Array.isArray(input.allowedTools) ? JSON.stringify(input.allowedTools) : null,
+      input.boundaries === undefined ? null : input.boundaries.trim(),
       input.maxParallel ? Math.max(1, Number(input.maxParallel)) : null,
       now(),
       agentId
@@ -824,6 +844,8 @@ function updateCliAgent(project: ProjectRecord, agentId: string, input: Partial<
         role: agent.role,
         modelBackend: agent.modelBackend,
         capabilities: agent.capabilities,
+        allowedTools: agent.allowedTools,
+        boundaries: agent.boundaries,
         maxParallel: agent.maxParallel
       }
     });
@@ -1224,13 +1246,13 @@ Usage:
   pnpm --filter @harness/server cli templates:agents
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects
-  pnpm --filter @harness/server cli templates:agent-create --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--maxParallel 2]
+  pnpm --filter @harness/server cli templates:agent-create --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
   pnpm --filter @harness/server cli templates:workflow-create --name <text> (--steps <json>|--stepsFile <file>) [--description <text>|--descriptionFile <file>]
   pnpm --filter @harness/server cli templates:project-create --name <text> (--agents <json>|--agentsFile <file>) [--description <text>|--descriptionFile <file>]
   pnpm --filter @harness/server cli providers:list
   pnpm --filter @harness/server cli agents:list --project <projectId>
-  pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--maxParallel 2]
-  pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--maxParallel 2]
+  pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
+  pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode sequential|parallel] [--workflowTemplate <id>] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
   pnpm --filter @harness/server cli documents:create --project <projectId> --title <text> [--content <text>|--contentFile <file>]

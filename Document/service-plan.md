@@ -151,6 +151,8 @@ Risk boundaries can include:
 
 Each agent should have declared strengths, allowed tools, and boundaries. This lets the PM agent choose agents more intelligently than simple round-robin assignment.
 
+Initial implementation: agents and agent templates store allowed tool tags and written boundaries in addition to capabilities. These fields can be edited in the UI or CLI and are injected into each agent prompt and CLI environment so model-specific runners receive the same operating limits.
+
 Examples:
 
 - Frontend Engineer
@@ -530,7 +532,7 @@ The agent directory should include:
 - Recent activity
 - Performance metrics
 
-Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, templates, and per-agent parallelism. The agent directory also shows current work, recent activity, and completed/failed/running run counts per agent.
+Initial implementation: agents can be created and edited from the UI, including persona, role, model backend, CLI command override, capability tags, allowed tools, boundaries, templates, and per-agent parallelism. The agent directory also shows current work, recent activity, and completed/failed/running run counts per agent.
 
 Initial implementation: agents can also be listed, created, and updated from the headless CLI so automation can configure persona-driven worker pools before planning or scheduling work.
 
@@ -542,7 +544,7 @@ MVP features:
 
 - Create/open local project folders.
 - Show project-level task, blocker, approval, run, and merge summaries in the project list.
-- Create and edit agents with personas, capabilities, model backends, CLI overrides, and concurrency limits.
+- Create and edit agents with personas, capabilities, allowed tools, boundaries, model backends, CLI overrides, and concurrency limits.
 - Create/edit Kanban tasks.
 - Create a PM plan from a user goal and turn it into assigned Kanban tasks.
 - Assign a task to an agent.

@@ -1756,6 +1756,8 @@ function AgentPanel(props: {
   const [persona, setPersona] = useState("");
   const [cliCommand, setCliCommand] = useState("");
   const [capabilitiesText, setCapabilitiesText] = useState("");
+  const [allowedToolsText, setAllowedToolsText] = useState("");
+  const [boundaries, setBoundaries] = useState("");
   const [maxParallel, setMaxParallel] = useState(1);
   const selectedProvider = props.providerCatalog?.llmProviders.find((provider) => provider.id === modelBackend);
   const agentStats = useMemo(() => {
@@ -1787,7 +1789,9 @@ function AgentPanel(props: {
     cliCommand: cliCommand || null,
     modelBackend,
     maxParallel,
-    capabilities: parseCapabilities(capabilitiesText)
+    capabilities: parseCapabilities(capabilitiesText),
+    allowedTools: parseCapabilities(allowedToolsText),
+    boundaries
   };
 
   useEffect(() => {
@@ -1836,6 +1840,8 @@ function AgentPanel(props: {
     setPersona(template.persona);
     setCliCommand(template.cliCommand || "");
     setCapabilitiesText(template.capabilities.join(", "));
+    setAllowedToolsText(template.allowedTools.join(", "));
+    setBoundaries(template.boundaries);
     setModelBackend(template.modelBackend);
     setMaxParallel(template.maxParallel);
   }
@@ -1847,6 +1853,8 @@ function AgentPanel(props: {
     setPersona(agent.persona);
     setCliCommand(agent.cliCommand || "");
     setCapabilitiesText(agent.capabilities.join(", "));
+    setAllowedToolsText(agent.allowedTools.join(", "));
+    setBoundaries(agent.boundaries);
     setModelBackend(agent.modelBackend);
     setMaxParallel(agent.maxParallel);
   }
@@ -1857,6 +1865,8 @@ function AgentPanel(props: {
     setPersona("");
     setCliCommand("");
     setCapabilitiesText("");
+    setAllowedToolsText("");
+    setBoundaries("");
     setRole("worker");
     setModelBackend(props.overview.settings.defaultModelBackend);
     setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
@@ -1883,6 +1893,8 @@ function AgentPanel(props: {
                 </div>
                 <span>{agent.role} · {agent.modelBackend} · max {agent.maxParallel}</span>
                 {agent.capabilities.length > 0 && <span>{agent.capabilities.join(", ")}</span>}
+                {agent.allowedTools.length > 0 && <span>tools: {agent.allowedTools.join(", ")}</span>}
+                {agent.boundaries && <span>boundaries: {agent.boundaries}</span>}
                 <div className="agent-stat-grid">
                   <b>{stats?.completedRuns || 0} done</b>
                   <b>{stats?.failedRuns || 0} failed</b>
@@ -1936,6 +1948,16 @@ function AgentPanel(props: {
           value={capabilitiesText}
           onChange={(event) => setCapabilitiesText(event.target.value)}
           placeholder="Capabilities, comma separated"
+        />
+        <input
+          value={allowedToolsText}
+          onChange={(event) => setAllowedToolsText(event.target.value)}
+          placeholder="Allowed tools, comma separated"
+        />
+        <textarea
+          value={boundaries}
+          onChange={(event) => setBoundaries(event.target.value)}
+          placeholder="Boundaries and safety limits"
         />
         <input
           value={cliCommand}

@@ -75,6 +75,8 @@ export function openGlobalDb() {
       model_backend TEXT NOT NULL,
       cli_command TEXT,
       capabilities TEXT NOT NULL,
+      allowed_tools TEXT NOT NULL DEFAULT '[]',
+      boundaries TEXT NOT NULL DEFAULT '',
       max_parallel INTEGER NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -98,6 +100,8 @@ export function openGlobalDb() {
       updated_at TEXT NOT NULL
     );
   `);
+  ensureColumn(db, "agent_templates", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "agent_templates", "boundaries", "TEXT NOT NULL DEFAULT ''");
   seedDefaultAgentTemplates(db);
   seedDefaultWorkflowTemplates(db);
   seedDefaultProjectTemplates(db);
@@ -119,6 +123,8 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       modelBackend: "mock",
       cliCommand: null,
       capabilities: ["planning", "assignment", "handoff"],
+      allowedTools: ["kanban", "documents", "memory"],
+      boundaries: "Do not run shell commands or edit project files directly; delegate implementation to worker agents.",
       maxParallel: 1
     },
     {
@@ -128,6 +134,8 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       modelBackend: "mock",
       cliCommand: null,
       capabilities: ["implementation", "debugging"],
+      allowedTools: ["worktree", "shell", "tests"],
+      boundaries: "Work only inside the assigned task worktree and report verification before handoff.",
       maxParallel: 2
     },
     {
@@ -137,14 +145,16 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       modelBackend: "mock",
       cliCommand: null,
       capabilities: ["review", "quality"],
+      allowedTools: ["worktree", "diff", "tests"],
+      boundaries: "Review and request changes when risk remains; do not merge without approval.",
       maxParallel: 1
     }
   ];
   const stmt = db.prepare(`
-    INSERT INTO agent_templates (
-      id, name, role, persona, model_backend, cli_command,
-      capabilities, max_parallel, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agent_templates (
+        id, name, role, persona, model_backend, cli_command,
+        capabilities, allowed_tools, boundaries, max_parallel, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const template of templates) {
@@ -156,6 +166,8 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       template.modelBackend,
       template.cliCommand,
       JSON.stringify(template.capabilities),
+      JSON.stringify(template.allowedTools),
+      template.boundaries,
       template.maxParallel,
       timestamp,
       timestamp
@@ -260,6 +272,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["planning", "assignment", "handoff"],
+          allowedTools: ["kanban", "documents", "memory"],
+          boundaries: "Do not run shell commands or edit project files directly; delegate implementation to worker agents.",
           maxParallel: 1
         },
         {
@@ -269,6 +283,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["implementation", "debugging"],
+          allowedTools: ["worktree", "shell", "tests"],
+          boundaries: "Work only inside the assigned task worktree and report verification before handoff.",
           maxParallel: 2
         },
         {
@@ -278,6 +294,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["review", "quality"],
+          allowedTools: ["worktree", "diff", "tests"],
+          boundaries: "Review and request changes when risk remains; do not merge without approval.",
           maxParallel: 1
         }
       ]
@@ -293,6 +311,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["planning", "research-management"],
+          allowedTools: ["kanban", "documents", "memory"],
+          boundaries: "Track assumptions and uncertainty; delegate source gathering to research agents.",
           maxParallel: 1
         },
         {
@@ -302,6 +322,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["research", "source-review"],
+          allowedTools: ["documents", "memory"],
+          boundaries: "Record source uncertainty and avoid presenting unverified claims as facts.",
           maxParallel: 2
         },
         {
@@ -311,6 +333,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["analysis", "synthesis"],
+          allowedTools: ["documents", "memory"],
+          boundaries: "Separate evidence from inference and flag unresolved contradictions.",
           maxParallel: 1
         },
         {
@@ -320,6 +344,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["writing", "documentation"],
+          allowedTools: ["documents", "memory"],
+          boundaries: "Do not invent facts; use only validated findings and note gaps.",
           maxParallel: 1
         }
       ]
@@ -335,6 +361,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["planning", "content-strategy"],
+          allowedTools: ["kanban", "documents", "memory"],
+          boundaries: "Keep publication risks visible and route quality decisions through review.",
           maxParallel: 1
         },
         {
@@ -344,6 +372,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["drafting", "writing"],
+          allowedTools: ["documents", "memory"],
+          boundaries: "Match the brief and avoid unsupported claims or off-brand tone.",
           maxParallel: 2
         },
         {
@@ -353,6 +383,8 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           modelBackend: "mock",
           cliCommand: null,
           capabilities: ["editing", "quality"],
+          allowedTools: ["documents", "memory"],
+          boundaries: "Request changes when accuracy, tone, or publication readiness is unclear.",
           maxParallel: 1
         }
       ]
@@ -370,7 +402,7 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
       randomUUID(),
       template.name,
       template.description,
-      JSON.stringify(template.agents),
+      JSON.stringify(normalizeProjectTemplateAgents(template.agents)),
       timestamp,
       timestamp
     );
@@ -481,6 +513,8 @@ export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentT
     modelBackend: input.modelBackend?.trim() || settings.defaultModelBackend,
     cliCommand: input.cliCommand?.trim() || null,
     capabilities: Array.isArray(input.capabilities) ? input.capabilities : [],
+    allowedTools: Array.isArray(input.allowedTools) ? input.allowedTools : [],
+    boundaries: input.boundaries?.trim() || "",
     maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
     createdAt: timestamp,
     updatedAt: timestamp
@@ -491,8 +525,8 @@ export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentT
     db.prepare(`
       INSERT INTO agent_templates (
         id, name, role, persona, model_backend, cli_command,
-        capabilities, max_parallel, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        capabilities, allowed_tools, boundaries, max_parallel, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       template.id,
       template.name,
@@ -501,6 +535,8 @@ export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentT
       template.modelBackend,
       template.cliCommand,
       JSON.stringify(template.capabilities),
+      JSON.stringify(template.allowedTools),
+      template.boundaries,
       template.maxParallel,
       template.createdAt,
       template.updatedAt
@@ -649,8 +685,8 @@ export function seedProjectFromTemplate(projectPath: string, templateId: string)
     const stmt = db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const agent of template.agents) {
@@ -662,6 +698,8 @@ export function seedProjectFromTemplate(projectPath: string, templateId: string)
         agent.modelBackend,
         agent.cliCommand,
         JSON.stringify(agent.capabilities),
+        JSON.stringify(agent.allowedTools || []),
+        agent.boundaries || "",
         agent.maxParallel,
         "idle",
         null,
@@ -719,6 +757,10 @@ function normalizeProjectTemplateAgents(input: unknown): ProjectTemplateAgent[] 
         capabilities: Array.isArray(value.capabilities)
           ? value.capabilities.map((capability) => capability.trim()).filter(Boolean)
           : [],
+        allowedTools: Array.isArray(value.allowedTools)
+          ? value.allowedTools.map((tool) => tool.trim()).filter(Boolean)
+          : [],
+        boundaries: value.boundaries?.trim() || "",
         maxParallel: Math.max(1, Number(value.maxParallel || 1))
       };
     })
@@ -743,6 +785,8 @@ export function openProjectDb(projectPath: string) {
       model_backend TEXT NOT NULL,
       cli_command TEXT,
       capabilities TEXT NOT NULL,
+      allowed_tools TEXT NOT NULL DEFAULT '[]',
+      boundaries TEXT NOT NULL DEFAULT '',
       max_parallel INTEGER NOT NULL,
       status TEXT NOT NULL,
       current_task_id TEXT,
@@ -852,6 +896,8 @@ export function openProjectDb(projectPath: string) {
       updated_at TEXT NOT NULL
     );
   `);
+  ensureColumn(db, "agents", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "agents", "boundaries", "TEXT NOT NULL DEFAULT ''");
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "model_backend", "TEXT");
   ensureColumn(db, "tasks", "task_order", "INTEGER NOT NULL DEFAULT 0");
@@ -1328,6 +1374,8 @@ export function seedDefaultAgents(projectPath: string) {
         modelBackend: "mock",
         cliCommand: null,
         capabilities: ["planning", "assignment", "handoff"],
+        allowedTools: ["kanban", "documents", "memory"],
+        boundaries: "Do not run shell commands or edit project files directly; delegate implementation to worker agents.",
         maxParallel: 1
       },
       {
@@ -1338,6 +1386,8 @@ export function seedDefaultAgents(projectPath: string) {
         modelBackend: "mock",
         cliCommand: null,
         capabilities: ["implementation", "debugging"],
+        allowedTools: ["worktree", "shell", "tests"],
+        boundaries: "Work only inside the assigned task worktree and report verification before handoff.",
         maxParallel: 2
       },
       {
@@ -1348,6 +1398,8 @@ export function seedDefaultAgents(projectPath: string) {
         modelBackend: "mock",
         cliCommand: null,
         capabilities: ["review", "quality"],
+        allowedTools: ["worktree", "diff", "tests"],
+        boundaries: "Review and request changes when risk remains; do not merge without approval.",
         maxParallel: 1
       }
     ];
@@ -1355,8 +1407,8 @@ export function seedDefaultAgents(projectPath: string) {
     const stmt = db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const agent of agents) {
@@ -1368,6 +1420,8 @@ export function seedDefaultAgents(projectPath: string) {
         agent.modelBackend,
         agent.cliCommand,
         JSON.stringify(agent.capabilities),
+        JSON.stringify(agent.allowedTools),
+        agent.boundaries,
         agent.maxParallel,
         "idle",
         null,
@@ -1429,7 +1483,9 @@ export function mapAgent(row: unknown): AgentRecord {
     persona: String(r.persona),
     modelBackend: String(r.model_backend),
     cliCommand: r.cli_command ? String(r.cli_command) : null,
-    capabilities: JSON.parse(String(r.capabilities)) as string[],
+    capabilities: parseJsonStringArray(r.capabilities),
+    allowedTools: parseJsonStringArray(r.allowed_tools),
+    boundaries: r.boundaries ? String(r.boundaries) : "",
     maxParallel: Number(r.max_parallel),
     status: String(r.status) as AgentRecord["status"],
     currentTaskId: r.current_task_id ? String(r.current_task_id) : null,
@@ -1447,11 +1503,25 @@ export function mapAgentTemplate(row: unknown): AgentTemplateRecord {
     persona: String(r.persona),
     modelBackend: String(r.model_backend),
     cliCommand: r.cli_command ? String(r.cli_command) : null,
-    capabilities: JSON.parse(String(r.capabilities)) as string[],
+    capabilities: parseJsonStringArray(r.capabilities),
+    allowedTools: parseJsonStringArray(r.allowed_tools),
+    boundaries: r.boundaries ? String(r.boundaries) : "",
     maxParallel: Number(r.max_parallel),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };
+}
+
+function parseJsonStringArray(value: unknown) {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function mapWorkflowTemplate(row: unknown): WorkflowTemplateRecord {

@@ -439,6 +439,8 @@ function createAgent(project: ProjectRecord, input: Partial<AgentRecord>) {
       modelBackend: input.modelBackend?.trim() || settings.defaultModelBackend,
       cliCommand: input.cliCommand?.trim() || null,
       capabilities: Array.isArray(input.capabilities) ? input.capabilities : [],
+      allowedTools: Array.isArray(input.allowedTools) ? input.allowedTools : [],
+      boundaries: input.boundaries?.trim() || "",
       maxParallel: Number(input.maxParallel || settings.defaultAgentMaxParallel),
       status: "idle",
       currentTaskId: null,
@@ -449,8 +451,8 @@ function createAgent(project: ProjectRecord, input: Partial<AgentRecord>) {
     db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       agent.id,
       agent.name,
@@ -459,6 +461,8 @@ function createAgent(project: ProjectRecord, input: Partial<AgentRecord>) {
       agent.modelBackend,
       agent.cliCommand,
       JSON.stringify(agent.capabilities),
+      JSON.stringify(agent.allowedTools),
+      agent.boundaries,
       agent.maxParallel,
       agent.status,
       agent.currentTaskId,
@@ -496,6 +500,8 @@ function updateAgent(project: ProjectRecord, agentId: string, input: Partial<Age
           model_backend = COALESCE(?, model_backend),
           cli_command = ?,
           capabilities = COALESCE(?, capabilities),
+          allowed_tools = COALESCE(?, allowed_tools),
+          boundaries = COALESCE(?, boundaries),
           max_parallel = COALESCE(?, max_parallel),
           updated_at = ?
       WHERE id = ?
@@ -506,6 +512,8 @@ function updateAgent(project: ProjectRecord, agentId: string, input: Partial<Age
       input.modelBackend?.trim() || null,
       input.cliCommand === undefined ? (existing as { cli_command: string | null }).cli_command : input.cliCommand?.trim() || null,
       Array.isArray(input.capabilities) ? JSON.stringify(input.capabilities) : null,
+      Array.isArray(input.allowedTools) ? JSON.stringify(input.allowedTools) : null,
+      input.boundaries === undefined ? null : input.boundaries.trim(),
       input.maxParallel ? Math.max(1, Number(input.maxParallel)) : null,
       now(),
       agentId
@@ -521,6 +529,8 @@ function updateAgent(project: ProjectRecord, agentId: string, input: Partial<Age
         role: agent.role,
         modelBackend: agent.modelBackend,
         capabilities: agent.capabilities,
+        allowedTools: agent.allowedTools,
+        boundaries: agent.boundaries,
         maxParallel: agent.maxParallel
       }
     });

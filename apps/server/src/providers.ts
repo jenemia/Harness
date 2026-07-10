@@ -565,6 +565,8 @@ function buildLlmEnvironment(
     HARNESS_AGENT_NAME: agent.name,
     HARNESS_AGENT_ROLE: agent.role,
     HARNESS_AGENT_PERSONA: agent.persona,
+    HARNESS_AGENT_ALLOWED_TOOLS: agent.allowedTools.join(","),
+    HARNESS_AGENT_BOUNDARIES: agent.boundaries,
     HARNESS_TASK_ID: task.id,
     HARNESS_TASK_TITLE: task.title,
     HARNESS_TASK_DESCRIPTION: task.description,
@@ -597,6 +599,12 @@ function writePromptFiles(
     `## Persona`,
     agent.persona,
     ``,
+    `## Allowed Tools`,
+    formatList(agent.allowedTools),
+    ``,
+    `## Boundaries`,
+    agent.boundaries || "(none)",
+    ``,
     `## Task`,
     task.title,
     ``,
@@ -617,6 +625,13 @@ function writePromptFiles(
   ].join("\n");
   writeFileSync(promptFile, prompt, "utf8");
   return { promptFile, memoryFile, memoryText };
+}
+
+function formatList(items: string[]) {
+  if (!items.length) {
+    return "(none)";
+  }
+  return items.map((item) => `- ${item}`).join("\n");
 }
 
 function formatProjectMemory(memories: MemoryRecord[]) {

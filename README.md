@@ -13,7 +13,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Jira-like task detail drawer with editable metadata, labels, parent/subtask links, dependencies, runs, changed files, timeline, worktree, and merge state.
 - Project-local Documents panel for specs, notes, and planning material.
 - Project-local Memory panel for conventions and preferences injected into agent prompts.
-- Agent persona, backend, capability, template, current work, run metrics, and concurrency management.
+- Agent persona, backend, capability, allowed tool, boundary, template, current work, run metrics, and concurrency management.
 - Task assignment and execution.
 - PM planning endpoint that decomposes a goal into assigned Kanban tasks.
 - Workflow templates for reusable PM planning role chains.
@@ -60,10 +60,10 @@ pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --
 pnpm cli providers:list
 pnpm cli templates:projects
 pnpm cli templates:workflows
-pnpm cli templates:agent-create --name "Docs Agent" --role writer --persona "Write concise project docs" --capabilities docs,writing
+pnpm cli templates:agent-create --name "Docs Agent" --role writer --persona "Write concise project docs" --capabilities docs,writing --allowedTools documents,memory --boundaries "Use only validated project facts"
 pnpm cli templates:workflow-create --name "Build, Review, Docs" --stepsFile ./workflow.steps.json
 pnpm cli templates:project-create --name "Frontend Team" --agentsFile ./project-template-agents.json
-pnpm cli agents:create --project <projectId> --name "Frontend Agent" --role programmer --persona "Build polished React UI" --capabilities frontend,react --maxParallel 2
+pnpm cli agents:create --project <projectId> --name "Frontend Agent" --role programmer --persona "Build polished React UI" --capabilities frontend,react --allowedTools worktree,shell,tests --boundaries "Stay inside the task worktree" --maxParallel 2
 pnpm cli plans:create --project <projectId> --goal "Build the next feature" --workflowTemplate <templateId>
 pnpm cli plans:create --project <projectId> --goalFile ./Document/service-plan.md --mode sequential
 pnpm cli documents:create --project <projectId> --title "Service Plan" --contentFile ./Document/service-plan.md
@@ -117,7 +117,7 @@ The project sidebar can scan the global default project root and import existing
 
 ## Agents
 
-Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` CLI commands to manage persona-driven worker profiles, model backend defaults, CLI overrides, capabilities, and per-agent concurrency.
+Use the Agents panel or the `agents:list`, `agents:create`, and `agents:update` CLI commands to manage persona-driven worker profiles, model backend defaults, CLI overrides, capabilities, allowed tools, boundaries, and per-agent concurrency.
 
 ## PM Planning
 

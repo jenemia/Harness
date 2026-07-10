@@ -100,6 +100,8 @@ export type AgentRecord = {
   modelBackend: string;
   cliCommand: string | null;
   capabilities: string[];
+  allowedTools: string[];
+  boundaries: string;
   maxParallel: number;
   status: "idle" | "busy" | "offline";
   currentTaskId: string | null;
@@ -115,6 +117,8 @@ export type AgentTemplateRecord = {
   modelBackend: string;
   cliCommand: string | null;
   capabilities: string[];
+  allowedTools: string[];
+  boundaries: string;
   maxParallel: number;
   createdAt: string;
   updatedAt: string;
@@ -143,6 +147,8 @@ export type ProjectTemplateAgent = {
   modelBackend: string;
   cliCommand: string | null;
   capabilities: string[];
+  allowedTools: string[];
+  boundaries: string;
   maxParallel: number;
 };
 
