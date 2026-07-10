@@ -24,7 +24,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Git worktree per executable task.
 - Harness workspace mode for non-code tasks that do not need Git worktrees.
 - Automatic workspace mode selection for common code, docs, planning, and research task signals.
-- Automatic PM-driven handoff with project-level handoff rules, dynamic fallback routing, and approval gates for LLM CLI command execution and merge.
+- Automatic PM-driven handoff with project-level handoff rules, dynamic fallback routing, and approval gates for risky handoffs, LLM CLI command execution, and merge.
 - PM completion evaluation events before automatic handoffs or Done transitions.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
@@ -118,9 +118,9 @@ Each project also has project-local settings stored inside `<project>/.harness/h
 
 Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 
-Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. If no configured or dynamic handoff applies, the task moves to Done.
+Handoff rules are a role-to-role map. The default routes `programmer` and `worker` completions to `reviewer`. When no matching rule exists, the PM runtime can choose a dynamic fallback from completion signals and available agent roles, such as `researcher -> analyst -> writer` or changed/risky work to a reviewer. Dynamic handoffs with risk or error signals pause for human approval before the next agent starts. If no configured or dynamic handoff applies, the task moves to Done.
 
-The provider catalog exposes the active OS platform provider, workspace isolation provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`.
+The provider catalog exposes the active OS platform provider, workspace isolation provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including command, merge, and handoff approval capabilities.
 
 ## Project Templates
 
@@ -174,7 +174,7 @@ Headless workflows can inspect the same Kanban state through `board:show`, filte
 
 ## Approvals
 
-Harness blocks task execution before running shell-backed LLM providers until the user approves the request. Approved tasks resume automatically. Rejected tasks remain blocked with the decision recorded in the task timeline.
+Harness blocks task execution before running shell-backed LLM providers until the user approves the request. Risky PM handoffs also pause in the same approval queue before the target agent starts. Approved tasks resume automatically. Rejected tasks remain blocked with the decision recorded in the task timeline.
 
 Harness also queues merge approvals when a completed task has worktree changes waiting to land. Merge approvals can be accepted or sent back for changes from the same Approvals panel and CLI commands.
 

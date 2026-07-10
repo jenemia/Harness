@@ -198,7 +198,7 @@ export type Approval = {
   id: string;
   taskId: string;
   agentId: string;
-  kind: "command_execution" | "merge";
+  kind: "command_execution" | "merge" | "handoff";
   status: "pending" | "approved" | "rejected";
   reason: string;
   commandPreview: string | null;
@@ -297,6 +297,7 @@ export type ProviderCatalog = {
     capabilities: {
       commandExecution: boolean;
       mergeApproval: boolean;
+      handoffApproval: boolean;
       remembersDecisions: boolean;
       resumesApprovedTasks: boolean;
     };

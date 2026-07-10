@@ -22,6 +22,7 @@ const reservedProjectRuns = new Map<string, number>();
 const providers = createDefaultProviders(projectHarnessDir);
 const commandApprovalKind = "command_execution";
 const mergeApprovalKind = "merge";
+const handoffApprovalKind = "handoff";
 
 export function listRuntimeProviders() {
   return {
@@ -615,6 +616,7 @@ export async function decideApproval(
   let shouldStartTaskId: string | null = null;
   let shouldApproveMergeTaskId: string | null = null;
   let shouldRequestMergeChangesTaskId: string | null = null;
+  let shouldStartHandoffTaskId: string | null = null;
   let mergeChangeReason = "";
 
   try {
@@ -647,6 +649,26 @@ export async function decideApproval(
         shouldRequestMergeChangesTaskId = task.id;
         mergeChangeReason = providers.approval().rejectionReason(approval);
       }
+    } else if (approval.kind === handoffApprovalKind) {
+      if (task && decision === "approved") {
+        const targetAgent = approval.commandPreview ? getAgent(db, approval.commandPreview) : null;
+        if (targetAgent && agent) {
+          performHandoff(db, task, agent, targetAgent, {
+            role: targetAgent.role,
+            source: "approved",
+            reason: "PM approved handoff."
+          }, "Human approved the PM handoff decision.");
+          shouldStartHandoffTaskId = task.id;
+        } else {
+          setTaskBlocked(db, task.id, "Approved handoff target agent is no longer available.");
+        }
+      }
+      if (task && decision === "rejected") {
+        setTaskBlocked(db, task.id, providers.approval().rejectionReason(approval));
+        if (agent) {
+          refreshAgentStatus(db, agent.id);
+        }
+      }
     } else if (task && decision === "approved") {
       db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
         "Selected",
@@ -657,7 +679,7 @@ export async function decideApproval(
       shouldStartTaskId = task.id;
     }
 
-    if (approval.kind !== mergeApprovalKind && task && decision === "rejected") {
+    if (approval.kind !== mergeApprovalKind && approval.kind !== handoffApprovalKind && task && decision === "rejected") {
       setTaskBlocked(db, task.id, providers.approval().rejectionReason(approval));
       if (agent) {
         refreshAgentStatus(db, agent.id);
@@ -669,6 +691,9 @@ export async function decideApproval(
 
   if (shouldStartTaskId) {
     deferRuntimeTask(() => startTask(project, shouldStartTaskId));
+  }
+  if (shouldStartHandoffTaskId) {
+    deferRuntimeTask(() => startTask(project, shouldStartHandoffTaskId));
   }
   if (shouldApproveMergeTaskId) {
     return await approveMerge(project, shouldApproveMergeTaskId);
@@ -881,31 +906,12 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
       return;
     }
 
-    assignTask(db, task.id, nextAgent.id);
-    updateTaskStatus(db, task.id, nextAgent.role === "reviewer" ? "In Review" : "Selected");
-    db.prepare("INSERT INTO handoffs VALUES (?, ?, ?, ?, ?, ?)").run(
-      randomUUID(),
-      task.id,
-      completedBy.id,
-      nextAgent.id,
-      `${handoffDecision.reason} ${evaluation.summary}`,
-      now()
-    );
-    insertEvent(db, {
-      taskId: task.id,
-      agentId: nextAgent.id,
-      type: "handoff.automatic",
-      message: `PM Agent handed the task from ${completedBy.name} to ${nextAgent.name}.`,
-      metadata: {
-        fromAgentId: completedBy.id,
-        toAgentId: nextAgent.id,
-        fromRole: completedBy.role,
-        toRole: handoffDecision.role,
-        decisionSource: handoffDecision.source,
-        decisionReason: handoffDecision.reason,
-        evaluation
-      }
-    });
+    if (requiresHandoffApproval(handoffDecision, evaluation)) {
+      requestHandoffApproval(db, task, completedBy, nextAgent, handoffDecision, evaluation);
+      return;
+    }
+
+    performHandoff(db, task, completedBy, nextAgent, handoffDecision, evaluation.summary, evaluation);
     deferRuntimeTask(() => startTask(project, task.id));
     return;
   }
@@ -938,6 +944,101 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   }
 
   scheduleReadyDependents(project, db, task.id);
+}
+
+function performHandoff(
+  db: DatabaseSync,
+  task: TaskRecord,
+  fromAgent: AgentRecord,
+  toAgent: AgentRecord,
+  handoffDecision: { role: string; source: string; reason: string },
+  reasonSuffix: string,
+  evaluation?: ReturnType<typeof evaluateCompletion>
+) {
+  assignTask(db, task.id, toAgent.id);
+  updateTaskStatus(db, task.id, toAgent.role === "reviewer" ? "In Review" : "Selected");
+  db.prepare("INSERT INTO handoffs VALUES (?, ?, ?, ?, ?, ?)").run(
+    randomUUID(),
+    task.id,
+    fromAgent.id,
+    toAgent.id,
+    `${handoffDecision.reason} ${reasonSuffix}`,
+    now()
+  );
+  insertEvent(db, {
+    taskId: task.id,
+    agentId: toAgent.id,
+    type: "handoff.automatic",
+    message: `PM Agent handed the task from ${fromAgent.name} to ${toAgent.name}.`,
+    metadata: {
+      fromAgentId: fromAgent.id,
+      toAgentId: toAgent.id,
+      fromRole: fromAgent.role,
+      toRole: handoffDecision.role,
+      decisionSource: handoffDecision.source,
+      decisionReason: handoffDecision.reason,
+      evaluation: evaluation || null
+    }
+  });
+}
+
+function requiresHandoffApproval(
+  handoffDecision: { source: string },
+  evaluation: ReturnType<typeof evaluateCompletion>
+) {
+  if (handoffDecision.source === "configured") {
+    return false;
+  }
+  return evaluation.signals.includes("risk") || evaluation.signals.includes("error-mentioned");
+}
+
+function requestHandoffApproval(
+  db: DatabaseSync,
+  task: TaskRecord,
+  completedBy: AgentRecord,
+  nextAgent: AgentRecord,
+  handoffDecision: { role: string; source: string; reason: string },
+  evaluation: ReturnType<typeof evaluateCompletion>
+) {
+  const existingRows = db
+    .prepare("SELECT * FROM approvals WHERE task_id = ? AND agent_id = ? AND kind = ? ORDER BY created_at DESC")
+    .all(task.id, completedBy.id, handoffApprovalKind)
+    .map(mapApproval);
+  const pending = existingRows.find((approval) => approval.status === "pending" && approval.commandPreview === nextAgent.id);
+  const reason = `PM handoff to ${nextAgent.name} needs approval because signals were detected: ${evaluation.signals.join(", ")}.`;
+
+  setTaskBlocked(db, task.id, reason);
+  if (pending) {
+    return;
+  }
+
+  const approvalId = randomUUID();
+  db.prepare("INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+    approvalId,
+    task.id,
+    completedBy.id,
+    handoffApprovalKind,
+    "pending",
+    reason,
+    nextAgent.id,
+    now(),
+    null
+  );
+  insertEvent(db, {
+    taskId: task.id,
+    agentId: completedBy.id,
+    type: "approval.requested",
+    message: reason,
+    metadata: {
+      approvalId,
+      kind: handoffApprovalKind,
+      targetAgentId: nextAgent.id,
+      targetRole: handoffDecision.role,
+      decisionSource: handoffDecision.source,
+      decisionReason: handoffDecision.reason,
+      evaluation
+    }
+  });
 }
 
 function chooseNextHandoff(

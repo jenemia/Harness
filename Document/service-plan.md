@@ -120,7 +120,7 @@ Initial implementation: project settings include role-to-role handoff rules. By 
 
 Initial implementation: after each successful run, the PM runtime inspects the latest completion output and changed files before choosing the role-to-role handoff or Done transition. It records a `pm.evaluated` timeline event with output excerpt, changed files, detected follow-up/risk/verification signals, and includes the evaluation summary in automatic handoff metadata.
 
-Initial implementation: when no configured handoff rule matches the completed agent role, the PM runtime can choose a dynamic fallback handoff from the completed role, task text, completion signals, changed files, and available agent capabilities. The first fallback routes support research chains such as `researcher -> analyst -> writer`, writing to editor/reviewer, and risky or changed work to reviewer/QA-style agents. Handoff events record whether the decision came from a configured rule or dynamic fallback, and the task drawer shows handoff decision badges for source, target role, changed-file count, and detected PM signals.
+Initial implementation: when no configured handoff rule matches the completed agent role, the PM runtime can choose a dynamic fallback handoff from the completed role, task text, completion signals, changed files, and available agent capabilities. The first fallback routes support research chains such as `researcher -> analyst -> writer`, writing to editor/reviewer, and risky or changed work to reviewer/QA-style agents. Handoff events record whether the decision came from a configured rule or dynamic fallback, and the task drawer shows handoff decision badges for source, target role, changed-file count, and detected PM signals. Dynamic handoffs with risk or error signals create a local human approval request before the target agent starts; approval resumes the handoff and rejection leaves the task blocked with the decision recorded.
 
 Initial implementation: shell-backed LLM providers create a command execution approval request before any configured CLI command runs. The task is blocked until the user approves or rejects the request from the Approvals panel. Approved tasks resume automatically; rejected tasks remain blocked and the decision is recorded in the timeline.
 
@@ -213,7 +213,7 @@ Certain actions should require user approval:
 - Creating large numbers of tasks
 - Marking project milestones complete
 
-Initial implementation: command-backed LLM providers still honor project-level command approval settings, but risky shell command detection is enforced by the policy provider independently of that setting. Risk tags and command previews are recorded in task events and approval request metadata.
+Initial implementation: command-backed LLM providers still honor project-level command approval settings, but risky shell command detection is enforced by the policy provider independently of that setting. Risk tags and command previews are recorded in task events and approval request metadata. PM handoffs with risk/error completion signals also create approval requests so a human can approve or reject the next-agent transition before it runs.
 
 ### Review Agent
 
@@ -307,7 +307,7 @@ The system should support explicit workflow templates, but the PM agent should a
 
 Default behavior: sequential workflow chains advance automatically after each agent finishes unless a risk boundary requires approval.
 
-Initial implementation: global workflow templates are stored in the app-wide Harness database. PM planning and document-based planning can select a reusable template such as `Plan, Build, Review` or `Build and Review`, then create tasks from each step's role, title template, description template, and acceptance criteria. Outside explicit templates and configured role maps, PM dynamic fallback handoffs can still choose the next available specialist from task and completion signals.
+Initial implementation: global workflow templates are stored in the app-wide Harness database. PM planning and document-based planning can select a reusable template such as `Plan, Build, Review` or `Build and Review`, then create tasks from each step's role, title template, description template, and acceptance criteria. Outside explicit templates and configured role maps, PM dynamic fallback handoffs can still choose the next available specialist from task and completion signals, with human approval required when risk/error signals are present.
 
 ### Agent Workspaces
 
@@ -493,7 +493,7 @@ Initial implementation: when the server starts, Harness scans registered project
 - Local desktop app for normal users
 - Optional CLI package for automation and headless runs
 
-Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation with automatic or explicit workspace mode, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
+Initial implementation: the server package includes a JSON CLI for headless project listing, project registration/update/unregistration, project Git initialization, project root import, project overview, project health reporting, global/project settings management, provider catalog inspection, template listing and creation, agent create/update/list flows, board/task/run inspection, document create/update/list/plan flows, memory create/update/list flows, PM plan creation, task creation with automatic or explicit workspace mode, task decomposition, task updates including per-task workspace mode, task reorder, task pause/resume, task comments, approval decisions for commands, merges, and risky PM handoffs, merge decisions, conflicted merge resolution, ready-task scheduling, and single-task starts. The CLI uses the same global and project-local storage as the local web app and can create templates, seed project templates, configure agents, inspect board and run state, create plans from goal text/files, maintain project memory, or turn saved documents into workflow-template-backed tickets.
 
 ## 8. Draft Product Structure
 

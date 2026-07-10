@@ -94,6 +94,7 @@ export type ApprovalProviderDefinition = {
   capabilities: {
     commandExecution: boolean;
     mergeApproval: boolean;
+    handoffApproval: boolean;
     remembersDecisions: boolean;
     resumesApprovedTasks: boolean;
   };
@@ -672,6 +673,7 @@ function createLocalHumanApprovalProvider(): ApprovalProvider {
       capabilities: {
         commandExecution: true,
         mergeApproval: true,
+        handoffApproval: true,
         remembersDecisions: true,
         resumesApprovedTasks: true
       }
@@ -755,6 +757,11 @@ function createLocalHumanApprovalProvider(): ApprovalProvider {
           ? "Human approved merging this task into the main checkout."
           : "Human requested changes before merging this task.";
       }
+      if (approval.kind === "handoff") {
+        return decision === "approved"
+          ? "Human approved the PM handoff decision."
+          : "Human rejected the PM handoff decision.";
+      }
 
       return decision === "approved"
         ? "Human approved command execution for this task."
@@ -764,6 +771,9 @@ function createLocalHumanApprovalProvider(): ApprovalProvider {
     rejectionReason(approval) {
       if (approval.kind === "merge") {
         return "Human requested changes before merging this task.";
+      }
+      if (approval.kind === "handoff") {
+        return "Human rejected the PM handoff decision.";
       }
       return "Command execution approval was rejected.";
     }

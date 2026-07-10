@@ -346,14 +346,21 @@ function ApprovalsPanel(props: {
         {pending.map((approval) => {
           const task = props.overview.tasks.find((item) => item.id === approval.taskId);
           const agent = props.overview.agents.find((item) => item.id === approval.agentId);
+          const targetAgent =
+            approval.kind === "handoff" && approval.commandPreview
+              ? props.overview.agents.find((item) => item.id === approval.commandPreview)
+              : null;
           return (
             <div className="approval-row pending" key={approval.id}>
               <div>
                 <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
-                <span>{agent?.name || "Unknown agent"} · {approval.kind.replace("_", " ")}</span>
+                <span>
+                  {agent?.name || "Unknown agent"} · {approval.kind.replace("_", " ")}
+                  {targetAgent ? ` · to ${targetAgent.name}` : ""}
+                </span>
               </div>
               <p>{approval.reason}</p>
-              {approval.commandPreview && <code>{approval.commandPreview}</code>}
+              {approval.commandPreview && approval.kind !== "handoff" && <code>{approval.commandPreview}</code>}
               <div className="approval-actions">
                 <button className="secondary-button" type="button" onClick={() => void decide(approval, "reject")}>
                   Reject
@@ -2282,7 +2289,8 @@ function SettingsPanel(props: {
           <span>
             command approvals {props.providerCatalog.approval.capabilities.commandExecution ? "on" : "off"} | merge
             approvals {props.providerCatalog.approval.capabilities.mergeApproval ? "on" : "off"} | resumes tasks{" "}
-            {props.providerCatalog.approval.capabilities.resumesApprovedTasks ? "on" : "off"}
+            {props.providerCatalog.approval.capabilities.resumesApprovedTasks ? "on" : "off"} | handoff approvals{" "}
+            {props.providerCatalog.approval.capabilities.handoffApproval ? "on" : "off"}
           </span>
           <strong>{props.providerCatalog.policy.label}</strong>
           <span>

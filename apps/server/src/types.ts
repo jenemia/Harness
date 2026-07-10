@@ -207,7 +207,7 @@ export type ApprovalRecord = {
   id: string;
   taskId: string;
   agentId: string;
-  kind: "command_execution" | "merge";
+  kind: "command_execution" | "merge" | "handoff";
   status: "pending" | "approved" | "rejected";
   reason: string;
   commandPreview: string | null;
