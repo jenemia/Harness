@@ -34,7 +34,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Task-level model backend overrides for routing specific work to a different provider.
 - Global settings for app-wide defaults and project-local settings for default LLM backend, provider commands, agent concurrency, project concurrency, PM plan auto-start, and command approval policy.
 
-LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, `HARNESS_WORKSPACE_KIND`, `HARNESS_WORKSPACE_PATH`, and the backward-compatible `HARNESS_WORKTREE_PATH`.
+LLM CLI providers run inside the task workspace and receive Harness context through environment variables, including `HARNESS_PROMPT_FILE`, `HARNESS_AGENT_PERSONA`, `HARNESS_TASK_TITLE`, `HARNESS_TASK_RUN_SUMMARY`, `HARNESS_WORKSPACE_KIND`, `HARNESS_WORKSPACE_PATH`, and the backward-compatible `HARNESS_WORKTREE_PATH`.
 
 Global memory is written to `.harness/global-memory.md` and exposed as `HARNESS_GLOBAL_MEMORY` and `HARNESS_GLOBAL_MEMORY_FILE`. Project memory is written to `.harness/project-memory.md` and exposed as `HARNESS_PROJECT_MEMORY` and `HARNESS_PROJECT_MEMORY_FILE`.
 
@@ -170,6 +170,8 @@ When the server starts, Harness scans registered projects for runs that were lef
 Open a task from the board to inspect its status, assignee, labels, linked files, parent/subtask links, workspace mode, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, PM handoff decision history, follow-up task creation, and task-scoped activity timeline. New tasks can use automatic workspace selection, while existing tasks keep an explicit `worktree` or `harness` mode.
 
 Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files.
+
+Recent completed or failed runs for the same task are injected into the generated agent prompt and `HARNESS_TASK_RUN_SUMMARY`, giving reviewer or handoff agents the prior agent output and changed-file context.
 
 Linked files are injected into the generated agent prompt and exposed to command-backed providers as `HARNESS_LINKED_FILES`, so model-specific CLI wrappers can use the same task context.
 

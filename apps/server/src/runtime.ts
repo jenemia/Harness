@@ -789,9 +789,14 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
 
     const projectMemory = db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory);
     const globalMemory = listGlobalMemories();
+    const taskRuns = db
+      .prepare("SELECT * FROM runs WHERE task_id = ? AND id != ? AND status IN (?, ?) ORDER BY started_at DESC LIMIT 5")
+      .all(task.id, runId, "completed", "failed")
+      .map(mapRun);
     const result = await selectedProvider.run(executionAgent, freshTask, workspace, {
       globalMemory,
       projectMemory,
+      taskRuns,
       timeoutMs: settings.maxRunSeconds * 1000
     });
     const completedAt = now();

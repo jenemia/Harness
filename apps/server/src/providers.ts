@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { AgentRecord, ApprovalRecord, MemoryRecord, TaskRecord } from "./types.js";
+import type { AgentRecord, ApprovalRecord, MemoryRecord, RunRecord, TaskRecord } from "./types.js";
 
 export type CommandResult = {
   ok: boolean;
@@ -26,6 +26,7 @@ export type MergeState = {
 export type LlmRunContext = {
   globalMemory: MemoryRecord[];
   projectMemory: MemoryRecord[];
+  taskRuns?: RunRecord[];
   timeoutMs?: number;
 };
 
@@ -809,6 +810,7 @@ function createMockLlmProvider(): LlmProvider {
         `Role: ${agent.role}`,
         `Task: ${task.title}`,
         `Linked files: ${task.linkedFiles.length}`,
+        `Previous task runs: ${context?.taskRuns?.length || 0}`,
         `Global memory entries: ${context?.globalMemory.length || 0}`,
         `Project memory entries: ${context?.projectMemory.length || 0}`,
         "",
@@ -896,6 +898,7 @@ function buildLlmEnvironment(
     HARNESS_GLOBAL_MEMORY_FILE: files.globalMemoryFile,
     HARNESS_PROJECT_MEMORY: files.projectMemoryText,
     HARNESS_PROJECT_MEMORY_FILE: files.projectMemoryFile,
+    HARNESS_TASK_RUN_SUMMARY: files.taskRunSummaryText,
     HARNESS_AGENT_NAME: agent.name,
     HARNESS_AGENT_ROLE: agent.role,
     HARNESS_AGENT_PERSONA: agent.persona,
@@ -928,6 +931,7 @@ function writePromptFiles(
   const projectMemoryFile = path.join(promptDir, "project-memory.md");
   const globalMemoryText = formatMemory(context?.globalMemory || []);
   const projectMemoryText = formatMemory(context?.projectMemory || []);
+  const taskRunSummaryText = formatTaskRuns(context?.taskRuns || []);
   const workspaceInstruction =
     workspace.kind === "git-worktree"
       ? "Work only inside this task Git worktree. Report changed files, verification performed, and any blockers."
@@ -968,6 +972,9 @@ function writePromptFiles(
     `## Project Memory`,
     projectMemoryText,
     ``,
+    `## Recent Task Runs`,
+    taskRunSummaryText,
+    ``,
     `## Workspace`,
     `Kind: ${workspace.kind}`,
     `Mode: ${task.workspaceMode}`,
@@ -977,7 +984,7 @@ function writePromptFiles(
     workspaceInstruction
   ].join("\n");
   writeFileSync(promptFile, prompt, "utf8");
-  return { promptFile, globalMemoryFile, projectMemoryFile, globalMemoryText, projectMemoryText };
+  return { promptFile, globalMemoryFile, projectMemoryFile, globalMemoryText, projectMemoryText, taskRunSummaryText };
 }
 
 function formatList(items: string[]) {
@@ -995,6 +1002,38 @@ function formatMemory(memories: MemoryRecord[]) {
   return memories
     .map((memory) => [`### ${memory.title}`, memory.content || "(empty)"].join("\n"))
     .join("\n\n");
+}
+
+function formatTaskRuns(runs: RunRecord[]) {
+  if (runs.length === 0) {
+    return "(none)";
+  }
+
+  return runs
+    .slice(0, 5)
+    .map((run) => {
+      const output = [run.output, run.error].filter(Boolean).join("\n").trim();
+      const excerpt = output ? truncate(output, 1200) : "(no output)";
+      return [
+        `### Run ${run.id.slice(0, 8)} (${run.status})`,
+        `Agent: ${run.agentId.slice(0, 8)}`,
+        `Provider: ${run.providerId || "unknown"}`,
+        `Model backend: ${run.modelBackend || "unknown"}`,
+        `Started: ${run.startedAt}`,
+        `Completed: ${run.completedAt || "not completed"}`,
+        `Changed files: ${run.changedFiles.length ? run.changedFiles.join(", ") : "none"}`,
+        ``,
+        excerpt
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
+function truncate(value: string, maxLength: number) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return `${value.slice(0, maxLength - 15)}\n...[truncated]`;
 }
 
 async function ensureHarnessGitExclude(platformProvider: PlatformProvider, projectPath: string) {

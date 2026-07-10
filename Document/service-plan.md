@@ -252,6 +252,8 @@ Every agent action should be auditable. Users should be able to answer: who did 
 
 Initial implementation: every run stores the assigned agent, effective model backend, provider id, command preview when applicable, workspace path, branch when present, snapshot ref, changed files, output, error, and timestamps. Task detail and timeline views expose this audit trail.
 
+Initial implementation: recent completed or failed runs for the same task are injected into the generated agent prompt and `HARNESS_TASK_RUN_SUMMARY`, so reviewer and handoff agents receive prior output, provider, timing, and changed-file context.
+
 Initial implementation: run audit trails can also be inspected from the headless CLI with status/task/agent/provider/model filters and run-scoped detail output.
 
 ### Workspace Snapshots
