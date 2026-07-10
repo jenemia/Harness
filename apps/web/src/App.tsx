@@ -18,6 +18,7 @@ import {
   Play,
   Plus,
   RefreshCcw,
+  Search,
   Sparkles,
   Settings,
   Tag,
@@ -42,6 +43,9 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
+  const [boardQuery, setBoardQuery] = useState("");
+  const [boardAssigneeId, setBoardAssigneeId] = useState("");
+  const [boardLabel, setBoardLabel] = useState("");
 
   async function loadProjects() {
     const [data, providers, templatesResponse, workflowTemplatesResponse, projectTemplatesResponse, settingsResponse] = await Promise.all([
@@ -118,6 +122,47 @@ export function App() {
   const selectedTask = useMemo(() => {
     return overview?.tasks.find((task) => task.id === selectedTaskId) || null;
   }, [overview, selectedTaskId]);
+  const boardLabels = useMemo(() => {
+    return Array.from(new Set((overview?.tasks || []).flatMap((task) => task.labels))).sort((a, b) => a.localeCompare(b));
+  }, [overview]);
+  const visibleTasks = useMemo(() => {
+    if (!overview) {
+      return [];
+    }
+    const query = boardQuery.trim().toLowerCase();
+    return overview.tasks.filter((task) => {
+      const assignee = task.assigneeAgentId ? agentsById.get(task.assigneeAgentId) : null;
+      const matchesQuery =
+        !query ||
+        [
+          task.id,
+          task.title,
+          task.description,
+          task.acceptanceCriteria,
+          task.reporter,
+          task.priority,
+          task.status,
+          assignee?.name || "unassigned",
+          ...task.labels,
+          ...task.linkedFiles
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      const matchesAssignee =
+        !boardAssigneeId ||
+        (boardAssigneeId === "unassigned" ? !task.assigneeAgentId : task.assigneeAgentId === boardAssigneeId);
+      const matchesLabel = !boardLabel || task.labels.includes(boardLabel);
+      return matchesQuery && matchesAssignee && matchesLabel;
+    });
+  }, [agentsById, boardAssigneeId, boardLabel, boardQuery, overview]);
+  const hasBoardFilters = Boolean(boardQuery || boardAssigneeId || boardLabel);
+
+  useEffect(() => {
+    setBoardQuery("");
+    setBoardAssigneeId("");
+    setBoardLabel("");
+  }, [selectedProjectId]);
 
   return (
     <div className="app-shell">
@@ -230,15 +275,32 @@ export function App() {
                 runAction={runAction}
                 onChanged={() => loadOverview()}
               />
+              <BoardFilters
+                agents={overview.agents}
+                labels={boardLabels}
+                query={boardQuery}
+                assigneeId={boardAssigneeId}
+                label={boardLabel}
+                visibleCount={visibleTasks.length}
+                totalCount={overview.tasks.length}
+                onQueryChange={setBoardQuery}
+                onAssigneeChange={setBoardAssigneeId}
+                onLabelChange={setBoardLabel}
+                onClear={() => {
+                  setBoardQuery("");
+                  setBoardAssigneeId("");
+                  setBoardLabel("");
+                }}
+              />
               <div className="kanban">
                 {columns.map((column) => (
                   <section className="kanban-column" key={column}>
                     <div className="column-header">
                       <span>{column}</span>
-                      <b>{overview.tasks.filter((task) => task.status === column).length}</b>
+                      <b>{visibleTasks.filter((task) => task.status === column).length}</b>
                     </div>
                     <div className="column-list">
-                      {overview.tasks
+                      {visibleTasks
                         .filter((task) => task.status === column)
                         .map((task) => (
                           <TaskCard
@@ -252,6 +314,9 @@ export function App() {
                             onChanged={() => loadOverview()}
                           />
                         ))}
+                      {hasBoardFilters && visibleTasks.filter((task) => task.status === column).length === 0 && (
+                        <div className="column-empty">No matching tasks</div>
+                      )}
                     </div>
                   </section>
                 ))}
@@ -961,6 +1026,54 @@ function DocumentEditor(props: {
         </div>
       )}
     </form>
+  );
+}
+
+function BoardFilters(props: {
+  agents: Agent[];
+  labels: string[];
+  query: string;
+  assigneeId: string;
+  label: string;
+  visibleCount: number;
+  totalCount: number;
+  onQueryChange: (value: string) => void;
+  onAssigneeChange: (value: string) => void;
+  onLabelChange: (value: string) => void;
+  onClear: () => void;
+}) {
+  const hasFilters = Boolean(props.query || props.assigneeId || props.label);
+  return (
+    <div className="board-filters">
+      <label className="search-field">
+        <Search size={16} />
+        <input value={props.query} onChange={(event) => props.onQueryChange(event.target.value)} placeholder="Search tasks" />
+      </label>
+      <select value={props.assigneeId} onChange={(event) => props.onAssigneeChange(event.target.value)}>
+        <option value="">All assignees</option>
+        <option value="unassigned">Unassigned</option>
+        {props.agents.map((agent) => (
+          <option key={agent.id} value={agent.id}>
+            {agent.name}
+          </option>
+        ))}
+      </select>
+      <select value={props.label} onChange={(event) => props.onLabelChange(event.target.value)}>
+        <option value="">All labels</option>
+        {props.labels.map((label) => (
+          <option key={label} value={label}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <span className="filter-count">
+        {props.visibleCount} / {props.totalCount}
+      </span>
+      <button className="secondary-button compact" type="button" onClick={props.onClear} disabled={!hasFilters}>
+        <X size={15} />
+        <span>Clear</span>
+      </button>
+    </div>
   );
 }
 
