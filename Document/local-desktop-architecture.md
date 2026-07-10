@@ -357,6 +357,8 @@ provider process, PID, session id, last sequence와 workspace는 DB에 기록한
 - service test를 작성하고 HTTP와 CLI가 같은 service를 호출하게 한다.
 - 이 단계에서는 기존 HTTP server를 유지한다.
 
+현재 server package에서는 `apps/server/src/services.ts`가 project, agent, task, comment, document와 memory use case의 공통 application service를 제공한다. HTTP와 CLI transport는 project-local SQL mutation을 직접 실행하지 않고 이 service와 공통 runtime service를 호출한다. typed IPC와 MCP도 이후 단계에서 같은 service entry를 사용한다.
+
 ### 2단계: store와 runtime 경계 분리
 
 - SQLite open, migration과 project path 처리를 store module로 이동한다.

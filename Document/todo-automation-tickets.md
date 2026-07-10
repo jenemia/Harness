@@ -16,11 +16,15 @@
 
 Depends on: 없음
 
+Status: 완료
+
 - HTTP route와 CLI에 섞인 project, task, agent, approval mutation을 application service로 이동한다.
 - transport가 request/argv를 검증한 뒤 같은 service를 호출하게 한다.
 - 서비스 단위 테스트로 HTTP와 CLI의 규칙 일치를 검증한다.
 
 완료 조건: transport가 raw DB mutation을 소유하지 않고 기존 API·CLI 동작이 유지된다.
+
+검증: application service CRUD 회귀 테스트, CLI/HTTP 교차 smoke, `pnpm typecheck`, `pnpm test`, `pnpm build`.
 
 ### A02: Project-local layout, lock, migration과 recovery
 
