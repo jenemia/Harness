@@ -40,7 +40,7 @@ import {
   unblockReadyDependents
 } from "./runtime.js";
 import { selectFolder } from "./folder-picker.js";
-import { createDraftReply, createDraftSession, getDraftSnapshot, recoverDraftReviewRequests, replayDraftEvents, updateDraftCommentStatus, updateDraftRevision } from "./drafts.js";
+import { createDraftReply, createDraftSession, decideDraftApply, getDraftSnapshot, recordDraftApplyAttempt, recoverDraftReviewRequests, replayDraftEvents, restoreDraftRevision, undoDraftApply, updateDraftCommentStatus, updateDraftRevision } from "./drafts.js";
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
 import {
   createAgentService,
@@ -306,6 +306,31 @@ const server = http.createServer(async (req, res) => {
       if (draftCommentMatch && req.method === "PATCH") {
         const body = await readBody<{ status: "open" | "resolved" }>(req);
         sendJson(res, { comment: updateDraftCommentStatus(project, draftCommentMatch[1], draftCommentMatch[2], body.status) });
+        return;
+      }
+
+      const draftAppliesMatch = childPath.match(/^drafts\/([^/]+)\/applies$/);
+      if (draftAppliesMatch && req.method === "POST") {
+        sendJson(res, { apply: recordDraftApplyAttempt(project, draftAppliesMatch[1], await readBody(req)) }, 201);
+        return;
+      }
+
+      const draftApplyDecisionMatch = childPath.match(/^drafts\/([^/]+)\/applies\/([^/]+)\/decision$/);
+      if (draftApplyDecisionMatch && req.method === "POST") {
+        const body = await readBody<{ decision: "approved" | "rejected" }>(req);
+        sendJson(res, { apply: decideDraftApply(project, draftApplyDecisionMatch[1], draftApplyDecisionMatch[2], body.decision) });
+        return;
+      }
+
+      const draftApplyUndoMatch = childPath.match(/^drafts\/([^/]+)\/applies\/([^/]+)\/undo$/);
+      if (draftApplyUndoMatch && req.method === "POST") {
+        sendJson(res, { apply: undoDraftApply(project, draftApplyUndoMatch[1], draftApplyUndoMatch[2]) });
+        return;
+      }
+
+      const draftRestoreMatch = childPath.match(/^drafts\/([^/]+)\/restore$/);
+      if (draftRestoreMatch && req.method === "POST") {
+        sendJson(res, { draft: restoreDraftRevision(project, draftRestoreMatch[1], await readBody(req)) });
         return;
       }
 

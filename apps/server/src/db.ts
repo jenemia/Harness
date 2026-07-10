@@ -2112,7 +2112,7 @@ export function mapDraftApplyHistory(row: unknown): DraftApplyHistoryRecord {
     id: String(r.id), draftId: String(r.draft_id), sourceRevision: Number(r.source_revision),
     targetRevision: r.target_revision === null ? null : Number(r.target_revision),
     selectedCommentIds: JSON.parse(String(r.selected_comment_ids || "[]")) as string[],
-    result: r.result ? JSON.parse(String(r.result)) as Record<string, unknown> : null,
+    result: r.result ? JSON.parse(String(r.result)) as DraftApplyHistoryRecord["result"] : null,
     status: String(r.status) as DraftApplyHistoryRecord["status"], idempotencyKey: String(r.idempotency_key),
     createdAt: String(r.created_at), appliedAt: r.applied_at ? String(r.applied_at) : null
   };

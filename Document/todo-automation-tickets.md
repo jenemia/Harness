@@ -156,11 +156,15 @@ Status: 완료
 
 Depends on: A09, A10
 
+Status: 완료
+
 - 선택 comment와 expected revision을 포함한 idempotent apply를 구현한다.
 - 구조화된 planning 결과, 원문 diff, 승인·취소·undo·revision restore를 제공한다.
 - 미결 질문은 임의로 채우지 않고 별도 상태로 보존한다.
 
 완료 조건: 명시적 승인 전에는 초안이 변하지 않고 승인 후 즉시 되돌릴 수 있다.
+
+검증: 선택 comment·expected revision·idempotency, 구조화 planning 결과와 unified diff, 승인 전 무변경, 승인·취소·undo·revision restore, 미결 질문 이월을 서버 통합 테스트로 검증했다. 브라우저 smoke에서 선택 → diff → 승인 → undo → 과거 revision 복원과 console 오류 없음까지 확인했다.
 
 ### A12: Interaction 모델과 suspended run
 

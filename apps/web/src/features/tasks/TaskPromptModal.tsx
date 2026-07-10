@@ -1,4 +1,4 @@
-import { AlertTriangle, FileText, MessageSquare, RefreshCcw, Send, Sparkles, Square, X } from "lucide-react";
+import { AlertTriangle, Check, FileText, GitCompare, MessageSquare, RefreshCcw, RotateCcw, Send, Sparkles, Square, Undo2, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DraftComment, DraftReviewRequest, DraftSnapshot } from "../../api/contracts";
 import { draftService } from "../../services/draftService";
@@ -22,6 +22,8 @@ export function TaskPromptModal(props: {
   const [replyTargetId, setReplyTargetId] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [mobilePane, setMobilePane] = useState<"draft" | "comments">("draft");
+  const [selectedCommentIds, setSelectedCommentIds] = useState<Set<string>>(new Set());
+  const [isApplying, setIsApplying] = useState(false);
   const initializationRef = useRef<Promise<{ draft: DraftSnapshot }> | null>(null);
   const draftIdRef = useRef("");
   const revisionRef = useRef(0);
@@ -213,6 +215,79 @@ export function TaskPromptModal(props: {
     }
   }
 
+  async function requestApply() {
+    if (!snapshot || !selectedCommentIds.size || isApplying) return;
+    setError("");
+    setIsApplying(true);
+    try {
+      await persistDraft(promptRef.current);
+      const current = await draftService.get(props.projectId, snapshot.session.id);
+      const eligible = [...selectedCommentIds].filter((commentId) => current.draft.comments.some((comment) =>
+        comment.id === commentId && !comment.stale && comment.status !== "applied" &&
+        comment.revision === current.draft.session.currentRevision,
+      ));
+      if (!eligible.length) throw new Error("선택한 코멘트가 현재 revision에 없습니다.");
+      await draftService.requestApply(props.projectId, snapshot.session.id, {
+        expectedRevision: current.draft.session.currentRevision,
+        selectedCommentIds: eligible,
+        idempotencyKey: window.crypto.randomUUID(),
+      });
+      setSelectedCommentIds(new Set());
+      await refreshDraft();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setIsApplying(false);
+    }
+  }
+
+  async function decideApply(applyId: string, decision: "approved" | "rejected") {
+    if (!snapshot || isApplying) return;
+    setError("");
+    setIsApplying(true);
+    try {
+      const response = await draftService.decideApply(props.projectId, snapshot.session.id, applyId, decision);
+      applySnapshot(response.apply.snapshot);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setIsApplying(false);
+    }
+  }
+
+  async function undoApply(applyId: string) {
+    if (!snapshot || isApplying) return;
+    setError("");
+    setIsApplying(true);
+    try {
+      const response = await draftService.undoApply(props.projectId, snapshot.session.id, applyId);
+      applySnapshot(response.apply.snapshot);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setIsApplying(false);
+    }
+  }
+
+  async function restoreRevision(revision: number) {
+    if (!snapshot || isApplying) return;
+    setError("");
+    setIsApplying(true);
+    try {
+      const response = await draftService.restoreRevision(
+        props.projectId,
+        snapshot.session.id,
+        snapshot.session.currentRevision,
+        revision,
+      );
+      applySnapshot(response.draft.snapshot);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setIsApplying(false);
+    }
+  }
+
   const threads = useMemo(() => {
     if (!snapshot) return [];
     return snapshot.comments
@@ -230,6 +305,11 @@ export function TaskPromptModal(props: {
         .reverse()
         .find((request) => request.reviewerId === reviewer.id && request.revision === snapshot.session.currentRevision) || null,
     }));
+  }, [snapshot]);
+  const activeApply = useMemo(() => {
+    if (!snapshot) return null;
+    return [...snapshot.applyHistory].reverse().find((apply) => apply.status === "pending") ||
+      [...snapshot.applyHistory].reverse().find((apply) => apply.status === "applied") || null;
   }, [snapshot]);
 
   return (
@@ -290,7 +370,12 @@ export function TaskPromptModal(props: {
           <aside className={`draft-review-pane ${mobilePane === "comments" ? "mobile-active" : ""}`}>
             <div className="draft-review-heading">
               <div><span className="modal-kicker">Live review</span><h3>Agent comments</h3></div>
-              <button className="icon-button" type="button" onClick={() => void refreshDraft()}><RefreshCcw size={15} /></button>
+              <div className="draft-review-heading-actions">
+                <button className="secondary-button compact" type="button" disabled={!selectedCommentIds.size || isApplying || activeApply?.status === "pending"} onClick={() => void requestApply()}>
+                  <GitCompare size={14} /> 내용 반영 ({selectedCommentIds.size})
+                </button>
+                <button aria-label="Refresh draft" className="icon-button" type="button" onClick={() => void refreshDraft()}><RefreshCcw size={15} /></button>
+              </div>
             </div>
             <div className="draft-reviewers">
               {latestRequests.map(({ reviewer, request }) => {
@@ -311,18 +396,77 @@ export function TaskPromptModal(props: {
               })}
             </div>
             <div className="draft-comment-list">
+              {activeApply?.result && (
+                <section className={`draft-apply-panel ${activeApply.status}`}>
+                  <header>
+                    <div><span className="modal-kicker">Planning proposal</span><h4>원문과 변경 제안</h4></div>
+                    <span>r{activeApply.sourceRevision} · {activeApply.status}</span>
+                  </header>
+                  {activeApply.result.changeSummary.length > 0 && (
+                    <ul>{activeApply.result.changeSummary.map((item) => <li key={item}>{item}</li>)}</ul>
+                  )}
+                  {activeApply.result.unresolvedQuestions.length > 0 && (
+                    <div className="draft-unresolved-questions">
+                      <strong>미결 질문</strong>
+                      {activeApply.result.unresolvedQuestions.map((question) => <p key={question.commentId}>{question.body}</p>)}
+                    </div>
+                  )}
+                  <details open>
+                    <summary><GitCompare size={14} /> 원문 diff</summary>
+                    <pre className="draft-apply-diff">{activeApply.result.unifiedDiff || "변경할 본문이 없습니다."}</pre>
+                  </details>
+                  <details>
+                    <summary>구조화된 기획 결과</summary>
+                    <PlanningList title="완료 조건" values={activeApply.result.completionCriteria} />
+                    <PlanningList title="의존성" values={activeApply.result.dependencies} />
+                    <PlanningList title="위험" values={activeApply.result.risks} />
+                  </details>
+                  <div className="draft-apply-actions">
+                    {activeApply.status === "pending" && (
+                      <>
+                        <button className="secondary-button compact" disabled={isApplying} type="button" onClick={() => void decideApply(activeApply.id, "rejected")}>
+                          <X size={13} /> 취소
+                        </button>
+                        <button className="primary-button compact" disabled={isApplying || !activeApply.result.unifiedDiff || activeApply.sourceRevision !== snapshot?.session.currentRevision} type="button" onClick={() => void decideApply(activeApply.id, "approved")}>
+                          <Check size={13} /> 승인 후 반영
+                        </button>
+                      </>
+                    )}
+                    {activeApply.status === "applied" && activeApply.targetRevision === snapshot?.session.currentRevision && (
+                      <button className="secondary-button compact" disabled={isApplying} type="button" onClick={() => void undoApply(activeApply.id)}>
+                        <Undo2 size={13} /> 즉시 실행 취소
+                      </button>
+                    )}
+                  </div>
+                </section>
+              )}
               {threads.length === 0 && <p className="drawer-copy">Keep typing. Review starts after a short pause.</p>}
               {threads.map(({ comment, replies }) => {
                 const reviewer = snapshot?.reviewers.find((item) => item.id === comment.reviewerId);
+                const selectable = !comment.stale && comment.status !== "applied" && comment.revision === snapshot?.session.currentRevision;
                 return (
                   <article className={`draft-comment ${comment.kind} ${comment.stale ? "stale" : ""}`} key={comment.id}>
                     <header>
-                      <strong>@{reviewer?.role || comment.author}</strong>
+                      <label className="draft-comment-select">
+                        <input
+                          aria-label={`Select comment from ${reviewer?.role || comment.author}`}
+                          checked={selectedCommentIds.has(comment.id)}
+                          disabled={!selectable}
+                          type="checkbox"
+                          onChange={(event) => setSelectedCommentIds((current) => {
+                            const next = new Set(current);
+                            if (event.target.checked) next.add(comment.id);
+                            else next.delete(comment.id);
+                            return next;
+                          })}
+                        />
+                        <strong>@{reviewer?.role || comment.author}</strong>
+                      </label>
                       <span>{comment.kind} · {comment.status} · r{comment.revision}{comment.stale ? " · stale" : ""} · {formatDate(comment.createdAt, locale)}</span>
                     </header>
                     <p>{comment.body}</p>
                     {replies.map((reply) => <div className="draft-reply" key={reply.id}><strong>{reply.author}</strong><span>{reply.body}</span></div>)}
-                    {!comment.stale && (
+                    {!comment.stale && comment.status !== "applied" && (
                       <button className="text-button" type="button" onClick={() => void toggleCommentStatus(comment)}>
                         {comment.status === "resolved" ? "Reopen" : "Resolve"}
                       </button>
@@ -341,10 +485,31 @@ export function TaskPromptModal(props: {
                   </article>
                 );
               })}
+              {snapshot && snapshot.revisions.length > 1 && (
+                <details className="draft-revision-history">
+                  <summary><RotateCcw size={14} /> 이전 revision 복원</summary>
+                  <div>
+                    {[...snapshot.revisions].reverse().filter((revision) => revision.revision !== snapshot.session.currentRevision).map((revision) => (
+                      <button className="text-button" disabled={isApplying} key={revision.id} type="button" onClick={() => void restoreRevision(revision.revision)}>
+                        revision {revision.revision} 복원
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           </aside>
         </div>
       </section>
+    </div>
+  );
+}
+
+function PlanningList(props: { title: string; values: string[] }) {
+  return (
+    <div className="draft-planning-list">
+      <strong>{props.title}</strong>
+      {props.values.length ? <ul>{props.values.map((value) => <li key={value}>{value}</li>)}</ul> : <span>별도 항목 없음</span>}
     </div>
   );
 }

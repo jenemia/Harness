@@ -289,9 +289,21 @@ export type DraftComment = {
 };
 export type DraftApplyHistory = {
   id: string; draftId: string; sourceRevision: number; targetRevision: number | null;
-  selectedCommentIds: string[]; result: Record<string, unknown> | null;
+  selectedCommentIds: string[]; result: DraftPlanningResult | null;
   status: "pending" | "applied" | "rejected" | "undone"; idempotencyKey: string;
   createdAt: string; appliedAt: string | null;
+};
+export type DraftPlanningResult = {
+  originalContent: string;
+  proposedContent: string;
+  completionCriteria: string[];
+  dependencies: string[];
+  risks: string[];
+  unresolvedQuestions: Array<{ commentId: string; body: string }>;
+  changeSummary: string[];
+  unifiedDiff: string;
+  appliedCommentIds: string[];
+  originalCommentStatuses: Record<string, DraftComment["status"]>;
 };
 export type DraftEvent = {
   id: string; draftId: string; sequence: number; type: string;

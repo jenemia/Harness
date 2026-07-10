@@ -56,12 +56,15 @@ import {
   claimDraftReviewRequest,
   createDraftReply,
   createDraftSession,
+  decideDraftApply,
   getDraftSnapshot,
   recordDraftApplyAttempt,
   recoverDraftReviewRequests,
   replayDraftEvents,
+  restoreDraftRevision,
   subscribeDraftEvents,
   submitDraftReview,
+  undoDraftApply,
   updateDraftCommentStatus,
   updateDraftRevision
 } from "./drafts.js";
@@ -240,6 +243,18 @@ export async function invokeApplicationCommand<C extends HarnessCommand>(
     case "drafts:apply-request": {
       const value = input(payload) as HarnessCommandInputs["drafts:apply-request"];
       return { apply: recordDraftApplyAttempt(requiredProject(value.projectId), value.draftId, value.payload as Parameters<typeof recordDraftApplyAttempt>[2]) };
+    }
+    case "drafts:apply-decision": {
+      const value = input(payload) as HarnessCommandInputs["drafts:apply-decision"];
+      return { apply: decideDraftApply(requiredProject(value.projectId), value.draftId, value.applyId, value.decision) };
+    }
+    case "drafts:apply-undo": {
+      const value = input(payload) as HarnessCommandInputs["drafts:apply-undo"];
+      return { apply: undoDraftApply(requiredProject(value.projectId), value.draftId, value.applyId) };
+    }
+    case "drafts:restore-revision": {
+      const value = input(payload) as HarnessCommandInputs["drafts:restore-revision"];
+      return { draft: restoreDraftRevision(requiredProject(value.projectId), value.draftId, value) };
     }
     case "drafts:events": {
       const value = input(payload) as HarnessCommandInputs["drafts:events"];

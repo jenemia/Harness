@@ -134,6 +134,19 @@
   margin-top: 3px;
 }
 
+.draft-review-heading-actions,
+.draft-comment-select,
+.draft-apply-panel header,
+.draft-apply-panel summary,
+.draft-revision-history summary {
+  align-items: center;
+  display: flex;
+}
+
+.draft-review-heading-actions {
+  gap: 6px;
+}
+
 .draft-reviewers {
   display: grid;
   gap: 7px;
@@ -200,11 +213,143 @@
   justify-content: space-between;
 }
 
+.draft-comment-select {
+  gap: 6px;
+}
+
+.draft-comment-select input {
+  accent-color: #0c66e4;
+  flex: 0 0 auto;
+  height: 14px;
+  margin: 0;
+  min-height: 0;
+  padding: 0;
+  width: 14px;
+}
+
 .draft-comment header strong,
 .draft-comment header span,
 .draft-reply,
 .draft-comment .text-button {
   font-size: 11px;
+}
+
+.draft-apply-panel {
+  background: #ffffff;
+  border: 1px solid #85b8ff;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.draft-apply-panel.applied {
+  border-color: #7ee2b8;
+}
+
+.draft-apply-panel > header {
+  justify-content: space-between;
+}
+
+.draft-apply-panel h4 {
+  font-size: 14px;
+  margin-top: 2px;
+}
+
+.draft-apply-panel > header > span,
+.draft-apply-panel li,
+.draft-apply-panel p,
+.draft-planning-list span {
+  color: #44546f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.draft-apply-panel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.draft-apply-panel details {
+  border-top: 1px solid #dfe1e6;
+  padding-top: 8px;
+}
+
+.draft-apply-panel summary,
+.draft-revision-history summary {
+  color: #172b4d;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+}
+
+.draft-apply-diff {
+  background: #0c1f3a;
+  border-radius: 6px;
+  color: #f7f8f9;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 8px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre;
+}
+
+.draft-unresolved-questions {
+  background: #fff7d6;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.draft-unresolved-questions strong,
+.draft-planning-list strong {
+  font-size: 12px;
+}
+
+.draft-unresolved-questions p {
+  margin: 4px 0 0;
+}
+
+.draft-planning-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.draft-apply-actions {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.draft-revision-history {
+  background: #ffffff;
+  border: 1px solid #dfe1e6;
+  border-radius: 7px;
+  padding: 10px;
+}
+
+.draft-revision-history > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.draft-revision-history .text-button {
+  background: transparent;
+  border: 0;
+  color: #0c66e4;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.draft-revision-history .text-button:disabled {
+  color: #97a0af;
+  cursor: default;
 }
 
 .draft-comment header span,
@@ -309,6 +454,16 @@
 
   .draft-review-pane.mobile-active {
     display: flex;
+  }
+
+  .draft-review-heading {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .draft-review-heading-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .draft-editor-pane {

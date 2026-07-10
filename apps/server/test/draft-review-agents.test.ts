@@ -58,7 +58,7 @@ test("local draft reviewer agents stream progress, stop, retry, and answer user 
       value.requests.find((request) => request.id === running.id)?.status === "completed"
     );
     const reviewerComment = snapshot.comments.find(
-      (comment) => comment.reviewerId === running.reviewerId && !comment.stale
+      (comment) => comment.reviewerId === running.reviewerId
     );
     assert.ok(reviewerComment);
 
@@ -73,15 +73,16 @@ test("local draft reviewer agents stream progress, stop, retry, and answer user 
       value.requests.length === beforeReplyRequests + 1 &&
       value.requests[value.requests.length - 1]?.status === "completed"
     );
-    assert.ok(snapshot.comments.some((comment) =>
+    const followUpComment = snapshot.comments.find((comment) =>
       comment.reviewerId === running.reviewerId && comment.body.includes("재시도는 최대 2회")
-    ));
+    );
+    assert.ok(followUpComment);
     const repeatedBodies = snapshot.comments
       .filter((comment) => comment.reviewerId === running.reviewerId)
       .map((comment) => comment.body);
     assert.equal(new Set(repeatedBodies).size, repeatedBodies.length);
-    assert.equal(updateDraftCommentStatus(project, draftId, reviewerComment.id, "resolved").status, "resolved");
-    assert.equal(updateDraftCommentStatus(project, draftId, reviewerComment.id, "open").status, "open");
+    assert.equal(updateDraftCommentStatus(project, draftId, followUpComment.id, "resolved").status, "resolved");
+    assert.equal(updateDraftCommentStatus(project, draftId, followUpComment.id, "open").status, "open");
 
     const stableRequestCount = snapshot.requests.length;
     await new Promise((resolve) => setTimeout(resolve, 350));

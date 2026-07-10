@@ -18,6 +18,7 @@ import type {
   DraftApplyHistoryRecord,
   DraftCommentRecord,
   DraftEventRecord,
+  DraftPlanningResult,
   DraftReviewRequestRecord,
   DraftReviewerRecord,
   DraftRevisionRecord,
@@ -383,7 +384,9 @@ export function updateDraftCommentStatus(
       const row = db.prepare("SELECT * FROM draft_comments WHERE id = ? AND draft_id = ?").get(commentId, draftId);
       if (!row) throw new Error("Draft comment not found.");
       const comment = mapDraftComment(row);
-      if (comment.stale) throw new Error("Stale draft comments cannot change review status.");
+      if (comment.stale || comment.status === "applied") {
+        throw new Error("Stale or applied draft comments cannot change review status.");
+      }
       const timestamp = now();
       db.prepare("UPDATE draft_comments SET status = ?, updated_at = ? WHERE id = ?").run(status, timestamp, comment.id);
       appendDraftEvent(db, draftId, "draft.comment.status", { commentId, status, revision: comment.revision });
@@ -402,28 +405,44 @@ export function recordDraftApplyAttempt(
   return withProjectWriterLock(project.path, () => {
     const db = openProjectDb(project.path);
     try {
+      return withImmediateTransaction(db, () => {
       const session = requiredDraftSession(db, draftId);
-      if (session.currentRevision !== input.expectedRevision) throw new DraftRevisionConflictError(session.currentRevision);
       const key = input.idempotencyKey.trim();
       if (!key) throw new Error("Draft apply idempotency key is required.");
+      const existing = db.prepare(
+        "SELECT * FROM draft_apply_history WHERE draft_id = ? AND idempotency_key = ?"
+      ).get(draftId, key);
+      if (existing) return mapDraftApplyHistory(existing);
+      if (session.currentRevision !== input.expectedRevision) throw new DraftRevisionConflictError(session.currentRevision);
       const selected = Array.from(new Set(input.selectedCommentIds));
+      if (!selected.length) throw new Error("Select at least one draft comment to apply.");
       for (const commentId of selected) {
         const commentRow = db.prepare("SELECT * FROM draft_comments WHERE id = ? AND draft_id = ?").get(commentId, draftId);
         if (!commentRow) {
           throw new Error(`Draft comment not found: ${commentId}`);
         }
         const comment = mapDraftComment(commentRow);
-        if (comment.stale || comment.revision !== session.currentRevision) {
+        if (!["suggestion", "question", "risk"].includes(comment.kind)) {
+          throw new Error(`Only reviewer suggestions, questions, and risks can be applied: ${commentId}`);
+        }
+        if (comment.stale || comment.status === "stale" || comment.status === "applied" || comment.revision !== session.currentRevision) {
           throw new Error(`Stale draft comment cannot be applied: ${commentId}`);
         }
       }
+      const currentRevision = mapDraftRevision(db.prepare(
+        "SELECT * FROM draft_revisions WHERE draft_id = ? AND revision = ?"
+      ).get(draftId, session.currentRevision));
+      const planningResult = createDraftPlanningResult(db, currentRevision.content, selected);
       const timestamp = now();
       const result = db.prepare(`
         INSERT OR IGNORE INTO draft_apply_history (
           id, draft_id, source_revision, target_revision, selected_comment_ids, result,
           status, idempotency_key, created_at, applied_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(randomUUID(), draftId, session.currentRevision, null, JSON.stringify(selected), null, "pending", key, timestamp, null);
+      `).run(
+        randomUUID(), draftId, session.currentRevision, null, JSON.stringify(selected),
+        JSON.stringify(planningResult), "pending", key, timestamp, null
+      );
       const history = mapDraftApplyHistory(
         db.prepare("SELECT * FROM draft_apply_history WHERE draft_id = ? AND idempotency_key = ?").get(draftId, key)
       );
@@ -431,10 +450,161 @@ export function recordDraftApplyAttempt(
         applyId: history.id, revision: session.currentRevision, selectedCommentIds: selected
       });
       return history;
+      });
     } finally {
       db.close();
     }
   });
+}
+
+export function decideDraftApply(
+  project: ProjectRecord,
+  draftId: string,
+  applyId: string,
+  decision: "approved" | "rejected",
+  scheduling: SchedulingOptions = {}
+) {
+  if (decision !== "approved" && decision !== "rejected") throw new Error("Draft apply decision is invalid.");
+  const outcome = withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      return withImmediateTransaction(db, () => {
+      const history = requiredDraftApply(db, draftId, applyId);
+      if (decision === "rejected") {
+        if (history.status === "pending") {
+          db.prepare("UPDATE draft_apply_history SET status = 'rejected' WHERE id = ?").run(history.id);
+          appendDraftEvent(db, draftId, "draft.apply.rejected", { applyId: history.id, revision: history.sourceRevision });
+        }
+        return { history: requiredDraftApply(db, draftId, applyId), snapshot: readDraftSnapshot(db, draftId), changed: false };
+      }
+      if (history.status === "applied") {
+        return { history, snapshot: readDraftSnapshot(db, draftId), changed: false };
+      }
+      if (history.status !== "pending" || !history.result) {
+        throw new Error(`Only a pending draft apply proposal can be approved; current status is ${history.status}.`);
+      }
+      if (history.result.proposedContent === history.result.originalContent) {
+        throw new Error("This proposal contains unresolved questions but no draft changes to approve.");
+      }
+      const session = requiredDraftSession(db, draftId);
+      if (session.currentRevision !== history.sourceRevision) throw new DraftRevisionConflictError(session.currentRevision);
+      assertNoCredentialMaterial(history.result.proposedContent, "Draft planning result");
+      const timestamp = now();
+      const targetRevision = session.currentRevision + 1;
+      cancelSupersededReviewRequests(db, draftId, targetRevision, timestamp);
+      db.prepare("INSERT INTO draft_revisions VALUES (?, ?, ?, ?, ?)").run(
+        randomUUID(), draftId, targetRevision, history.result.proposedContent, timestamp
+      );
+      db.prepare("UPDATE draft_sessions SET current_revision = ?, updated_at = ? WHERE id = ?").run(
+        targetRevision, timestamp, draftId
+      );
+      for (const commentId of history.result.appliedCommentIds) {
+        db.prepare("UPDATE draft_comments SET status = 'applied', stale = 0, updated_at = ? WHERE id = ? AND draft_id = ?").run(
+          timestamp, commentId, draftId
+        );
+      }
+      preserveUnresolvedQuestions(db, history, targetRevision, timestamp);
+      db.prepare("UPDATE draft_apply_history SET status = 'applied', target_revision = ?, applied_at = ? WHERE id = ?").run(
+        targetRevision, timestamp, history.id
+      );
+      appendDraftEvent(db, draftId, "draft.apply.approved", {
+        applyId: history.id, sourceRevision: history.sourceRevision, targetRevision,
+        appliedCommentIds: history.result.appliedCommentIds,
+        unresolvedQuestionIds: history.result.unresolvedQuestions.map((question) => question.commentId)
+      });
+      enqueueDraftReviews(db, project, draftId, targetRevision, scheduling);
+      return {
+        history: requiredDraftApply(db, draftId, applyId),
+        snapshot: readDraftSnapshot(db, draftId),
+        changed: true
+      };
+      });
+    } finally {
+      db.close();
+    }
+  });
+  if (outcome.changed) resetDraftReviewRuntime(project, draftId, outcome.snapshot.requests, scheduling);
+  return outcome;
+}
+
+export function undoDraftApply(
+  project: ProjectRecord,
+  draftId: string,
+  applyId: string,
+  scheduling: SchedulingOptions = {}
+) {
+  const outcome = withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      return withImmediateTransaction(db, () => {
+      const history = requiredDraftApply(db, draftId, applyId);
+      if (history.status === "undone") return { history, snapshot: readDraftSnapshot(db, draftId), changed: false };
+      if (history.status !== "applied" || !history.result || history.targetRevision === null) {
+        throw new Error(`Only an applied draft proposal can be undone; current status is ${history.status}.`);
+      }
+      const session = requiredDraftSession(db, draftId);
+      if (session.currentRevision !== history.targetRevision) throw new DraftRevisionConflictError(session.currentRevision);
+      const timestamp = now();
+      const restoredRevision = session.currentRevision + 1;
+      cancelSupersededReviewRequests(db, draftId, restoredRevision, timestamp);
+      db.prepare("INSERT INTO draft_revisions VALUES (?, ?, ?, ?, ?)").run(
+        randomUUID(), draftId, restoredRevision, history.result.originalContent, timestamp
+      );
+      db.prepare("UPDATE draft_sessions SET current_revision = ?, updated_at = ? WHERE id = ?").run(
+        restoredRevision, timestamp, draftId
+      );
+      for (const commentId of history.result.appliedCommentIds) {
+        db.prepare("UPDATE draft_comments SET status = 'stale', stale = 1, updated_at = ? WHERE id = ? AND draft_id = ?").run(
+          timestamp, commentId, draftId
+        );
+      }
+      preserveUnresolvedQuestions(db, history, restoredRevision, timestamp);
+      db.prepare("UPDATE draft_apply_history SET status = 'undone' WHERE id = ?").run(history.id);
+      appendDraftEvent(db, draftId, "draft.apply.undone", {
+        applyId: history.id, appliedRevision: history.targetRevision, restoredRevision
+      });
+      enqueueDraftReviews(db, project, draftId, restoredRevision, scheduling);
+      return {
+        history: requiredDraftApply(db, draftId, applyId),
+        snapshot: readDraftSnapshot(db, draftId),
+        changed: true
+      };
+      });
+    } finally {
+      db.close();
+    }
+  });
+  if (outcome.changed) resetDraftReviewRuntime(project, draftId, outcome.snapshot.requests, scheduling);
+  return outcome;
+}
+
+export function restoreDraftRevision(
+  project: ProjectRecord,
+  draftId: string,
+  input: { expectedRevision: number; revision: number },
+  scheduling: SchedulingOptions = {}
+) {
+  const source = getDraftSnapshot(project, draftId).revisions.find((revision) => revision.revision === input.revision);
+  if (!source) throw new Error(`Draft revision not found: ${input.revision}`);
+  const restored = updateDraftRevision(project, draftId, {
+    expectedRevision: input.expectedRevision,
+    content: source.content
+  }, scheduling);
+  if (!restored.deduplicated) {
+    withProjectWriterLock(project.path, () => {
+      const db = openProjectDb(project.path);
+      try {
+        appendDraftEvent(db, draftId, "draft.revision.restored", {
+          sourceRevision: input.revision,
+          restoredRevision: restored.snapshot.session.currentRevision
+        });
+      } finally {
+        db.close();
+      }
+    });
+    restored.snapshot = getDraftSnapshot(project, draftId);
+  }
+  return restored;
 }
 
 export function getDraftSnapshot(project: ProjectRecord, draftId: string) {
@@ -656,7 +826,162 @@ function cancelSupersededReviewRequests(db: DatabaseSync, draftId: string, revis
     UPDATE draft_review_requests SET status = 'cancelled', completed_at = ?
     WHERE draft_id = ? AND revision < ? AND status IN ('debounced', 'pending', 'running')
   `).run(timestamp, draftId, revision);
+  db.prepare(`
+    UPDATE draft_comments
+    SET stale = 1, status = CASE WHEN status = 'applied' THEN status ELSE 'stale' END, updated_at = ?
+    WHERE draft_id = ? AND revision < ? AND status != 'applied'
+  `).run(timestamp, draftId, revision);
   db.prepare("UPDATE draft_reviewers SET status = 'idle', updated_at = ? WHERE draft_id = ?").run(timestamp, draftId);
+}
+
+function requiredDraftApply(db: DatabaseSync, draftId: string, applyId: string) {
+  const row = db.prepare("SELECT * FROM draft_apply_history WHERE id = ? AND draft_id = ?").get(applyId, draftId);
+  if (!row) throw new Error("Draft apply proposal not found.");
+  return mapDraftApplyHistory(row);
+}
+
+function withImmediateTransaction<T>(db: DatabaseSync, operation: () => T) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = operation();
+    db.exec("COMMIT");
+    return result;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+function createDraftPlanningResult(db: DatabaseSync, originalContent: string, selectedCommentIds: string[]): DraftPlanningResult {
+  const selected = selectedCommentIds.map((commentId) => mapDraftComment(
+    db.prepare("SELECT * FROM draft_comments WHERE id = ?").get(commentId)
+  ));
+  const agreedItems: string[] = [];
+  const risks: string[] = [];
+  const unresolvedQuestions: DraftPlanningResult["unresolvedQuestions"] = [];
+  const appliedCommentIds: string[] = [];
+  const originalCommentStatuses: DraftPlanningResult["originalCommentStatuses"] = {};
+
+  for (const comment of selected) {
+    originalCommentStatuses[comment.id] = comment.status;
+    if (comment.kind === "question") {
+      const replies = db.prepare(
+        "SELECT * FROM draft_comments WHERE parent_comment_id = ? ORDER BY created_at ASC"
+      ).all(comment.id).map(mapDraftComment);
+      if (!replies.length) {
+        unresolvedQuestions.push({ commentId: comment.id, body: comment.body });
+        continue;
+      }
+      agreedItems.push(`${comment.body} — ${replies.map((reply) => reply.body).join(" / ")}`);
+      appliedCommentIds.push(comment.id);
+      continue;
+    }
+    if (comment.kind === "risk") risks.push(comment.body);
+    else agreedItems.push(comment.body);
+    appliedCommentIds.push(comment.id);
+  }
+
+  const sections: string[] = [];
+  if (agreedItems.length) sections.push(`## 반영된 검토 의견\n${agreedItems.map(markdownBullet).join("\n")}`);
+  if (risks.length) sections.push(`## 위험 요소\n${risks.map(markdownBullet).join("\n")}`);
+  const base = originalContent.trimEnd();
+  const proposedContent = [base, ...sections].filter(Boolean).join("\n\n");
+  const completionCriteria = extractPlanningLines(proposedContent, /(완료|검증|acceptance|done|complete|test|테스트)/i);
+  const dependencies = extractPlanningLines(proposedContent, /(의존|dependency|depends|선행|담당|owner)/i);
+  const changeSummary = [
+    ...(agreedItems.length ? [`합의된 검토 의견 ${agreedItems.length}개를 반영했습니다.`] : []),
+    ...(risks.length ? [`위험 요소 ${risks.length}개를 명시했습니다.`] : []),
+    ...(unresolvedQuestions.length ? [`답변되지 않은 질문 ${unresolvedQuestions.length}개를 미결 상태로 유지했습니다.`] : [])
+  ];
+  return {
+    originalContent,
+    proposedContent,
+    completionCriteria,
+    dependencies,
+    risks,
+    unresolvedQuestions,
+    changeSummary,
+    unifiedDiff: buildUnifiedDiff(originalContent, proposedContent),
+    appliedCommentIds,
+    originalCommentStatuses
+  };
+}
+
+function preserveUnresolvedQuestions(
+  db: DatabaseSync,
+  history: DraftApplyHistoryRecord,
+  targetRevision: number,
+  timestamp: string
+) {
+  for (const unresolved of history.result?.unresolvedQuestions || []) {
+    const sourceRow = db.prepare("SELECT * FROM draft_comments WHERE id = ? AND draft_id = ?").get(unresolved.commentId, history.draftId);
+    if (!sourceRow) continue;
+    const source = mapDraftComment(sourceRow);
+    const dedupeKey = `apply:${history.id}:unresolved:${source.id}:revision:${targetRevision}`;
+    db.prepare(`
+      INSERT OR IGNORE INTO draft_comments (
+        id, draft_id, revision, reviewer_id, parent_comment_id, author, kind, status,
+        body, dedupe_key, stale, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      randomUUID(), history.draftId, targetRevision, source.reviewerId, null, source.author,
+      "question", "open", source.body, dedupeKey, 0, timestamp, timestamp
+    );
+  }
+}
+
+function resetDraftReviewRuntime(
+  project: ProjectRecord,
+  draftId: string,
+  requests: DraftReviewRequestRecord[],
+  scheduling: SchedulingOptions
+) {
+  reviewRuntime?.cancel(project, draftId);
+  cancelDraftReviewTimers(project.path, draftId);
+  armDraftReviewTimers(project, requests, scheduling);
+}
+
+function markdownBullet(value: string) {
+  return `- ${value.replace(/\s+/g, " ").trim()}`;
+}
+
+function extractPlanningLines(content: string, pattern: RegExp) {
+  return Array.from(new Set(content
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim())
+    .filter((line) => line && !line.startsWith("#") && pattern.test(line))));
+}
+
+function buildUnifiedDiff(original: string, proposed: string) {
+  if (original === proposed) return "";
+  const before = original.split("\n");
+  const after = proposed.split("\n");
+  let prefix = 0;
+  while (prefix < before.length && prefix < after.length && before[prefix] === after[prefix]) prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < before.length - prefix && suffix < after.length - prefix &&
+    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
+  ) suffix += 1;
+  const contextStart = Math.max(0, prefix - 2);
+  const beforeEnd = Math.min(before.length, before.length - suffix + 2);
+  const afterEnd = Math.min(after.length, after.length - suffix + 2);
+  const removedStart = prefix;
+  const removedEnd = before.length - suffix;
+  const addedStart = prefix;
+  const addedEnd = after.length - suffix;
+  const lines = [
+    "--- draft/original",
+    "+++ draft/proposed",
+    `@@ -${contextStart + 1},${beforeEnd - contextStart} +${contextStart + 1},${afterEnd - contextStart} @@`
+  ];
+  for (let index = contextStart; index < prefix; index += 1) lines.push(` ${before[index]}`);
+  for (let index = removedStart; index < removedEnd; index += 1) lines.push(`-${before[index]}`);
+  for (let index = addedStart; index < addedEnd; index += 1) lines.push(`+${after[index]}`);
+  for (let offset = 0; offset < Math.min(2, suffix); offset += 1) {
+    lines.push(` ${before[before.length - suffix + offset]}`);
+  }
+  return lines.join("\n");
 }
 
 function requiredDraftSession(db: DatabaseSync, draftId: string) {

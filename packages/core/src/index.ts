@@ -53,6 +53,14 @@ export type HarnessCommandInputs = {
     draftId: string;
     payload: { expectedRevision: number; selectedCommentIds: string[]; idempotencyKey: string };
   };
+  "drafts:apply-decision": {
+    projectId: string;
+    draftId: string;
+    applyId: string;
+    decision: "approved" | "rejected";
+  };
+  "drafts:apply-undo": { projectId: string; draftId: string; applyId: string };
+  "drafts:restore-revision": { projectId: string; draftId: string; expectedRevision: number; revision: number };
   "drafts:events": { projectId: string; draftId: string; afterSequence?: number };
   "drafts:recover": { projectId: string };
   "tasks:create-from-prompt": { projectId: string; prompt: string };
@@ -168,6 +176,11 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "drafts:comment-status") return isText(payload.draftId) && isText(payload.commentId) &&
     (payload.status === "open" || payload.status === "resolved");
   if (command === "drafts:apply-request") return isText(payload.draftId) && isDraftApplyPayload(payload.payload);
+  if (command === "drafts:apply-decision") return isText(payload.draftId) && isText(payload.applyId) &&
+    (payload.decision === "approved" || payload.decision === "rejected");
+  if (command === "drafts:apply-undo") return isText(payload.draftId) && isText(payload.applyId);
+  if (command === "drafts:restore-revision") return isText(payload.draftId) &&
+    isNonNegativeInteger(payload.expectedRevision) && isNonNegativeInteger(payload.revision);
   if (command === "drafts:events") return isText(payload.draftId) && (payload.afterSequence === undefined || isNonNegativeInteger(payload.afterSequence));
   if (command === "drafts:recover") return true;
   if (command === "tasks:create-from-prompt") return isText(payload.prompt);
@@ -186,7 +199,8 @@ const commandNames = new Set<HarnessCommand>([
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
   "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
-  "drafts:apply-request", "drafts:events", "drafts:recover",
+  "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",
+  "drafts:events", "drafts:recover",
   "tasks:create-from-prompt", "tasks:create", "tasks:update", "tasks:start", "tasks:pause", "tasks:resume", "tasks:move",
   "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:resolve-merge", "tasks:request-changes"
 ]);

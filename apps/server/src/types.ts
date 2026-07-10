@@ -337,11 +337,24 @@ export type DraftApplyHistoryRecord = {
   sourceRevision: number;
   targetRevision: number | null;
   selectedCommentIds: string[];
-  result: Record<string, unknown> | null;
+  result: DraftPlanningResult | null;
   status: "pending" | "applied" | "rejected" | "undone";
   idempotencyKey: string;
   createdAt: string;
   appliedAt: string | null;
+};
+
+export type DraftPlanningResult = {
+  originalContent: string;
+  proposedContent: string;
+  completionCriteria: string[];
+  dependencies: string[];
+  risks: string[];
+  unresolvedQuestions: Array<{ commentId: string; body: string }>;
+  changeSummary: string[];
+  unifiedDiff: string;
+  appliedCommentIds: string[];
+  originalCommentStatuses: Record<string, DraftCommentRecord["status"]>;
 };
 
 export type DraftEventRecord = {
