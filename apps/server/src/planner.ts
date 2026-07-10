@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, nextTaskOrder, now, openProjectDb } from "./db.js";
+import { resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
 
 export type PlanningMode = "sequential" | "parallel";
@@ -45,6 +46,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
         role: item.role,
         acceptanceCriteria: item.acceptanceCriteria,
         assigneeAgentId: agent?.id || null,
+        assigneeAgent: agent || null,
         dependencyTaskIds: dependencies,
         status: dependencies.length ? "Blocked" : "Selected"
       });
@@ -87,6 +89,7 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
     role: string;
     acceptanceCriteria: string;
     assigneeAgentId: string | null;
+    assigneeAgent: AgentRecord | null;
     dependencyTaskIds: string[];
     status: TaskStatus;
   }) {
@@ -105,7 +108,13 @@ export function createPlan(project: ProjectRecord, input: PlanRequest) {
       waivedDependencyTaskIds: [],
       labels: ["pm-plan", `role:${inputTask.role}`],
       acceptanceCriteria: inputTask.acceptanceCriteria,
-      workspaceMode: "worktree",
+      workspaceMode: resolveTaskWorkspaceMode({
+        title: inputTask.title,
+        description: inputTask.description,
+        acceptanceCriteria: inputTask.acceptanceCriteria,
+        labels: ["pm-plan", `role:${inputTask.role}`],
+        agent: inputTask.assigneeAgent
+      }),
       taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,

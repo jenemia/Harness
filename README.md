@@ -23,6 +23,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Dependency waiver support for explicitly unblocking tasks when a prerequisite no longer applies.
 - Git worktree per executable task.
 - Harness workspace mode for non-code tasks that do not need Git worktrees.
+- Automatic workspace mode selection for common code, docs, planning, and research task signals.
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
 - PM completion evaluation events before automatic handoffs or Done transitions.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
@@ -91,6 +92,7 @@ pnpm cli tasks:list --project <projectId> --status Selected,Blocked
 pnpm cli tasks:show --project <projectId> --task <taskId>
 pnpm cli tasks:create --project <projectId> --title "Wire up settings" --status Selected
 pnpm cli tasks:create --project <projectId> --title "Draft release notes" --status Selected --workspaceMode harness
+pnpm cli tasks:create --project <projectId> --title "Research onboarding notes" --status Selected --workspaceMode auto
 pnpm cli tasks:update --project <projectId> --task <taskId> --status Done
 pnpm cli tasks:update --project <projectId> --task <taskId> --waivedDependencies <dependencyTaskId>
 pnpm cli tasks:decompose --project <projectId> --task <taskId> --mode sequential --itemsFile ./subtasks.txt
@@ -164,7 +166,7 @@ When the server starts, Harness scans registered projects for runs that were lef
 
 ## Task Tracking
 
-Open a task from the board to inspect its status, assignee, labels, parent/subtask links, workspace mode, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline.
+Open a task from the board to inspect its status, assignee, labels, parent/subtask links, workspace mode, worktree branch/path, dependencies, merge state, merge approval or requested changes, run snapshot, run output, errors, changed files, comments, handoff history, follow-up task creation, and task-scoped activity timeline. New tasks can use automatic workspace selection, while existing tasks keep an explicit `worktree` or `harness` mode.
 
 Each run records the effective model backend, provider id, command preview when a command-backed provider is used, starting snapshot, workspace path, and changed files.
 

@@ -965,7 +965,7 @@ function TaskComposer(props: {
 }) {
   const [title, setTitle] = useState("");
   const [modelBackend, setModelBackend] = useState("");
-  const [workspaceMode, setWorkspaceMode] = useState<Task["workspaceMode"]>("worktree");
+  const [workspaceMode, setWorkspaceMode] = useState<Task["workspaceMode"] | "auto">("auto");
   const [assigneeAgentId, setAssigneeAgentId] = useState("");
   const [dependencyTaskId, setDependencyTaskId] = useState("");
   const [parentTaskId, setParentTaskId] = useState("");
@@ -979,7 +979,7 @@ function TaskComposer(props: {
         body: JSON.stringify({
           title,
           modelBackend: modelBackend || null,
-          workspaceMode,
+          ...(workspaceMode === "auto" ? {} : { workspaceMode }),
           assigneeAgentId: assigneeAgentId || null,
           parentTaskId: parentTaskId || null,
           dependencyTaskIds: dependencyTaskId ? [dependencyTaskId] : [],
@@ -990,7 +990,7 @@ function TaskComposer(props: {
       });
       setTitle("");
       setModelBackend("");
-      setWorkspaceMode("worktree");
+      setWorkspaceMode("auto");
       setDependencyTaskId("");
       setParentTaskId("");
       setLabelsText("");
@@ -1009,7 +1009,8 @@ function TaskComposer(props: {
           </option>
         ))}
       </select>
-      <select value={workspaceMode} onChange={(event) => setWorkspaceMode(event.target.value as Task["workspaceMode"])}>
+      <select value={workspaceMode} onChange={(event) => setWorkspaceMode(event.target.value as Task["workspaceMode"] | "auto")}>
+        <option value="auto">Auto workspace</option>
         <option value="worktree">Git worktree</option>
         <option value="harness">Harness workspace</option>
       </select>

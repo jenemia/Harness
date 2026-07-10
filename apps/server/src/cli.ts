@@ -51,6 +51,7 @@ import {
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
+import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import type { AgentRecord, DocumentRecord, MemoryRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
@@ -612,7 +613,7 @@ function createTaskCommand(args: string[]) {
     waivedDependencyTaskIds: parseCsv(options.waivedDependencies),
     labels: parseCsv(options.labels),
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile") || "",
-    workspaceMode: normalizeWorkspaceMode(options.workspaceMode),
+    workspaceMode: parseWorkspaceModeOption(options.workspaceMode),
     blockedReason: null
   });
   return { task, overview: getProjectOverview(project) };
@@ -634,7 +635,7 @@ function updateTaskCommand(args: string[]) {
     waivedDependencyTaskIds: options.waivedDependencies !== undefined ? parseCsv(options.waivedDependencies) : undefined,
     labels: options.labels !== undefined ? parseCsv(options.labels) : undefined,
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile"),
-    workspaceMode: options.workspaceMode === undefined ? undefined : normalizeWorkspaceMode(options.workspaceMode),
+    workspaceMode: options.workspaceMode === undefined ? undefined : parseWorkspaceModeOption(options.workspaceMode),
     blockedReason: optionPatchValue(options, "blockedReason", "clearBlockedReason")
   });
   const unblocked = task.status === "Done" ? unblockReadyDependents(project, task.id) : [];
@@ -804,13 +805,10 @@ function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatu
   return `Waiting on dependencies: ${dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`;
 }
 
-function normalizeWorkspaceMode(value: unknown) {
-  return value === "harness" ? "harness" : "worktree";
-}
-
 function createCliTask(
   project: ProjectRecord,
-  input: Pick<
+  input: Omit<
+    Pick<
     TaskRecord,
     | "title"
     | "description"
@@ -824,16 +822,32 @@ function createCliTask(
     | "waivedDependencyTaskIds"
     | "labels"
     | "acceptanceCriteria"
-    | "workspaceMode"
     | "blockedReason"
-  >
+    >,
+    "workspaceMode"
+  > & {
+    workspaceMode?: TaskRecord["workspaceMode"];
+  }
 ) {
   const db = openProjectDb(project.path);
   try {
     const timestamp = now();
+    const agentRow = input.assigneeAgentId
+      ? db.prepare("SELECT * FROM agents WHERE id = ?").get(input.assigneeAgentId)
+      : null;
+    const agent = agentRow ? mapAgent(agentRow) : null;
+    const workspaceMode = resolveTaskWorkspaceMode({
+      explicit: input.workspaceMode,
+      title: input.title,
+      description: input.description,
+      acceptanceCriteria: input.acceptanceCriteria,
+      labels: input.labels,
+      agent
+    });
     const task: TaskRecord = {
       id: randomUUID(),
       ...input,
+      workspaceMode,
       branchName: null,
       worktreePath: null,
       blockedReason: input.blockedReason || defaultDependencyBlocker(input.dependencyTaskIds, input.status),
@@ -1063,7 +1077,7 @@ function updateCliTask(project: ProjectRecord, taskId: string, input: Partial<Ta
       Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(input.waivedDependencyTaskIds) : null,
       Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
       input.acceptanceCriteria?.trim() || null,
-      input.workspaceMode === undefined ? null : normalizeWorkspaceMode(input.workspaceMode),
+      input.workspaceMode === undefined ? null : parseWorkspaceModeOption(input.workspaceMode) || null,
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
       now(),
       taskId
@@ -1444,8 +1458,8 @@ Usage:
   pnpm --filter @harness/server cli runs:show --project <projectId> --run <runId>
   pnpm --filter @harness/server cli tasks:list --project <projectId> [--status Backlog,Selected] [--assignee <agentId>] [--labels a,b]
   pnpm --filter @harness/server cli tasks:show --project <projectId> --task <taskId>
-  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--workspaceMode worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
-  pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee] [--workspaceMode worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
+  pnpm --filter @harness/server cli tasks:create --project <projectId> --title <text> [--description <text>|--descriptionFile <file>] [--status Backlog|Selected|In Progress|In Review|Paused|Blocked|Done] [--workspaceMode auto|worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
+  pnpm --filter @harness/server cli tasks:update --project <projectId> --task <taskId> [--status Done] [--assignee <agentId>|--clearAssignee] [--workspaceMode auto|worktree|harness] [--dependencies task1,task2] [--waivedDependencies task1]
   pnpm --filter @harness/server cli tasks:decompose --project <projectId> --task <taskId> (--items <text|json> | --itemsFile <file>) [--mode parallel|sequential]
   pnpm --filter @harness/server cli tasks:comment --project <projectId> --task <taskId> (--body <text> | --bodyFile <file>) [--author <name>]
   pnpm --filter @harness/server cli tasks:move --project <projectId> --task <taskId> --direction up|down

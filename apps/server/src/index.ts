@@ -55,6 +55,7 @@ import {
   startTask,
   unblockReadyDependents
 } from "./runtime.js";
+import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import type {
   AgentRecord,
   AgentTemplateRecord,
@@ -603,7 +604,19 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
     const timestamp = now();
     const status = input.status || "Backlog";
     const dependencyTaskIds = Array.isArray(input.dependencyTaskIds) ? input.dependencyTaskIds : [];
-    const workspaceMode = input.workspaceMode === "harness" ? "harness" : "worktree";
+    const labels = Array.isArray(input.labels) ? input.labels : [];
+    const assigneeRow = input.assigneeAgentId
+      ? db.prepare("SELECT * FROM agents WHERE id = ?").get(input.assigneeAgentId)
+      : null;
+    const assignee = assigneeRow ? mapAgent(assigneeRow) : null;
+    const workspaceMode = resolveTaskWorkspaceMode({
+      explicit: input.workspaceMode,
+      title: input.title,
+      description: input.description,
+      acceptanceCriteria: input.acceptanceCriteria,
+      labels,
+      agent: assignee
+    });
     const task: TaskRecord = {
       id: randomUUID(),
       title: input.title.trim(),
@@ -616,7 +629,7 @@ function createTask(project: ProjectRecord, input: Partial<TaskRecord>) {
       parentTaskId: input.parentTaskId || null,
       dependencyTaskIds,
       waivedDependencyTaskIds: Array.isArray(input.waivedDependencyTaskIds) ? input.waivedDependencyTaskIds : [],
-      labels: Array.isArray(input.labels) ? input.labels : [],
+      labels,
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
       workspaceMode,
       taskOrder: nextTaskOrder(db),
@@ -793,10 +806,6 @@ function defaultDependencyBlocker(dependencyTaskIds: string[], status: TaskStatu
   return `Waiting on dependencies: ${dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`;
 }
 
-function normalizeWorkspaceMode(value: unknown) {
-  return value === "harness" ? "harness" : "worktree";
-}
-
 function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskRecord>) {
   const db = openProjectDb(project.path);
   try {
@@ -838,7 +847,7 @@ function updateTask(project: ProjectRecord, taskId: string, input: Partial<TaskR
       Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(input.waivedDependencyTaskIds) : null,
       Array.isArray(input.labels) ? JSON.stringify(input.labels) : null,
       input.acceptanceCriteria?.trim() || null,
-      input.workspaceMode === undefined ? null : normalizeWorkspaceMode(input.workspaceMode),
+      input.workspaceMode === undefined ? null : parseWorkspaceModeOption(input.workspaceMode) || null,
       input.blockedReason === undefined ? (existing as { blocked_reason: string | null }).blocked_reason : input.blockedReason,
       now(),
       taskId
