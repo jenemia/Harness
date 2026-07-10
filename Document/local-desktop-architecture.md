@@ -302,6 +302,8 @@ Harness는 다음만 수행한다.
 
 Harness가 OAuth token을 CLI에 복사하거나 전달할 필요가 없다. CLI subprocess가 자신의 credential store를 사용하도록 한다. provider token, session cookie와 API key를 prompt, environment preview, log와 task event에 포함하지 않는다.
 
+Cursor 실행 provider는 `cursor-agent -p --force --output-format stream-json`을 기본 명령으로 사용하고 project timeout을 process group에 적용한다. NDJSON의 user/prompt event는 저장하지 않으며 assistant, tool과 terminal event만 공통 provider event로 정규화한다. Agent CLI의 `--model`과 `--resume`은 provider command override로 추가할 수 있다. 이는 Cursor가 별도 stdio Harness MCP server를 실행하는 client 연결과 독립된 흐름이다.
+
 ### 예외: Harness 직접 OAuth 연동
 
 CLI로 제공할 수 없는 기능 때문에 Harness가 provider API에 직접 접근해야 하는 경우에만 OAuth를 추가한다.

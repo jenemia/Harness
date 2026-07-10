@@ -156,6 +156,22 @@ Handoff rules are a role-to-role map. The default routes `programmer` and `worke
 
 The provider catalog exposes the active OS platform provider, workspace isolation provider, planning provider, local approval provider, local policy provider, and available LLM providers through `/api/providers` and `providers:list`, including structured ticket parsing, planning, and approval capabilities. Project health reports also flag command-backed model backends that do not have an agent override or matching provider command key configured, plus Selected tasks that the scheduler cannot start because of dependency, project capacity, or agent capacity gaps.
 
+### Cursor CLI provider
+
+The `cursor-cli` backend runs Cursor Agent inside the selected task workspace and reuses the CLI-owned login session. The Cursor desktop application and the headless Agent CLI are separate installations; Harness checks the `cursor-agent` compatibility command on `PATH` with `cursor-agent --version` and `cursor-agent status`. Install/login using Cursor's CLI instructions, then restart Harness so the desktop process receives the updated `PATH`.
+
+Harness defaults to `cursor-agent -p --force --output-format stream-json` with the generated prompt file, applies the project run timeout, and converts Cursor NDJSON into the common run timeline. The catalog advertises live text, tool events and session-resume support; unavailable usage/diff/graceful-stop features remain marked unsupported. To select a Cursor model or resume a known session, override the `cursor-cli` provider command globally, per project, or on an agent, for example:
+
+```json
+{
+  "cursor-cli": "cursor-agent -p --force --output-format stream-json --model \"gpt-5\" < \"$HARNESS_PROMPT_FILE\""
+}
+```
+
+Project default, agent backend and task backend selection determine where `cursor-cli` is used; an agent `cliCommand` remains the highest-precedence override. The outer command still follows Harness command approval and workspace runtime rules.
+
+This provider direction is **Harness → Cursor**: Harness launches Cursor to execute a task. A Cursor MCP connection is the opposite direction, **Cursor → Harness**: Cursor launches the Harness MCP server to inspect or mutate the board. MCP setup is configured separately and does not change the task provider.
+
 ## Project Templates
 
 Use the project create form, `/api/project-templates`, or `templates:project-create` to start a folder with a reusable team shape. Harness seeds software engineering, research, and content production project templates; each one creates the starter agents for that workflow.

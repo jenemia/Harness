@@ -348,8 +348,8 @@ export function SettingsPanel(props: {
                 {provider.authenticationStatus?.version ? ` (${provider.authenticationStatus.version})` : ""}
               </span>
             ))}
-          <span>Cursor CLI: {props.providerCatalog.cliAuthentication.cursor.message}</span>
           <span>Harness reuses each CLI login session and does not store provider tokens.</span>
+          <span>Cursor CLI provider runs Cursor inside a task workspace. Cursor MCP connection instead lets Cursor call Harness board tools and is configured separately.</span>
         </div>
       )}
       <form className="stack-form" onSubmit={submitGlobal}>

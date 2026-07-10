@@ -114,11 +114,15 @@ Status: 완료
 
 Depends on: A06, A07
 
+Status: 완료
+
 - `cursor-cli` catalog, `cursor-agent` 탐지·인자·모델·timeout·capability를 추가한다.
 - stdout/stderr parser를 공통 event로 정규화하고 session resume 가능 여부를 반영한다.
 - Harness provider 실행과 Cursor MCP client 연결을 UI·문서에서 구분한다.
 
 완료 조건: Cursor 실행 결과가 다른 provider와 같은 run timeline에 표시된다.
+
+검증: 공식 stream-JSON fixture parser, prompt/file-content 비저장, fake `cursor-agent` executable version/status/login-session 진단, task-level provider override, live common event 순서, default command와 process-group timeout, capability catalog, UI 안내와 전체 typecheck/test/build.
 
 ### A09: Draft session과 collaboration data
 

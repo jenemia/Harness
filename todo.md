@@ -122,21 +122,21 @@ Harness의 업무 카드 작성과 실행 흐름을 단순 입력·실행 구조
 
 ### Cursor 연결 방식
 
-- [ ] provider catalog에 `cursor-cli` 실행 provider를 추가한다.
-- [ ] `cursor-agent` 실행 파일 탐지, 로그인 상태 확인, 기본 인자, 모델과 timeout 설정을 지원한다.
-- [ ] Cursor CLI의 stdout과 stderr를 공통 provider event로 변환하는 adapter와 parser를 구현한다.
-- [ ] Cursor CLI가 지원하는 streaming, session resume, tool event, usage reporting 기능을 capability로 명시한다.
-- [ ] 지원하지 않는 capability는 UI와 API에서 비활성화하고 대체 동작을 안내한다.
-- [ ] agent별·project별·task별 Cursor provider 선택과 기존 CLI command override를 지원한다.
+- [x] provider catalog에 `cursor-cli` 실행 provider를 추가한다.
+- [x] `cursor-agent` 실행 파일 탐지, 로그인 상태 확인, 기본 인자, 모델과 timeout 설정을 지원한다.
+- [x] Cursor CLI의 stdout과 stderr를 공통 provider event로 변환하는 adapter와 parser를 구현한다.
+- [x] Cursor CLI가 지원하는 streaming, session resume, tool event, usage reporting 기능을 capability로 명시한다.
+- [x] 지원하지 않는 capability는 UI와 API에서 비활성화하고 대체 동작을 안내한다.
+- [x] agent별·project별·task별 Cursor provider 선택과 기존 CLI command override를 지원한다.
 - [ ] Cursor가 Harness MCP 서버에 연결해 보드를 조회하고 작업을 수행하는 설정 예시를 제공한다.
-- [ ] `cursor-cli`는 Harness가 Cursor를 실행하는 provider이고, Cursor MCP 연결은 Cursor가 Harness를 도구로 사용하는 방식임을 UI와 문서에서 구분한다.
+- [x] `cursor-cli`는 Harness가 Cursor를 실행하는 provider이고, Cursor MCP 연결은 Cursor가 Harness를 도구로 사용하는 방식임을 UI와 문서에서 구분한다.
 
 ### 공통 provider event 계약
 
 - [x] 모든 streaming provider가 따르는 versioned event envelope을 정의한다.
 - [x] event 공통 필드로 version, sequence, project id, task id, run id, provider id, timestamp와 correlation id를 기록한다.
 - [x] event 종류로 `text_delta`, `tool_use`, `tool_result`, `diff_hunk`, `decision`, `usage`, `rate_limit`, `result`, `error`를 지원한다.
-- [ ] provider별 원본 stream 형식을 공통 event로 정규화하고 필요한 경우 원본 event type만 비민감 metadata로 보존한다.
+- [x] provider별 원본 stream 형식을 공통 event로 정규화하고 필요한 경우 원본 event type만 비민감 metadata로 보존한다.
 - [x] sequence 기반 중복 제거, 순서 보정, reconnect replay와 마지막 수신 위치 복구를 구현한다.
 - [x] event payload에서 API key, credential, 전체 prompt와 민감한 파일 내용을 기본적으로 제거한다.
 - [x] provider capability로 `streaming`, `sessionResume`, `toolEvents`, `diffEvents`, `usageEvents`, `structuredDecision`, `gracefulStop`을 선언한다.

@@ -397,6 +397,7 @@ export type ProviderCatalog = {
     description: string;
     requiresCommand: boolean;
     commandExample: string | null;
+    defaultCommand?: string | null;
     capabilities: {
       streaming: boolean;
       sessionResume: boolean;
@@ -408,7 +409,6 @@ export type ProviderCatalog = {
     };
     authenticationStatus: CliAuthenticationStatus | null;
   }>;
-  cliAuthentication: { cursor: CliAuthenticationStatus };
 };
 
 export type CliAuthenticationStatus = {

@@ -2,8 +2,9 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { spawnSync } from "node:child_process";
-import type { ProviderCapabilities } from "@harness/core";
+import type { ProviderCapabilities, ProviderEventType } from "@harness/core";
 import type { AgentRecord, ApprovalRecord, CommentRecord, MemoryRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
+import { parseCursorStreamLine } from "./cursor-provider.js";
 
 export type CommandResult = {
   ok: boolean;
@@ -32,6 +33,7 @@ export type LlmRunContext = {
   taskRuns?: RunRecord[];
   agentDefinitionSnapshot?: string;
   timeoutMs?: number;
+  onEvent?: (event: { type: ProviderEventType; payload: Record<string, unknown>; metadata?: { originalEventType?: string } }) => void;
 };
 
 export type PlatformProvider = {
@@ -44,6 +46,14 @@ export type PlatformProvider = {
   };
   run(command: string, args: string[], cwd: string, allowFailure?: boolean): Promise<CommandResult>;
   runShell(command: string, cwd: string, extraEnv: Record<string, string>, timeoutMs?: number): Promise<{ ok: boolean; output: string; error: string | null }>;
+  runShellLines(
+    command: string,
+    cwd: string,
+    extraEnv: Record<string, string>,
+    timeoutMs: number | undefined,
+    onStdoutLine: (line: string) => void,
+    onStderrLine?: (line: string) => void
+  ): Promise<{ ok: boolean; code: number | null; error: string | null }>;
 };
 
 export type WorkspaceProvider = {
@@ -89,6 +99,7 @@ export type LlmProviderDefinition = {
   description: string;
   requiresCommand: boolean;
   commandExample: string | null;
+  defaultCommand?: string | null;
   capabilities: ProviderCapabilities;
   authentication?: CliAuthenticationDefinition;
 };
@@ -128,7 +139,7 @@ export function diagnoseCliAuthentication(authentication: CliAuthenticationDefin
 
 export type ProviderCommandResolution = {
   command: string | null;
-  source: "agent" | "settings" | "none";
+  source: "agent" | "settings" | "provider" | "none";
   key: string | null;
   candidateKeys: string[];
   platformProviderId: string;
@@ -284,7 +295,8 @@ export function resolveProviderCommand(
   platformProvider: PlatformProvider,
   agent: Pick<AgentRecord, "cliCommand">,
   modelBackend: string,
-  settings: Pick<ProjectSettings, "providerCommands">
+  settings: Pick<ProjectSettings, "providerCommands">,
+  defaultCommand?: string | null
 ): ProviderCommandResolution {
   const commandKeys = providerCommandCandidateKeys(platformProvider, modelBackend);
   if (agent.cliCommand) {
@@ -298,10 +310,11 @@ export function resolveProviderCommand(
     };
   }
   const matchingKey = commandKeys.find((key) => settings.providerCommands[key]?.trim());
+  const providerCommand = defaultCommand?.trim() || null;
   return {
-    command: matchingKey ? settings.providerCommands[matchingKey] : null,
-    source: matchingKey ? "settings" : "none",
-    key: matchingKey || null,
+    command: matchingKey ? settings.providerCommands[matchingKey] : providerCommand,
+    source: matchingKey ? "settings" : providerCommand ? "provider" : "none",
+    key: matchingKey || (providerCommand ? "provider.defaultCommand" : null),
     candidateKeys: commandKeys,
     platformProviderId: platformProvider.id,
     nodePlatform: platformProvider.platform
@@ -325,6 +338,7 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
   return new ProviderRegistry(platformProvider, workspaceProvider, approvalProvider, policyProvider, [
     createMockLlmProvider(),
     createShellLlmProvider(platformProvider),
+    createCursorCliProvider(platformProvider),
     createCliLlmProvider(platformProvider, {
       id: "codex",
       label: "Codex CLI",
@@ -547,6 +561,60 @@ function createNodePlatformProvider(
           ? `Command timed out after ${Math.round((timeoutMs || 0) / 1000)} seconds.`
           : result.error || (result.code === 0 ? null : `Command exited with code ${result.code}`)
       };
+    },
+
+    async runShellLines(command, cwd, extraEnv, timeoutMs, onStdoutLine, onStderrLine) {
+      return new Promise((resolve) => {
+        const child = spawn(command, {
+          cwd,
+          shell: config.shell,
+          env: { ...process.env, ...extraEnv },
+          detached: config.processGroups
+        });
+        let stderr = "";
+        let stdoutBuffer = "";
+        let stderrBuffer = "";
+        let timedOut = false;
+        let closed = false;
+        const emitLines = (chunk: string, current: string, listener?: (line: string) => void) => {
+          const parts = `${current}${chunk}`.split(/\r?\n/);
+          const remainder = parts.pop() || "";
+          for (const line of parts) {
+            if (line) listener?.(line);
+          }
+          return remainder;
+        };
+        const timeout = timeoutMs
+          ? setTimeout(() => {
+              timedOut = true;
+              killShellProcess(child.pid, "SIGTERM", config.processGroups);
+              setTimeout(() => {
+                if (!closed) killShellProcess(child.pid, "SIGKILL", config.processGroups);
+              }, 1000);
+            }, timeoutMs)
+          : null;
+        child.stdout.on("data", (chunk) => {
+          stdoutBuffer = emitLines(chunk.toString(), stdoutBuffer, onStdoutLine);
+        });
+        child.stderr.on("data", (chunk) => {
+          const value = chunk.toString();
+          stderr += value;
+          stderrBuffer = emitLines(value, stderrBuffer, onStderrLine);
+        });
+        child.on("close", (code) => {
+          closed = true;
+          if (timeout) clearTimeout(timeout);
+          if (stdoutBuffer) onStdoutLine(stdoutBuffer);
+          if (stderrBuffer) onStderrLine?.(stderrBuffer);
+          resolve({
+            ok: code === 0 && !timedOut,
+            code,
+            error: timedOut
+              ? `Command timed out after ${Math.round((timeoutMs || 0) / 1000)} seconds.`
+              : stderr.trim() || (code === 0 ? null : `Command exited with code ${code}`)
+          });
+        });
+      });
     }
   };
 }
@@ -947,6 +1015,76 @@ function createShellLlmProvider(platformProvider: PlatformProvider): LlmProvider
         buildLlmEnvironment("shell", agent, task, workspace, context),
         context?.timeoutMs
       );
+    }
+  };
+}
+
+const cursorDefaultCommand = 'cursor-agent -p --force --output-format stream-json < "$HARNESS_PROMPT_FILE"';
+
+function createCursorCliProvider(platformProvider: PlatformProvider): LlmProvider {
+  return {
+    id: "cursor-cli",
+    definition: {
+      id: "cursor-cli",
+      label: "Cursor CLI",
+      kind: "llm-cli",
+      description: "Runs Cursor Agent in headless stream-JSON mode using its existing login session. Override the command to add --model or --resume.",
+      requiresCommand: true,
+      commandExample: cursorDefaultCommand,
+      defaultCommand: cursorDefaultCommand,
+      capabilities: {
+        streaming: true,
+        sessionResume: true,
+        toolEvents: true,
+        diffEvents: false,
+        usageEvents: false,
+        structuredDecision: false,
+        gracefulStop: false
+      },
+      authentication: {
+        strategy: "cli-session",
+        executable: "cursor-agent",
+        versionArgs: ["--version"],
+        statusArgs: ["status"],
+        loginCommand: "cursor-agent login"
+      }
+    },
+    async run(agent, task, workspace, context) {
+      if (!agent.cliCommand) {
+        return { ok: false, output: "", error: "Cursor CLI command is unavailable." };
+      }
+      let assistantOutput = "";
+      let terminalSummary = "";
+      let terminalSeen = false;
+      let terminalError = false;
+      let eventError: string | null = null;
+      const processResult = await platformProvider.runShellLines(
+        agent.cliCommand,
+        workspace.worktreePath,
+        buildLlmEnvironment("cursor-cli", agent, task, workspace, context),
+        context?.timeoutMs,
+        (line) => {
+          const event = parseCursorStreamLine(line);
+          if (!event) return;
+          if (event.type === "text_delta" && typeof event.payload.text === "string") assistantOutput += event.payload.text;
+          if (event.type === "result" || event.type === "error") {
+            terminalSeen = true;
+            terminalError = event.type === "error";
+            if (typeof event.payload.summary === "string") terminalSummary = event.payload.summary;
+          }
+          try {
+            context?.onEvent?.(event);
+          } catch (error) {
+            eventError = error instanceof Error ? error.message : String(error);
+          }
+        }
+      );
+      const ok = processResult.ok && terminalSeen && !terminalError && !eventError;
+      return {
+        ok,
+        output: terminalSummary || assistantOutput,
+        error: ok ? null : eventError || processResult.error || terminalSummary || "Cursor CLI stream ended without a successful result."
+      };
     }
   };
 }

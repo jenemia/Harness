@@ -301,7 +301,14 @@ export function AgentPanel(props: {
           placeholder={selectedProvider?.commandExample || "CLI command"}
         />
         {selectedProvider && (
-          <p className="provider-help">{selectedProvider.description}</p>
+          <div className="provider-help">
+            <span>{selectedProvider.description}</span>
+            <span>
+              {selectedProvider.capabilities.streaming ? "Live stream" : "Single-result fallback"}
+              {selectedProvider.capabilities.toolEvents ? " · tool events" : " · no tool events"}
+              {selectedProvider.capabilities.sessionResume ? " · session resume available" : " · no session resume"}
+            </span>
+          </div>
         )}
         {editingAgentId && (
           <button

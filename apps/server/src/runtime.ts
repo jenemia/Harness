@@ -67,16 +67,7 @@ export function listRuntimeProviders() {
     llmProviders: llmProviders.map((provider) => ({
       ...provider,
       authenticationStatus: provider.authentication ? diagnoseCliAuthentication(provider.authentication) : null
-    })),
-    cliAuthentication: {
-      cursor: diagnoseCliAuthentication({
-        strategy: "cli-session",
-        executable: "cursor-agent",
-        versionArgs: ["--version"],
-        statusArgs: ["status"],
-        loginCommand: "cursor-agent login"
-      })
-    }
+    }))
   };
 }
 
@@ -895,20 +886,40 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       .prepare("SELECT * FROM runs WHERE task_id = ? AND id != ? AND status IN (?, ?) ORDER BY started_at DESC LIMIT 5")
       .all(task.id, runId, "completed", "failed")
       .map(mapRun);
+    const streamState: {
+      terminal?: { payload: Record<string, unknown>; metadata?: { originalEventType?: string } };
+    } = {};
     const result = await selectedProvider.run(executionAgent, freshTask, workspace, {
       globalMemory,
       projectMemory,
       taskComments,
       taskRuns,
       agentDefinitionSnapshot: agentSnapshot.content,
-      timeoutMs: settings.maxRunSeconds * 1000
+      timeoutMs: settings.maxRunSeconds * 1000,
+      onEvent: (event) => {
+        if (event.type === "result" || event.type === "error") {
+          streamState.terminal = { payload: event.payload, metadata: event.metadata };
+          return;
+        }
+        appendProviderEvent(project, {
+          sequence: nextProviderEventSequence(project, runId),
+          projectId: project.id,
+          taskId: task.id,
+          runId,
+          providerId: selectedProvider.definition.id,
+          correlationId: providerEventContext!.correlationId,
+          type: event.type,
+          payload: event.payload,
+          metadata: event.metadata
+        });
+      }
     });
     const completedAt = now();
     const safeOutput = redactCredentialMaterial(result.output);
     const safeError = result.error ? redactCredentialMaterial(result.error) : null;
     const changedFiles = workspace.kind === "git-worktree" ? await collectChangedFiles(workspace.worktreePath) : [];
 
-    if (safeOutput) {
+    if (safeOutput && !selectedProvider.definition.capabilities.streaming) {
       appendProviderEvent(project, {
         sequence: nextProviderEventSequence(project, runId),
         projectId: project.id,
@@ -929,10 +940,12 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
       correlationId: providerEventContext.correlationId,
       type: result.ok ? "result" : "error",
       payload: {
+        ...(streamState.terminal?.payload || {}),
         status: result.ok ? "completed" : "failed",
         summary: result.ok ? safeOutput : safeError || "Agent run failed.",
         changedFiles
-      }
+      },
+      metadata: streamState.terminal?.metadata
     });
     if (!terminalEvent.inserted) return;
     terminalClaimed = true;
@@ -1598,7 +1611,9 @@ function ensureCommandApproval(
 ) {
   const effectiveBackend = getEffectiveModelBackend(agent, task);
   const provider = providers.llm(effectiveBackend);
-  const commandResolution = resolveProviderCommand(providers.platform(), agent, effectiveBackend, settings);
+  const commandResolution = resolveProviderCommand(
+    providers.platform(), agent, effectiveBackend, settings, provider.definition.defaultCommand
+  );
   const commandPreview = commandResolution.command || provider.definition.commandExample;
   const commandMetadata = providerCommandMetadata(commandResolution);
   const policy = providers.policy().evaluateLlmExecution({
@@ -1733,7 +1748,10 @@ function ensureMergeApproval(db: DatabaseSync, task: TaskRecord, agent: AgentRec
 
 function withProviderCommand(agent: AgentRecord, task: TaskRecord, settings: ProjectSettings) {
   const effectiveBackend = getEffectiveModelBackend(agent, task);
-  const commandResolution = resolveProviderCommand(providers.platform(), agent, effectiveBackend, settings);
+  const provider = providers.llm(effectiveBackend);
+  const commandResolution = resolveProviderCommand(
+    providers.platform(), agent, effectiveBackend, settings, provider.definition.defaultCommand
+  );
   return {
     agent: {
       ...agent,

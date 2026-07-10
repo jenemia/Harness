@@ -202,7 +202,9 @@ function collectProviderCommandIssue(
   if (!provider.requiresCommand) {
     return;
   }
-  const commandResolution = resolveProviderCommand(providers.platform(), agent || { cliCommand: null }, modelBackend, overview.settings);
+  const commandResolution = resolveProviderCommand(
+    providers.platform(), agent || { cliCommand: null }, modelBackend, overview.settings, provider.defaultCommand
+  );
   if (commandResolution.command) {
     return;
   }
