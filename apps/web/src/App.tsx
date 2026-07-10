@@ -392,6 +392,13 @@ function ApprovalsPanel(props: {
   const approvalKinds = useMemo(() => {
     return Array.from(new Set(props.overview.approvals.map((approval) => approval.kind))).sort((a, b) => a.localeCompare(b));
   }, [props.overview.approvals]);
+  const approvalEvents = useMemo(() => {
+    return new Map(
+      props.overview.events
+        .filter((event) => event.type === "approval.requested" && typeof event.metadata.approvalId === "string")
+        .map((event) => [event.metadata.approvalId as string, event])
+    );
+  }, [props.overview.events]);
   const filteredApprovals = useMemo(() => {
     return props.overview.approvals.filter((approval) => !kindFilter || approval.kind === kindFilter);
   }, [kindFilter, props.overview.approvals]);
@@ -435,6 +442,7 @@ function ApprovalsPanel(props: {
             approval.kind === "handoff" && approval.commandPreview
               ? props.overview.agents.find((item) => item.id === approval.commandPreview)
               : null;
+          const providerResolution = formatProviderCommandResolution(asRecord(approvalEvents.get(approval.id)?.metadata));
           return (
             <div className="approval-row pending" key={approval.id}>
               <div>
@@ -445,6 +453,7 @@ function ApprovalsPanel(props: {
                 </span>
               </div>
               <p>{approval.reason}</p>
+              {providerResolution && <span>{providerResolution}</span>}
               {approval.commandPreview && approval.kind !== "handoff" && <code>{approval.commandPreview}</code>}
               <div className="approval-actions">
                 <button className="secondary-button" type="button" onClick={() => void decide(approval, "reject")}>
@@ -459,12 +468,14 @@ function ApprovalsPanel(props: {
         })}
         {recent.map((approval) => {
           const task = props.overview.tasks.find((item) => item.id === approval.taskId);
+          const providerResolution = formatProviderCommandResolution(asRecord(approvalEvents.get(approval.id)?.metadata));
           return (
             <div className={`approval-row ${approval.status}`} key={approval.id}>
               <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
               <span>
                 {approval.kind.replace("_", " ")} · {approval.status} · {formatDate(approval.decidedAt || approval.createdAt)}
               </span>
+              {providerResolution && <span>{providerResolution}</span>}
             </div>
           );
         })}
@@ -2064,9 +2075,7 @@ function TaskRuns(props: {
         {props.runs.length === 0 && <p className="drawer-copy">No runs yet.</p>}
         {props.runs.map((run) => {
           const startMetadata = asRecord(runStartEvents.get(run.id)?.metadata);
-          const commandKey = typeof startMetadata.providerCommandKey === "string" ? startMetadata.providerCommandKey : "";
-          const commandSource = typeof startMetadata.providerCommandSource === "string" ? startMetadata.providerCommandSource : "";
-          const platformProvider = typeof startMetadata.platformProviderId === "string" ? startMetadata.platformProviderId : "";
+          const providerResolution = formatProviderCommandResolution(startMetadata);
           return (
             <div className="run-detail" key={run.id}>
               <div className="run-detail-top">
@@ -2088,10 +2097,10 @@ function TaskRuns(props: {
                   <span>{[run.modelBackend, run.providerId].filter(Boolean).join(" via ")}</span>
                 </div>
               )}
-              {(commandKey || platformProvider) && (
+              {providerResolution && (
                 <div className="snapshot-line">
                   <Settings size={14} />
-                  <span>{[commandKey || commandSource, platformProvider].filter(Boolean).join(" on ")}</span>
+                  <span>{providerResolution}</span>
                 </div>
               )}
               {run.commandPreview && (
@@ -2183,6 +2192,17 @@ function getHandoffDecision(handoff: Handoff, events: Event[]) {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function formatProviderCommandResolution(metadata: Record<string, unknown>) {
+  const commandKey = typeof metadata.providerCommandKey === "string" ? metadata.providerCommandKey : "";
+  const commandSource = typeof metadata.providerCommandSource === "string" ? metadata.providerCommandSource : "";
+  const platformProvider = typeof metadata.platformProviderId === "string" ? metadata.platformProviderId : "";
+  if (!commandKey && !commandSource && !platformProvider) {
+    return "";
+  }
+  const commandLabel = commandKey || commandSource;
+  return [commandLabel, platformProvider].filter(Boolean).join(" on ");
 }
 
 function TaskTimeline({ events, runs }: { events: Event[]; runs: Run[] }) {
