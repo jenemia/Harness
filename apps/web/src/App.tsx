@@ -25,7 +25,7 @@ import {
   X,
   UserRoundCog
 } from "lucide-react";
-import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanPreviewResult, PlanResult, PlanningMode, Project, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
+import type { Agent, AgentTemplate, Approval, CommentRecord, DocumentRecord, Event, Handoff, MemoryRecord, Overview, PlanPreviewResult, PlanResult, PlanningMode, Project, ProjectHealthReport, ProjectImportResult, ProjectListItem, ProjectSettings, ProjectTemplate, ProviderCatalog, Run, ScheduleResult, Task, TaskStatus, WorkflowTemplate } from "./api";
 import type { GlobalSettings } from "./api";
 import { api } from "./api";
 
@@ -35,6 +35,7 @@ export function App() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [healthReport, setHealthReport] = useState<ProjectHealthReport | null>(null);
   const [providerCatalog, setProviderCatalog] = useState<ProviderCatalog | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([]);
@@ -70,10 +71,15 @@ export function App() {
   async function loadOverview(projectId = selectedProjectId) {
     if (!projectId) {
       setOverview(null);
+      setHealthReport(null);
       return;
     }
-    const data = await api<Overview>(`/api/projects/${projectId}/overview`);
+    const [data, reportResponse] = await Promise.all([
+      api<Overview>(`/api/projects/${projectId}/overview`),
+      api<{ report: ProjectHealthReport }>(`/api/projects/${projectId}/report`)
+    ]);
     setOverview(data);
+    setHealthReport(reportResponse.report);
   }
 
   async function runAction(action: () => Promise<void>) {
@@ -211,6 +217,7 @@ export function App() {
               const nextProject = response.projects[0] || null;
               setSelectedProjectId(nextProject?.id || "");
               setOverview(null);
+              setHealthReport(null);
             }
           }}
           onUpdated={async (projectId, payload) => {
@@ -235,10 +242,10 @@ export function App() {
             }
           }}
           onInitializedGit={async (projectId) => {
-            const response = await api<{ overview: Overview }>(`/api/projects/${projectId}/init-git`, { method: "POST" });
+            await api<{ overview: Overview }>(`/api/projects/${projectId}/init-git`, { method: "POST" });
             await loadProjects();
             setSelectedProjectId(projectId);
-            setOverview(response.overview);
+            await loadOverview(projectId);
           }}
           runAction={runAction}
         />
@@ -324,7 +331,7 @@ export function App() {
             </section>
 
             <aside className="right-rail">
-              <ProjectHealthPanel overview={overview} providerCatalog={providerCatalog} />
+              <ProjectHealthPanel overview={overview} healthReport={healthReport} providerCatalog={providerCatalog} />
               <PlanningPanel
                 overview={overview}
                 workflowTemplates={workflowTemplates}
@@ -484,20 +491,32 @@ function ApprovalsPanel(props: {
   );
 }
 
-function ProjectHealthPanel({ overview, providerCatalog }: { overview: Overview; providerCatalog: ProviderCatalog | null }) {
-  const blockedTasks = overview.tasks.filter((task) => task.status === "Blocked");
-  const pausedTasks = overview.tasks.filter((task) => task.status === "Paused").length;
-  const pendingApprovals = overview.approvals.filter((approval) => approval.status === "pending").length;
-  const pendingMerges = overview.tasks.filter((task) => task.mergeStatus === "pending" || task.mergeStatus === "conflict").length;
-  const failedRuns = overview.runs.filter((run) => run.status === "failed").length;
-  const readyTasks = overview.tasks.filter((task) => task.status === "Selected" || task.status === "Backlog").length;
-  const idleAgents = overview.agents.filter((agent) => agent.status === "idle").length;
-  const unassignedTasks = overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
-  const providerCommandIssues = useMemo(
+function ProjectHealthPanel({
+  overview,
+  healthReport,
+  providerCatalog
+}: {
+  overview: Overview;
+  healthReport: ProjectHealthReport | null;
+  providerCatalog: ProviderCatalog | null;
+}) {
+  const fallbackBlockedTasks = overview.tasks.filter((task) => task.status === "Blocked");
+  const fallbackProviderCommandIssues = useMemo(
     () => findProviderCommandIssues(overview, providerCatalog),
     [overview, providerCatalog]
   );
-  const schedulerIssues = useMemo(() => findSchedulerIssues(overview), [overview]);
+  const fallbackSchedulerIssues = useMemo(() => findSchedulerIssues(overview), [overview]);
+  const blockedTasks = healthReport?.blockedTasks || fallbackBlockedTasks;
+  const pausedTasks = healthReport?.statusCounts.Paused ?? overview.tasks.filter((task) => task.status === "Paused").length;
+  const pendingApprovals = healthReport?.pendingApprovals ?? overview.approvals.filter((approval) => approval.status === "pending").length;
+  const pendingMerges =
+    healthReport?.pendingMerges ?? overview.tasks.filter((task) => task.mergeStatus === "pending" || task.mergeStatus === "conflict").length;
+  const failedRuns = healthReport?.failedRuns ?? overview.runs.filter((run) => run.status === "failed").length;
+  const readyTasks = healthReport?.readyTasks ?? overview.tasks.filter((task) => task.status === "Selected" || task.status === "Backlog").length;
+  const idleAgents = healthReport?.idleAgents ?? overview.agents.filter((agent) => agent.status === "idle").length;
+  const unassignedTasks = healthReport?.unassignedTasks ?? overview.tasks.filter((task) => task.status !== "Done" && !task.assigneeAgentId).length;
+  const providerCommandIssues = healthReport?.providerCommandIssues || fallbackProviderCommandIssues;
+  const schedulerIssues = healthReport?.schedulerIssues || fallbackSchedulerIssues;
   const recommendation =
     providerCommandIssues.length > 0
       ? "Configure provider commands"
