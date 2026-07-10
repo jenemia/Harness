@@ -10,6 +10,7 @@
     "dev:web": "pnpm --filter @harness/web dev",
     "start": "pnpm --filter @harness/server start",
     "cli": "pnpm --filter @harness/server cli",
+    "test": "pnpm --filter @harness/server test",
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck"
   },
