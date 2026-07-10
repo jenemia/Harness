@@ -415,6 +415,8 @@ Global storage:
 
 Initial implementation: Harness stores global settings for app-wide defaults and project-local settings for default LLM backend, provider command defaults, default agent concurrency, project-wide concurrency, PM plan auto-start behavior, and command approval policy. Harness also stores project-local memory entries for conventions and preferences that should travel with agent execution.
 
+Initial implementation: command-backed LLM providers respect a project-configurable run timeout inherited from global defaults. Timed-out commands fail the run, unblock the runner, and leave an audit error on the task.
+
 Candidate paths:
 
 - Project-local: `<project>/.harness/`

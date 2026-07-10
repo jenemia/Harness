@@ -20,6 +20,7 @@ Harness is a local-first multi-agent Kanban execution framework. It starts as a 
 - Automatic PM-driven handoff with project-level handoff rules and approval gates for LLM CLI command execution and merge.
 - Startup recovery for interrupted runs so stale busy agents and in-progress tasks can be audited and retried.
 - Run audit fields for model backend, provider, command preview, worktree, snapshot, and changed files.
+- Configurable run timeout for command-backed providers.
 - Provider-based platform and LLM adapters.
 - Built-in LLM provider slots: mock, shell, Codex CLI, Claude Code CLI, Gemini CLI, Ollama, and OpenRouter-compatible wrappers.
 - Task-level model backend overrides for routing specific work to a different provider.
@@ -68,7 +69,7 @@ The CLI uses the same global/project-local storage as the web app and honors `HA
 
 Use the Settings panel or `/api/settings` to configure global defaults. Global settings live in the global Harness data directory and provide the starting defaults for projects.
 
-Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel or `PATCH /api/projects/:projectId/settings` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, PM plan auto-start behavior, command approval policy, and PM handoff rules.
+Each project also has project-local settings stored inside `<project>/.harness/harness.db`. Use the project Settings panel or `PATCH /api/projects/:projectId/settings` to configure the current project's default LLM backend, provider command defaults, default agent concurrency, project-wide parallel run limit, run timeout, PM plan auto-start behavior, command approval policy, and PM handoff rules.
 
 Provider commands are a provider-to-command map. Agent-specific `cliCommand` values override project and global provider commands. A task can override its model backend; if it does, Harness uses that backend for approval checks, provider selection, prompt environment, and project-level provider command lookup.
 

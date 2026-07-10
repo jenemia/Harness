@@ -17,13 +17,14 @@ export type TaskWorkspace = {
 
 export type LlmRunContext = {
   projectMemory: MemoryRecord[];
+  timeoutMs?: number;
 };
 
 export type PlatformProvider = {
   id: string;
   platform: NodeJS.Platform;
   run(command: string, args: string[], cwd: string, allowFailure?: boolean): Promise<CommandResult>;
-  runShell(command: string, cwd: string, extraEnv: Record<string, string>): Promise<{ ok: boolean; output: string; error: string | null }>;
+  runShell(command: string, cwd: string, extraEnv: Record<string, string>, timeoutMs?: number): Promise<{ ok: boolean; output: string; error: string | null }>;
   ensureGitReady(projectPath: string): Promise<void>;
   ensureTaskWorktree(projectPath: string, task: TaskRecord): Promise<TaskWorkspace>;
   commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null }>;
@@ -117,15 +118,30 @@ function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => 
 
     run,
 
-    async runShell(command, cwd, extraEnv) {
-      const result = await new Promise<{ code: number | null; output: string; error: string }>((resolve) => {
+    async runShell(command, cwd, extraEnv, timeoutMs) {
+      const result = await new Promise<{ code: number | null; output: string; error: string; timedOut: boolean }>((resolve) => {
+        const useProcessGroup = process.platform !== "win32";
         const child = spawn(command, {
           cwd,
           shell: true,
-          env: { ...process.env, ...extraEnv }
+          env: { ...process.env, ...extraEnv },
+          detached: useProcessGroup
         });
         let output = "";
         let error = "";
+        let timedOut = false;
+        let closed = false;
+        const timeout = timeoutMs
+          ? setTimeout(() => {
+              timedOut = true;
+              killShellProcess(child.pid, "SIGTERM", useProcessGroup);
+              setTimeout(() => {
+                if (!closed) {
+                  killShellProcess(child.pid, "SIGKILL", useProcessGroup);
+                }
+              }, 1000);
+            }, timeoutMs)
+          : null;
 
         child.stdout.on("data", (chunk) => {
           output += chunk.toString();
@@ -133,13 +149,21 @@ function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => 
         child.stderr.on("data", (chunk) => {
           error += chunk.toString();
         });
-        child.on("close", (code) => resolve({ code, output, error }));
+        child.on("close", (code) => {
+          closed = true;
+          if (timeout) {
+            clearTimeout(timeout);
+          }
+          resolve({ code, output, error, timedOut });
+        });
       });
 
       return {
-        ok: result.code === 0,
+        ok: result.code === 0 && !result.timedOut,
         output: result.output,
-        error: result.error || (result.code === 0 ? null : `Command exited with code ${result.code}`)
+        error: result.timedOut
+          ? `Command timed out after ${Math.round((timeoutMs || 0) / 1000)} seconds.`
+          : result.error || (result.code === 0 ? null : `Command exited with code ${result.code}`)
       };
     },
 
@@ -234,6 +258,18 @@ function createNodePlatformProvider(projectHarnessDir: (projectPath: string) => 
   };
 }
 
+function killShellProcess(pid: number | undefined, signal: NodeJS.Signals, useProcessGroup: boolean) {
+  if (!pid) {
+    return;
+  }
+
+  try {
+    process.kill(useProcessGroup ? -pid : pid, signal);
+  } catch {
+    // The command may have already exited between timeout checks.
+  }
+}
+
 function createMockLlmProvider(): LlmProvider {
   return {
     id: "mock",
@@ -281,7 +317,12 @@ function createShellLlmProvider(platformProvider: PlatformProvider): LlmProvider
         return { ok: false, output: "", error: "Shell provider requires an agent CLI command." };
       }
 
-      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment("shell", agent, task, workspace, context));
+      return platformProvider.runShell(
+        agent.cliCommand,
+        workspace.worktreePath,
+        buildLlmEnvironment("shell", agent, task, workspace, context),
+        context?.timeoutMs
+      );
     }
   };
 }
@@ -306,7 +347,12 @@ function createCliLlmProvider(
         };
       }
 
-      return platformProvider.runShell(agent.cliCommand, workspace.worktreePath, buildLlmEnvironment(input.id, agent, task, workspace, context));
+      return platformProvider.runShell(
+        agent.cliCommand,
+        workspace.worktreePath,
+        buildLlmEnvironment(input.id, agent, task, workspace, context),
+        context?.timeoutMs
+      );
     }
   };
 }

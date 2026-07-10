@@ -379,6 +379,7 @@ export function defaultGlobalSettings(): GlobalSettings {
     defaultModelBackend: "mock",
     defaultAgentMaxParallel: 1,
     autoStartPlans: false,
+    maxRunSeconds: 1800,
     providerCommands: {},
     updatedAt: null
   };
@@ -411,6 +412,9 @@ export function getGlobalSettings(): GlobalSettings {
       if (row.key === "autoStartPlans") {
         settings.autoStartPlans = row.value === "true";
       }
+      if (row.key === "maxRunSeconds") {
+        settings.maxRunSeconds = Math.max(5, Number(row.value || settings.maxRunSeconds));
+      }
       if (row.key === "providerCommands") {
         settings.providerCommands = parseStringMap(row.value, settings.providerCommands);
       }
@@ -431,6 +435,7 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
       defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
       defaultAgentMaxParallel: Math.max(1, Number(input.defaultAgentMaxParallel || current.defaultAgentMaxParallel)),
       autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
+      maxRunSeconds: Math.max(5, Number(input.maxRunSeconds || current.maxRunSeconds)),
       providerCommands: normalizeStringMap(input.providerCommands || current.providerCommands),
       updatedAt: now()
     };
@@ -440,6 +445,7 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
     stmt.run("defaultModelBackend", next.defaultModelBackend, next.updatedAt);
     stmt.run("defaultAgentMaxParallel", String(next.defaultAgentMaxParallel), next.updatedAt);
     stmt.run("autoStartPlans", String(next.autoStartPlans), next.updatedAt);
+    stmt.run("maxRunSeconds", String(next.maxRunSeconds), next.updatedAt);
     stmt.run("providerCommands", JSON.stringify(next.providerCommands), next.updatedAt);
     return next;
   } finally {
@@ -862,6 +868,7 @@ export function defaultProjectSettings(): ProjectSettings {
     autoStartPlans: globalSettings.autoStartPlans,
     requireCommandApproval: true,
     maxProjectParallel: 4,
+    maxRunSeconds: globalSettings.maxRunSeconds,
     handoffRules: {
       programmer: "reviewer",
       worker: "reviewer"
@@ -908,6 +915,9 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "maxProjectParallel") {
       settings.maxProjectParallel = Math.max(1, Number(row.value || 1));
     }
+    if (row.key === "maxRunSeconds") {
+      settings.maxRunSeconds = Math.max(5, Number(row.value || settings.maxRunSeconds));
+    }
     if (row.key === "handoffRules") {
       settings.handoffRules = parseStringMap(row.value, settings.handoffRules);
     }
@@ -930,6 +940,7 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
       autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
       requireCommandApproval: input.requireCommandApproval ?? current.requireCommandApproval,
       maxProjectParallel: Math.max(1, Number(input.maxProjectParallel || current.maxProjectParallel)),
+      maxRunSeconds: Math.max(5, Number(input.maxRunSeconds || current.maxRunSeconds)),
       handoffRules: normalizeStringMap(input.handoffRules || current.handoffRules),
       providerCommands: normalizeStringMap(input.providerCommands || current.providerCommands),
       updatedAt: timestamp
@@ -941,6 +952,7 @@ export function updateProjectSettings(projectPath: string, input: Partial<Projec
     stmt.run("autoStartPlans", String(next.autoStartPlans), timestamp);
     stmt.run("requireCommandApproval", String(next.requireCommandApproval), timestamp);
     stmt.run("maxProjectParallel", String(next.maxProjectParallel), timestamp);
+    stmt.run("maxRunSeconds", String(next.maxRunSeconds), timestamp);
     stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
     stmt.run("providerCommands", JSON.stringify(next.providerCommands), timestamp);
     return next;

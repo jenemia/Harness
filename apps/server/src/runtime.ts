@@ -528,7 +528,8 @@ async function executeTask(project: ProjectRecord, taskId: string, reservedAgent
 
     const projectMemory = db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory);
     const result = await selectedProvider.run(executionAgent, freshTask, workspace, {
-      projectMemory
+      projectMemory,
+      timeoutMs: settings.maxRunSeconds * 1000
     });
     const completedAt = now();
     const changedFiles = await collectChangedFiles(workspace.worktreePath);

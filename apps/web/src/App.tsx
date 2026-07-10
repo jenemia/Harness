@@ -1711,6 +1711,7 @@ function SettingsPanel(props: {
   const [defaultModelBackend, setDefaultModelBackend] = useState("mock");
   const [defaultAgentMaxParallel, setDefaultAgentMaxParallel] = useState(1);
   const [autoStartPlans, setAutoStartPlans] = useState(false);
+  const [maxRunSeconds, setMaxRunSeconds] = useState(1800);
   const [globalProviderCommandsText, setGlobalProviderCommandsText] = useState("{}");
   const [projectSettings, setProjectSettings] = useState<ProjectSettings>(props.overview.settings);
   const [handoffRulesText, setHandoffRulesText] = useState(JSON.stringify(props.overview.settings.handoffRules, null, 2));
@@ -1724,6 +1725,7 @@ function SettingsPanel(props: {
     setDefaultModelBackend(props.settings.defaultModelBackend);
     setDefaultAgentMaxParallel(props.settings.defaultAgentMaxParallel);
     setAutoStartPlans(props.settings.autoStartPlans);
+    setMaxRunSeconds(props.settings.maxRunSeconds);
     setGlobalProviderCommandsText(JSON.stringify(props.settings.providerCommands, null, 2));
   }, [props.settings]);
 
@@ -1744,6 +1746,7 @@ function SettingsPanel(props: {
           defaultModelBackend,
           defaultAgentMaxParallel,
           autoStartPlans,
+          maxRunSeconds,
           providerCommands
         })
       });
@@ -1807,6 +1810,14 @@ function SettingsPanel(props: {
           />
           <span>Auto-start plans by default</span>
         </label>
+        <input
+          min={5}
+          max={86400}
+          type="number"
+          value={maxRunSeconds}
+          onChange={(event) => setMaxRunSeconds(Math.max(5, Number(event.target.value || 5)))}
+          placeholder="Run timeout seconds"
+        />
         <textarea
           value={globalProviderCommandsText}
           onChange={(event) => setGlobalProviderCommandsText(event.target.value)}
@@ -1844,6 +1855,14 @@ function SettingsPanel(props: {
           value={projectSettings.maxProjectParallel}
           onChange={(event) => updateProjectSetting("maxProjectParallel", Math.max(1, Number(event.target.value || 1)))}
           placeholder="Project parallel limit"
+        />
+        <input
+          min={5}
+          max={86400}
+          type="number"
+          value={projectSettings.maxRunSeconds}
+          onChange={(event) => updateProjectSetting("maxRunSeconds", Math.max(5, Number(event.target.value || 5)))}
+          placeholder="Run timeout seconds"
         />
         <label className="check-row">
           <input
