@@ -497,7 +497,7 @@ function createLocalAgentPolicyProvider(): PolicyProvider {
   };
 }
 
-function detectRiskyCommand(command: string) {
+export function detectRiskyCommand(command: string) {
   const normalized = command.replace(/\\\n/g, " ").replace(/\s+/g, " ").trim();
   const patterns: Array<{ tag: string; label: string; regex: RegExp }> = [
     { tag: "destructive-delete", label: "recursive forced delete", regex: /\brm\s+-[^\n;|&]*r[^\n;|&]*f|\brm\s+-[^\n;|&]*f[^\n;|&]*r/i },

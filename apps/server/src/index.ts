@@ -441,6 +441,21 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (childPath === "previews" && req.method === "GET") {
+        sendJson(res, await invokeApplicationCommand("previews:list", { projectId: project.id, taskId: requestUrl.searchParams.get("taskId") || undefined }));
+        return;
+      }
+      if (childPath === "previews" && req.method === "POST") {
+        const body = await readBody<{ taskId?: string; payload?: object }>(req);
+        sendJson(res, await invokeApplicationCommand("previews:register", { projectId: project.id, taskId: body.taskId || "", payload: body.payload || {} }), 201);
+        return;
+      }
+      const previewMatch = childPath.match(/^previews\/([^/]+)$/);
+      if (previewMatch && req.method === "DELETE") {
+        sendJson(res, await invokeApplicationCommand("previews:remove", { projectId: project.id, previewId: previewMatch[1] }));
+        return;
+      }
+
       if (req.method === "POST" && childPath === "tasks") {
         sendJson(res, await invokeApplicationCommand("tasks:create", { projectId: project.id, payload: await readBody(req) }), 201);
         return;

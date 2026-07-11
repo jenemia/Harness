@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -33,6 +33,10 @@ test("CLI uses the active desktop bridge and offline fallback shares application
     const offline = await runCli(["tasks:create", "--project", created.project.id, "--title", "Offline task", "--workspaceMode", "harness"]);
     assert.equal((offline as { task: { title: string } }).task.title, "Offline task");
     assert.equal(getProjectOverview(created.project).tasks.length, 2);
+    const offlineTaskId = (offline as { task: { id: string } }).task.id;
+    writeFileSync(path.join(created.project.path, "preview.html"), "preview", "utf8");
+    const cliPreview = await runCli(["previews:register", "--project", created.project.id, "--task", offlineTaskId, "--runtime", "artifact", "--artifactPath", "preview.html"]);
+    assert.equal((cliPreview as { preview: { artifactPath: string } }).preview.artifactPath, "preview.html");
 
     await assert.rejects(
       () => runCli(["tasks:create", "--project", created.project.id, "--title", "Invalid assignee", "--assignee", "missing", "--workspaceMode", "harness"]),
@@ -52,6 +56,17 @@ test("CLI uses the active desktop bridge and offline fallback shares application
       });
       assert.equal(createdByHttp.status, 201);
       assert.equal(((await createdByHttp.json()) as { task: { title: string } }).task.title, "HTTP task");
+      const httpTaskId = ((await invokeApplicationCommand("tasks:create", { projectId: created.project.id, payload: { title: "HTTP preview task", workspaceMode: "harness" } })) as { task: { id: string } }).task.id;
+      const previewByHttp = await fetch(`${httpServer.origin}/api/projects/${created.project.id}/previews`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskId: httpTaskId, payload: { runtime: "artifact", artifactPath: "preview.html" } })
+      });
+      assert.equal(previewByHttp.status, 201);
+      assert.equal(((await previewByHttp.json()) as { preview: { artifactPath: string } }).preview.artifactPath, "preview.html");
+      const listedPreviews = await fetch(`${httpServer.origin}/api/projects/${created.project.id}/previews`);
+      assert.equal(listedPreviews.status, 200);
+      assert.equal(((await listedPreviews.json()) as { previews: unknown[] }).previews.length, 2);
 
       const invalidHttp = await fetch(`${httpServer.origin}/api/projects/${created.project.id}/tasks`, {
         method: "POST",
@@ -63,7 +78,7 @@ test("CLI uses the active desktop bridge and offline fallback shares application
     } finally {
       await httpServer.stop();
     }
-    assert.equal(getProjectOverview(created.project).tasks.length, 3);
+    assert.equal(getProjectOverview(created.project).tasks.length, 4);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;

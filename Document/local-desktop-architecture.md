@@ -177,6 +177,12 @@ agent 관리 UI는 구조화 form과 raw Markdown editor가 하나의 in-memory 
 
 desktop main process는 project의 agent와 instruction directory를 OS file watcher로 감시하고 짧은 burst를 debounce한 뒤 definition/instruction content version event를 typed IPC로 보낸다. atomic rename이나 새 instruction directory가 생기면 watched directory 집합을 다시 구성한다. renderer에 unsaved draft가 없으면 최신 bundle을 자동 수락하고, draft가 있으면 local 내용을 유지한 채 overwrite, reload 또는 manual merge를 선택하게 한다. manual merge는 local/external 원문에 marker를 넣어 validation을 의도적으로 실패시키므로 사용자가 marker를 모두 해결하기 전에는 저장할 수 없다. 선택적 HTTP 개발 경로는 같은 bundle content version polling으로 동일한 충돌 규칙을 적용한다.
 
+### 선택적 Worktree Preview 계약
+
+preview는 task workspace 안의 사용자가 명시적으로 등록한 항목만 관리한다. version 1 contract는 정적·생성 산출물용 `artifact`, shell을 거치지 않는 `local` executable+args, 그리고 compose file/service를 지정하는 `docker-compose` runtime을 구분한다. monorepo package root와 artifact/compose path는 workspace-relative path만 저장하며 realpath, symlink와 기존 ancestor 검증을 통과해야 한다. process readiness URL은 HTTPS 또는 loopback HTTP만 허용한다.
+
+모든 process preview는 등록 시 `preview` approval을 만들고 기존 risky-command policy 결과를 approval metadata에 포함한다. approval은 process를 자동 시작하지 않으며 별도 start action만 허가한다. contract에는 environment 값 대신 허용할 environment key 이름만 저장하고 credential literal이 포함된 command, argument 또는 URL은 거부한다. renderer, HTTP, CLI와 이후 process runtime은 동일 application service contract를 사용한다.
+
 ## 사용자 전역 데이터
 
 project에 종속되지 않는 다음 정보는 OS application data directory에 둔다.

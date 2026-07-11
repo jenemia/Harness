@@ -1198,6 +1198,35 @@ export function openProjectDb(projectPath: string) {
       interaction_id TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS previews (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      contract_version INTEGER NOT NULL DEFAULT 1,
+      label TEXT NOT NULL,
+      runtime TEXT NOT NULL,
+      executable TEXT,
+      args TEXT NOT NULL DEFAULT '[]',
+      package_root TEXT NOT NULL DEFAULT '.',
+      compose_file TEXT,
+      service TEXT,
+      artifact_path TEXT,
+      readiness_url TEXT,
+      environment_keys TEXT NOT NULL DEFAULT '[]',
+      command_preview TEXT,
+      approval_id TEXT,
+      status TEXT NOT NULL DEFAULT 'stopped',
+      pid INTEGER,
+      owner_instance_id TEXT,
+      process_started_at TEXT,
+      log_path TEXT,
+      log_tail TEXT NOT NULL DEFAULT '',
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS previews_task_created ON previews(task_id, created_at);
+    CREATE INDEX IF NOT EXISTS previews_status_updated ON previews(status, updated_at);
+
     CREATE TABLE IF NOT EXISTS interactions (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,

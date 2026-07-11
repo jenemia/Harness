@@ -46,6 +46,7 @@ const providers = createDefaultProviders(projectHarnessDir);
 const commandApprovalKind = "command_execution";
 const mergeApprovalKind = "merge";
 const handoffApprovalKind = "handoff";
+const previewApprovalKind = "preview";
 
 type ResumeRunContext = {
   interactionId: string;
@@ -733,7 +734,9 @@ async function decideApprovalMutation(
       metadata: { approvalId: approval.id, kind: approval.kind, approvalProvider: providers.approval().id }
     });
 
-    if (approval.kind === mergeApprovalKind) {
+    if (approval.kind === previewApprovalKind) {
+      // Preview registration approval authorizes a later explicit start action only.
+    } else if (approval.kind === mergeApprovalKind) {
       if (task && decision === "approved") {
         shouldApproveMergeTaskId = task.id;
       }
@@ -771,7 +774,7 @@ async function decideApprovalMutation(
       shouldStartTaskId = task.id;
     }
 
-    if (approval.kind !== mergeApprovalKind && approval.kind !== handoffApprovalKind && task && decision === "rejected") {
+    if (approval.kind !== previewApprovalKind && approval.kind !== mergeApprovalKind && approval.kind !== handoffApprovalKind && task && decision === "rejected") {
       setTaskBlocked(db, task.id, providers.approval().rejectionReason(approval));
       if (agent) {
         refreshAgentStatus(db, agent.id);

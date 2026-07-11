@@ -99,6 +99,7 @@ import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from
 import { listInteractions } from "./interactions.js";
 import { correlationAttributes, operationSpanName, withTelemetrySpan } from "./telemetry.js";
 import { subscribeAgentFileEvents } from "./agent-file-events.js";
+import { listPreviews, registerPreview, removePreview, type PreviewRegistrationInput } from "./previews.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -283,6 +284,20 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "agents:archive": {
       const value = input(payload) as HarnessCommandInputs["agents:archive"];
       return archiveAgentService(requiredProject(value.projectId), value.agentId, value.payload as Parameters<typeof archiveAgentService>[2]);
+    }
+    case "previews:list": {
+      const value = input(payload) as HarnessCommandInputs["previews:list"];
+      return { previews: listPreviews(requiredProject(value.projectId), value.taskId) };
+    }
+    case "previews:register": {
+      const value = input(payload) as HarnessCommandInputs["previews:register"];
+      const project = requiredProject(value.projectId);
+      return { preview: registerPreview(project, value.taskId, value.payload as PreviewRegistrationInput), previews: listPreviews(project, value.taskId) };
+    }
+    case "previews:remove": {
+      const value = input(payload) as HarnessCommandInputs["previews:remove"];
+      const project = requiredProject(value.projectId);
+      return { result: removePreview(project, value.previewId), previews: listPreviews(project) };
     }
     case "plans:preview": {
       const value = input(payload) as HarnessCommandInputs["plans:preview"];

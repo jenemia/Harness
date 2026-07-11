@@ -366,11 +366,15 @@ Status: 완료
 
 Depends on: A15, A20
 
+Status: 완료
+
 - task에 사용자가 명시한 preview command 또는 생성된 산출물 상대 경로만 등록한다.
 - `cwd`, URL readiness, monorepo package root와 Docker 실행 방식을 versioned contract로 정의한다.
 - command는 project policy와 명시적 approval을 통과해야 하며 environment, URL과 log에 credential을 저장하지 않는다.
 
 완료 조건: 등록되지 않은 process나 workspace 밖 산출물을 preview로 취급하지 않고, monorepo·Docker 변형도 같은 validation 경계를 사용한다.
+
+검증: version 1 preview contract에 artifact, local executable+args와 Docker Compose runtime을 분리하고 monorepo package root, compose file/service, readiness URL과 environment key reference를 구조화했다. task workspace 기준 relative path, realpath, symlink와 기존 ancestor 검증으로 escape를 차단하고 HTTPS 또는 loopback HTTP URL만 허용한다. command preview는 raw shell이 아닌 구조화된 executable/args에서 만들며 모든 command preview는 `preview` approval을 생성하고 기존 risky-command policy tag를 reason에 포함한다. approval은 task나 process를 자동 시작하지 않고 이후 명시적 start만 허가한다. credential literal은 등록 전에 거부하고 environment 값은 DB에 저장하지 않는다. application command, typed IPC, HTTP와 CLI 등록·목록·삭제 경로를 같은 service에 연결했다. artifact/local/Docker 계약, monorepo 경로, symlink·outside path·비안전 URL 거부, secret 비저장, policy approval과 task 무실행을 통합 테스트했고 실제 CLI/HTTP transport smoke를 확인했다. 전체 workspace typecheck·build와 server 38개·web 2개·desktop 2개 테스트를 통과했다.
 
 ### A27: Preview process lifecycle, persistence와 recovery
 

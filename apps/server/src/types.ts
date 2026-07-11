@@ -277,13 +277,43 @@ export type ApprovalRecord = {
   id: string;
   taskId: string;
   agentId: string;
-  kind: "command_execution" | "merge" | "handoff";
+  kind: "command_execution" | "merge" | "handoff" | "preview";
   status: "pending" | "approved" | "rejected";
   reason: string;
   commandPreview: string | null;
   createdAt: string;
   decidedAt: string | null;
   interactionId: string | null;
+};
+
+export type PreviewRuntime = "artifact" | "local" | "docker-compose";
+export type PreviewStatus = "stopped" | "booting" | "live" | "crashed";
+
+export type PreviewRecord = {
+  id: string;
+  taskId: string;
+  contractVersion: 1;
+  label: string;
+  runtime: PreviewRuntime;
+  executable: string | null;
+  args: string[];
+  packageRoot: string;
+  composeFile: string | null;
+  service: string | null;
+  artifactPath: string | null;
+  readinessUrl: string | null;
+  environmentKeys: string[];
+  commandPreview: string | null;
+  approvalId: string | null;
+  status: PreviewStatus;
+  pid: number | null;
+  ownerInstanceId: string | null;
+  processStartedAt: string | null;
+  logPath: string | null;
+  logTail: string;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type InteractionKind = "question" | "approval" | "permission" | "review";

@@ -47,6 +47,9 @@ const commands: Record<string, CommandHandler> = {
   "agents:instruction-reorder": reorderAgentInstructionsCommand,
   "agents:clone": cloneAgentCommand,
   "agents:archive": archiveAgentCommand,
+  "previews:list": listPreviewsCommand,
+  "previews:register": registerPreviewCommand,
+  "previews:remove": removePreviewCommand,
   "plans:preview": previewPlanCommand,
   "plans:create": createPlanCommand,
   "documents:list": listDocumentsCommand,
@@ -410,6 +413,38 @@ function archiveAgentCommand(args: string[]) {
     expectedHash: getRequiredOption(options, "expectedHash"),
     ...(options.reassignTo !== undefined ? { reassignToAgentId: options.reassignTo || null } : {})
   } });
+}
+
+function listPreviewsCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("previews:list", { projectId: getRequiredOption(options, "project"), taskId: options.task });
+}
+
+function registerPreviewCommand(args: string[]) {
+  const options = parseOptions(args);
+  const parsedArgs = options.args ? JSON.parse(options.args) : [];
+  if (!Array.isArray(parsedArgs) || parsedArgs.some((item) => typeof item !== "string")) throw new Error("--args must be a JSON string array.");
+  return invokeTransport("previews:register", {
+    projectId: getRequiredOption(options, "project"),
+    taskId: getRequiredOption(options, "task"),
+    payload: {
+      label: options.label,
+      runtime: options.runtime,
+      executable: options.executable,
+      args: parsedArgs,
+      packageRoot: options.packageRoot,
+      composeFile: options.composeFile,
+      service: options.service,
+      artifactPath: options.artifactPath,
+      readinessUrl: options.readinessUrl,
+      environmentKeys: parseCsv(options.environmentKeys)
+    }
+  });
+}
+
+function removePreviewCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("previews:remove", { projectId: getRequiredOption(options, "project"), previewId: getRequiredOption(options, "preview") });
 }
 
 async function createPlanCommand(args: string[]) {
@@ -1008,7 +1043,7 @@ function normalizeInteractionKind(value: string) {
 }
 
 function normalizeApprovalKind(value: string) {
-  const kinds: Array<ApprovalRecord["kind"]> = ["command_execution", "merge", "handoff"];
+  const kinds: Array<ApprovalRecord["kind"]> = ["command_execution", "merge", "handoff", "preview"];
   const normalized = value.toLowerCase().replace("-", "_");
   const kind = kinds.find((item) => item.toLowerCase() === normalized);
   if (!kind) {
@@ -1079,6 +1114,9 @@ Usage:
   pnpm --filter @harness/server cli agents:instruction-reorder --project <projectId> --agent <agentId> --instructions <path1,path2> --expectedHash <sha256>
   pnpm --filter @harness/server cli agents:clone --project <projectId> --agent <agentId> [--name <text>] [--enabled true|false]
   pnpm --filter @harness/server cli agents:archive --project <projectId> --agent <agentId> --expectedHash <sha256> [--reassignTo <agentId>]
+  pnpm --filter @harness/server cli previews:list --project <projectId> [--task <taskId>]
+  pnpm --filter @harness/server cli previews:register --project <projectId> --task <taskId> --runtime artifact|local|docker-compose [--label <text>] [--executable <program> --args '["arg"]'] [--packageRoot <relative>] [--composeFile <relative> --service <name>] [--artifactPath <relative>] [--readinessUrl <url>] [--environmentKeys KEY1,KEY2]
+  pnpm --filter @harness/server cli previews:remove --project <projectId> --preview <previewId>
   pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>]
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
@@ -1092,7 +1130,7 @@ Usage:
   pnpm --filter @harness/server cli global-memories:list
   pnpm --filter @harness/server cli global-memories:create --title <text> [--content <text>|--contentFile <file>]
   pnpm --filter @harness/server cli global-memories:update --memory <memoryId> [--title <text>] [--content <text>|--contentFile <file>]
-  pnpm --filter @harness/server cli approvals:list --project <projectId> [--status pending,approved,rejected] [--kind command_execution,merge,handoff] [--task <taskId>] [--agent <agentId>]
+  pnpm --filter @harness/server cli approvals:list --project <projectId> [--status pending,approved,rejected] [--kind command_execution,merge,handoff,preview] [--task <taskId>] [--agent <agentId>]
   pnpm --filter @harness/server cli approvals:approve --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli approvals:reject --project <projectId> --approval <approvalId>
   pnpm --filter @harness/server cli interactions:list --project <projectId> [--status pending,resolved,rejected,expired] [--kind question,approval,permission,review] [--task <taskId>] [--run <runId>]

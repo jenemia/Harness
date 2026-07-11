@@ -58,6 +58,16 @@ pnpm cli agents:get --project <projectId> --agent <agentId>
 pnpm cli agents:update --project <projectId> --agent <agentId> --expectedHash <sha256> --persona "Updated persona"
 pnpm cli agents:raw-preview --project <projectId> --agent <agentId> --rawFile ./agent.md
 pnpm cli agents:raw-save --project <projectId> --agent <agentId> --expectedHash <sha256> --rawFile ./agent.md
+
+# Explicit artifact or process preview registration
+pnpm cli previews:register --project <projectId> --task <taskId> \
+  --runtime artifact --artifactPath dist/index.html
+pnpm cli previews:register --project <projectId> --task <taskId> \
+  --runtime local --executable pnpm --args '["dev"]' \
+  --packageRoot packages/web --readinessUrl http://127.0.0.1:4173/
+pnpm cli previews:register --project <projectId> --task <taskId> \
+  --runtime docker-compose --composeFile packages/web/compose.yaml --service web
+pnpm cli previews:list --project <projectId> --task <taskId>
 pnpm cli agents:instruction-save --project <projectId> --agent <agentId> --name security-review --expectedHash <sha256> --contentFile ./security-review.md
 pnpm cli agents:clone --project <projectId> --agent <agentId> --name "Agent Copy"
 pnpm cli agents:archive --project <projectId> --agent <agentId> --expectedHash <sha256> --reassignTo <replacementAgentId>

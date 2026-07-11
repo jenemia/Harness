@@ -254,7 +254,7 @@ export type Approval = {
   id: string;
   taskId: string;
   agentId: string;
-  kind: "command_execution" | "merge" | "handoff";
+  kind: "command_execution" | "merge" | "handoff" | "preview";
   status: "pending" | "approved" | "rejected";
   reason: string;
   commandPreview: string | null;
