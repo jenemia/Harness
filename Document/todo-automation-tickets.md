@@ -1,6 +1,6 @@
 # Harness TODO Automation Tickets
 
-이 문서는 `todo.md`의 자동 진행 범위를 독립적으로 구현하고 검증할 수 있는 티켓으로 나눈 실행 기준이다. `진행하면 좋은 것들 (자동 진행 대상 아님)`의 Worktree 개발 서버 Preview는 포함하지 않는다.
+이 문서는 `todo.md`의 자동 진행 범위를 독립적으로 구현하고 검증할 수 있는 티켓으로 나눈 실행 기준이다.
 
 ## 공통 완료 규칙
 
@@ -362,6 +362,36 @@ Status: 완료
 
 검증: project별 agent/instruction directory를 OS file watcher로 감시하고 120ms debounce 뒤 definition hash와 instruction hash를 합친 version event를 typed IPC로 전달한다. watcher는 atomic rename 후 directory 구성을 다시 수집하며 마지막 구독 종료 시 handle을 정리하고 재구독 시 현재 파일을 새 baseline으로 사용한다. 브라우저/headless HTTP 경로는 같은 bundle hash를 polling해 동일 충돌 상태를 만든다. 편집 중 외부 변경은 local draft를 유지한 채 overwrite, external reload 또는 merge marker 기반 manual merge를 명시적으로 요구하며 validation을 통과하기 전에는 저장하지 않는다. 통합 테스트에서 atomic external definition 변경, instruction burst debounce, watcher 재시작과 stale expected hash writer 거부를 확인했다. `pnpm dev` 브라우저 테스트에서 local 구조화 draft 중 외부 파일 변경 감지, reload, manual merge validation 차단과 최신 external hash에 대한 명시적 overwrite 저장을 확인했다. 전체 workspace typecheck·build와 server 37개·web 2개·desktop 2개 테스트를 통과했다.
 
+### A26: Preview registration, environment contract와 policy
+
+Depends on: A15, A20
+
+- task에 사용자가 명시한 preview command 또는 생성된 산출물 상대 경로만 등록한다.
+- `cwd`, URL readiness, monorepo package root와 Docker 실행 방식을 versioned contract로 정의한다.
+- command는 project policy와 명시적 approval을 통과해야 하며 environment, URL과 log에 credential을 저장하지 않는다.
+
+완료 조건: 등록되지 않은 process나 workspace 밖 산출물을 preview로 취급하지 않고, monorepo·Docker 변형도 같은 validation 경계를 사용한다.
+
+### A27: Preview process lifecycle, persistence와 recovery
+
+Depends on: A26
+
+- preview 실행의 URL, 산출물 경로, PID, bounded log와 `booting`, `live`, `crashed`, `stopped` 상태를 project-local DB에 저장한다.
+- Harness 소유 process만 process group으로 시작·중지·재시작하고 readiness와 비정상 종료를 반영한다.
+- app 시작 시 이전 owner marker와 PID identity를 검증해 Harness가 소유했던 orphan preview만 정리한다.
+
+완료 조건: preview lifecycle이 재시작과 crash 뒤에도 재현 가능하고 외부 process를 종료하지 않는다.
+
+### A28: Preview card UI와 open actions
+
+Depends on: A27
+
+- task 카드와 상세 화면에 preview 상태, URL·산출물과 최근 log를 표시한다.
+- 시작·중지·재시작, 산출물 folder/file 열기와 HTTPS 또는 loopback URL 열기를 typed IPC와 선택적 HTTP transport로 제공한다.
+- desktop과 웹 개발 경로에서 동일 application service 결과와 오류를 사용한다.
+
+완료 조건: 사용자가 카드에서 preview 상태를 확인하고 안전하게 제어·열 수 있다.
+
 ## 실행 순서
 
-기본 순서는 A01부터 A25까지다. 의존성이 충족된 티켓만 시작하며, 각 티켓의 검증과 커밋이 끝난 후 다음 티켓으로 진행한다. `todo.md`의 선택적 Worktree Preview는 자동 진행 대상이 아니다.
+기본 순서는 A01부터 A28까지다. 의존성이 충족된 티켓만 시작하며, 각 티켓의 검증과 커밋이 끝난 후 다음 티켓으로 진행한다.
