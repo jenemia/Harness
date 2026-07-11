@@ -45,6 +45,13 @@ export const harnessMcpTools: McpToolDefinition[] = [
   { name: "list_projects", description: "List Harness projects allowed for this MCP client.", access: "read", inputSchema: objectSchema({}), outputSchema: toolOutputSchema },
   { name: "get_project", description: "Get a project board snapshot and settings.", access: "read", inputSchema: objectSchema(projectId, ["projectId"]), outputSchema: toolOutputSchema },
   { name: "get_project_health", description: "Get project health, scheduler, review, approval, and provider readiness.", access: "read", inputSchema: objectSchema(projectId, ["projectId"]), outputSchema: toolOutputSchema },
+  { name: "list_agents", description: "List active and archived project agent indexes.", access: "read", inputSchema: objectSchema(projectId, ["projectId"]), outputSchema: toolOutputSchema },
+  { name: "get_agent", description: "Get one agent Markdown document, instruction files, parse state, and folder information.", access: "read", inputSchema: objectSchema({ ...projectId, agentId: text }, ["projectId", "agentId"]), outputSchema: toolOutputSchema },
+  { name: "save_agent", description: "Create or update an agent through the shared Markdown service. Supports dry-run preview.", access: "write", inputSchema: objectSchema({ ...projectId, agentId: { type: "string" }, payload: { type: "object" }, ...dryRun }, ["projectId", "payload"]), outputSchema: toolOutputSchema },
+  { name: "save_agent_markdown", description: "Atomically save raw agent Markdown with an expected content hash. Supports dry-run preview.", access: "write", inputSchema: objectSchema({ ...projectId, agentId: text, raw: { type: "string" }, expectedHash: text, ...dryRun }, ["projectId", "agentId", "raw", "expectedHash"]), outputSchema: toolOutputSchema },
+  { name: "manage_agent_instruction", description: "Save, rename, remove, or reorder agent instruction Markdown through the shared service.", access: "write", inputSchema: objectSchema({ ...projectId, agentId: text, action: { enum: ["save", "rename", "remove", "reorder"] }, payload: { type: "object" }, ...dryRun }, ["projectId", "agentId", "action", "payload"]), outputSchema: toolOutputSchema },
+  { name: "clone_agent", description: "Clone an agent Markdown folder and derived index. Supports dry-run preview.", access: "write", inputSchema: objectSchema({ ...projectId, agentId: text, payload: { type: "object" }, ...dryRun }, ["projectId", "agentId", "payload"]), outputSchema: toolOutputSchema },
+  { name: "archive_agent", description: "Archive an agent after active-run and assignment checks. Supports dry-run preview.", access: "write", inputSchema: objectSchema({ ...projectId, agentId: text, payload: { type: "object" }, ...dryRun }, ["projectId", "agentId", "payload"]), outputSchema: toolOutputSchema },
   { name: "list_tasks", description: "List tasks with optional status and assignee filters.", access: "read", inputSchema: objectSchema({ ...projectId, status: { type: "string" }, assigneeAgentId: { type: "string" } }, ["projectId"]), outputSchema: toolOutputSchema },
   { name: "get_task", description: "Get one task with runs, interactions, approvals, and timeline.", access: "read", inputSchema: objectSchema({ ...projectId, taskId: text }, ["projectId", "taskId"]), outputSchema: toolOutputSchema },
   { name: "create_task", description: "Create a task through Harness application policy. Supports dry-run preview.", access: "write", inputSchema: objectSchema({ ...projectId, task: { type: "object" }, ...dryRun }, ["projectId", "task"]), outputSchema: toolOutputSchema },
@@ -146,6 +153,38 @@ async function dispatchTool(toolName: string, args: Record<string, unknown>, cli
   const project = requiredText(args.projectId, "projectId");
   if (toolName === "get_project") return invoke("projects:overview", { projectId: project });
   if (toolName === "get_project_health") return invoke("projects:report", { projectId: project });
+  if (toolName === "list_agents") {
+    const overview = asRecord(await invoke("projects:overview", { projectId: project }));
+    return { agents: array(overview.agents) };
+  }
+  if (toolName === "get_agent") return invoke("agents:get", { projectId: project, agentId: requiredText(args.agentId, "agentId") });
+  if (toolName === "save_agent") return previewOrInvoke(isDryRun, "agents:save", {
+    projectId: project,
+    agentId: typeof args.agentId === "string" ? args.agentId : null,
+    payload: requiredRecord(args.payload, "payload")
+  });
+  if (toolName === "save_agent_markdown") return previewOrInvoke(isDryRun, "agents:raw-save", {
+    projectId: project,
+    agentId: requiredText(args.agentId, "agentId"),
+    raw: typeof args.raw === "string" ? args.raw : "",
+    expectedHash: requiredText(args.expectedHash, "expectedHash")
+  });
+  if (toolName === "manage_agent_instruction") {
+    const action = requiredEnum(args.action, ["save", "rename", "remove", "reorder"] as const, "action");
+    const commands = {
+      save: "agents:instruction-save",
+      rename: "agents:instruction-rename",
+      remove: "agents:instruction-remove",
+      reorder: "agents:instruction-reorder"
+    } as const;
+    return previewOrInvoke(isDryRun, commands[action], {
+      projectId: project,
+      agentId: requiredText(args.agentId, "agentId"),
+      payload: requiredRecord(args.payload, "payload")
+    });
+  }
+  if (toolName === "clone_agent") return previewOrInvoke(isDryRun, "agents:clone", { projectId: project, agentId: requiredText(args.agentId, "agentId"), payload: requiredRecord(args.payload, "payload") });
+  if (toolName === "archive_agent") return previewOrInvoke(isDryRun, "agents:archive", { projectId: project, agentId: requiredText(args.agentId, "agentId"), payload: requiredRecord(args.payload, "payload") });
   if (toolName === "list_tasks") {
     const overview = asRecord(await invoke("projects:overview", { projectId: project }));
     return { tasks: array(overview.tasks).filter((task) =>

@@ -152,6 +152,8 @@ export type Agent = {
   definitionSchemaVersion: number | null;
   parseStatus: "legacy" | "valid" | "invalid";
   parseError: string | null;
+  archivedAt: string | null;
+  archivePath: string | null;
 };
 
 export type AgentTemplate = {

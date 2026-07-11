@@ -1352,6 +1352,8 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "agents", "parse_status", "TEXT NOT NULL DEFAULT 'legacy'");
   ensureColumn(db, "agents", "parse_error", "TEXT");
   ensureColumn(db, "agents", "enabled", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "agents", "archived_at", "TEXT");
+  ensureColumn(db, "agents", "archive_path", "TEXT");
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "waived_dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "linked_file_paths", "TEXT NOT NULL DEFAULT '[]'");
@@ -2380,6 +2382,8 @@ export function mapAgent(row: unknown): AgentRecord {
         : Number(r.definition_schema_version),
     parseStatus: (r.parse_status ? String(r.parse_status) : "legacy") as AgentRecord["parseStatus"],
     parseError: r.parse_error ? String(r.parse_error) : null,
+    archivedAt: r.archived_at ? String(r.archived_at) : null,
+    archivePath: r.archive_path ? String(r.archive_path) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };

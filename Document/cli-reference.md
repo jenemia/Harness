@@ -51,6 +51,20 @@ pnpm cli tasks:resolve-merge --project <projectId> --task <taskId>
 pnpm cli tasks:request-changes --project <projectId> --task <taskId> --reason "Needs another pass"
 ```
 
+## Agent Markdown management
+
+```bash
+pnpm cli agents:get --project <projectId> --agent <agentId>
+pnpm cli agents:update --project <projectId> --agent <agentId> --expectedHash <sha256> --persona "Updated persona"
+pnpm cli agents:raw-preview --project <projectId> --agent <agentId> --rawFile ./agent.md
+pnpm cli agents:raw-save --project <projectId> --agent <agentId> --expectedHash <sha256> --rawFile ./agent.md
+pnpm cli agents:instruction-save --project <projectId> --agent <agentId> --name security-review --expectedHash <sha256> --contentFile ./security-review.md
+pnpm cli agents:clone --project <projectId> --agent <agentId> --name "Agent Copy"
+pnpm cli agents:archive --project <projectId> --agent <agentId> --expectedHash <sha256> --reassignTo <replacementAgentId>
+```
+
+Agent and instruction writes require the hashes returned by `agents:get`. Archive refuses active runs and requires assigned open tasks to be reassigned or explicitly unassigned.
+
 ## Settings and MCP
 
 ```bash

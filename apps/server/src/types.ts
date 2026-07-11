@@ -173,6 +173,8 @@ export type AgentRecord = {
   definitionSchemaVersion: number | null;
   parseStatus: "legacy" | "valid" | "invalid";
   parseError: string | null;
+  archivedAt: string | null;
+  archivePath: string | null;
   createdAt: string;
   updatedAt: string;
 };

@@ -1994,7 +1994,7 @@ function getApproval(db: DatabaseSync, approvalId: string): ApprovalRecord | nul
 
 function findAgentForHandoff(db: DatabaseSync, role: string, excludeAgentId: string): AgentRecord | null {
   const rows = db
-    .prepare("SELECT * FROM agents WHERE id != ? ORDER BY created_at ASC")
+    .prepare("SELECT * FROM agents WHERE id != ? AND archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC")
     .all(excludeAgentId)
     .map(mapAgent);
   return rows.find((agent) => agent.role === role || agent.capabilities.includes(role)) || null;
@@ -2007,7 +2007,7 @@ function chooseAgent(db: DatabaseSync, task: TaskRecord): AgentRecord | null {
   }
 
   const row = db
-    .prepare("SELECT * FROM agents WHERE role != ? AND status = ? ORDER BY created_at ASC LIMIT 1")
+    .prepare("SELECT * FROM agents WHERE role != ? AND status = ? AND archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC LIMIT 1")
     .get("project-manager", "idle");
   return row ? mapAgent(row) : null;
 }
@@ -2019,7 +2019,7 @@ function chooseAgentWithCapacity(db: DatabaseSync, task: TaskRecord): AgentRecor
   }
 
   const rows = db
-    .prepare("SELECT * FROM agents WHERE role != ? ORDER BY created_at ASC")
+    .prepare("SELECT * FROM agents WHERE role != ? AND archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC")
     .all("project-manager")
     .map(mapAgent);
   return rows.find((agent) => hasAgentCapacity(db, agent)) || null;

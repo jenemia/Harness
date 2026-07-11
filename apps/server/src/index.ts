@@ -378,8 +378,60 @@ const server = http.createServer(async (req, res) => {
       }
 
       const agentActionMatch = childPath.match(/^agents\/([^/]+)$/);
+      if (agentActionMatch && req.method === "GET") {
+        sendJson(res, await invokeApplicationCommand("agents:get", { projectId: project.id, agentId: agentActionMatch[1] }));
+        return;
+      }
       if (agentActionMatch && req.method === "PATCH") {
         sendJson(res, await invokeApplicationCommand("agents:save", { projectId: project.id, agentId: agentActionMatch[1], payload: await readBody(req) }));
+        return;
+      }
+
+      const agentRawPreviewMatch = childPath.match(/^agents\/([^/]+)\/raw-preview$/);
+      if (agentRawPreviewMatch && req.method === "POST") {
+        const body = await readBody<{ raw?: string }>(req);
+        sendJson(res, await invokeApplicationCommand("agents:raw-preview", { projectId: project.id, agentId: agentRawPreviewMatch[1], raw: body.raw || "" }));
+        return;
+      }
+
+      const agentRawMatch = childPath.match(/^agents\/([^/]+)\/raw$/);
+      if (agentRawMatch && req.method === "PUT") {
+        const body = await readBody<{ raw?: string; expectedHash?: string }>(req);
+        sendJson(res, await invokeApplicationCommand("agents:raw-save", { projectId: project.id, agentId: agentRawMatch[1], raw: body.raw || "", expectedHash: body.expectedHash || "" }));
+        return;
+      }
+
+      const agentInstructionsMatch = childPath.match(/^agents\/([^/]+)\/instructions$/);
+      if (agentInstructionsMatch && (req.method === "POST" || req.method === "PATCH")) {
+        sendJson(res, await invokeApplicationCommand("agents:instruction-save", { projectId: project.id, agentId: agentInstructionsMatch[1], payload: await readBody(req) }), req.method === "POST" ? 201 : 200);
+        return;
+      }
+      if (agentInstructionsMatch && req.method === "DELETE") {
+        sendJson(res, await invokeApplicationCommand("agents:instruction-remove", { projectId: project.id, agentId: agentInstructionsMatch[1], payload: await readBody(req) }));
+        return;
+      }
+
+      const agentInstructionRenameMatch = childPath.match(/^agents\/([^/]+)\/instructions\/rename$/);
+      if (agentInstructionRenameMatch && req.method === "POST") {
+        sendJson(res, await invokeApplicationCommand("agents:instruction-rename", { projectId: project.id, agentId: agentInstructionRenameMatch[1], payload: await readBody(req) }));
+        return;
+      }
+
+      const agentInstructionReorderMatch = childPath.match(/^agents\/([^/]+)\/instructions\/reorder$/);
+      if (agentInstructionReorderMatch && req.method === "POST") {
+        sendJson(res, await invokeApplicationCommand("agents:instruction-reorder", { projectId: project.id, agentId: agentInstructionReorderMatch[1], payload: await readBody(req) }));
+        return;
+      }
+
+      const agentCloneMatch = childPath.match(/^agents\/([^/]+)\/clone$/);
+      if (agentCloneMatch && req.method === "POST") {
+        sendJson(res, await invokeApplicationCommand("agents:clone", { projectId: project.id, agentId: agentCloneMatch[1], payload: await readBody(req) }), 201);
+        return;
+      }
+
+      const agentArchiveMatch = childPath.match(/^agents\/([^/]+)\/archive$/);
+      if (agentArchiveMatch && req.method === "POST") {
+        sendJson(res, await invokeApplicationCommand("agents:archive", { projectId: project.id, agentId: agentArchiveMatch[1], payload: await readBody(req) }));
         return;
       }
 

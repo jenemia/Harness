@@ -6,6 +6,8 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  rmSync,
+  unlinkSync,
   writeFileSync
 } from "node:fs";
 import path from "node:path";
@@ -19,6 +21,21 @@ const agentSchemaVersion = 1;
 const knownSections = ["Persona", "Instructions", "Boundaries", "Review Policy", "Output Format"];
 
 export type AgentParseStatus = "valid" | "invalid";
+
+export type AgentInstructionDocument = {
+  path: string;
+  filePath: string;
+  content: string;
+  hash: string;
+};
+
+export type AgentDefinitionSource = {
+  filePath: string;
+  relativePath: string;
+  folderPath: string;
+  hash: string;
+  raw: string;
+};
 
 export type AgentDocument = {
   filePath: string;
@@ -86,6 +103,11 @@ export function createAgentDefinition(projectPath: string, agent: AgentRecord): 
 }
 
 export function readAgentDefinition(projectPath: string, relativePath: string): AgentDocument {
+  const source = readAgentDefinitionSource(projectPath, relativePath);
+  return parseAgentDocument(projectPath, relativePath, source.filePath, source.raw);
+}
+
+export function readAgentDefinitionSource(projectPath: string, relativePath: string): AgentDefinitionSource {
   const filePath = resolveDefinitionPath(projectPath, relativePath);
   if (!existsSync(filePath)) throw new Error(`Agent definition not found: ${relativePath}`);
   if (lstatSync(filePath).isSymbolicLink()) throw new Error("Agent definition cannot be a symlink.");
@@ -93,6 +115,15 @@ export function readAgentDefinition(projectPath: string, relativePath: string): 
   const realAgentRoot = realpathSync(path.join(projectHarnessPath(projectPath), "agent"));
   if (!isInside(realFilePath, realAgentRoot)) throw new Error("Agent definition symlink escapes .harness/agent.");
   const raw = readFileSync(filePath, "utf8");
+  return { filePath, relativePath: toProjectRelative(projectPath, filePath), folderPath: path.dirname(filePath), hash: hashContent(raw), raw };
+}
+
+export function validateAgentDefinitionRaw(projectPath: string, relativePath: string, raw: string) {
+  const filePath = resolveDefinitionPath(projectPath, relativePath);
+  return parseAgentDocument(projectPath, relativePath, filePath, raw);
+}
+
+function parseAgentDocument(projectPath: string, relativePath: string, filePath: string, raw: string): AgentDocument {
   assertNoSecrets(raw);
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/);
   if (!match) throw new Error("agent.md must start with YAML frontmatter.");
@@ -140,6 +171,174 @@ export function readAgentDefinition(projectPath: string, relativePath: string): 
   };
 }
 
+export function writeAgentDefinitionRaw(
+  projectPath: string,
+  relativePath: string,
+  raw: string,
+  expectedHash: string,
+  expectedAgentId?: string
+) {
+  const current = readAgentDefinitionSource(projectPath, relativePath);
+  if (!expectedHash || current.hash !== expectedHash) throw new AgentDefinitionConflictError();
+  const candidate = validateAgentDefinitionRaw(projectPath, relativePath, raw);
+  if (expectedAgentId && candidate.definition.id !== expectedAgentId) throw new Error("Agent definition id cannot be changed.");
+  writeAtomic(current.filePath, raw.endsWith("\n") ? raw : `${raw}\n`);
+  return readAgentDefinition(projectPath, relativePath);
+}
+
+export function listAgentInstructions(projectPath: string, relativePath: string) {
+  const document = readAgentDefinition(projectPath, relativePath);
+  return document.definition.instructionFiles.map((instructionPath) => readInstruction(document.folderPath, instructionPath));
+}
+
+export function saveAgentInstruction(
+  projectPath: string,
+  relativePath: string,
+  input: {
+    instructionPath?: string | null;
+    name?: string | null;
+    content: string;
+    expectedDefinitionHash: string;
+    expectedInstructionHash?: string | null;
+  }
+) {
+  const document = requireDefinitionHash(projectPath, relativePath, input.expectedDefinitionHash);
+  assertNoSecrets(input.content);
+  const creating = !input.instructionPath;
+  const instructionPath = creating
+    ? normalizeInstructionName(input.name || "instruction")
+    : requiredInstructionReference(document, input.instructionPath as string);
+  const filePath = path.resolve(document.folderPath, instructionPath);
+  if (creating && existsSync(filePath)) throw new Error(`Instruction file already exists: ${instructionPath}`);
+  if (!creating) {
+    const existing = readInstruction(document.folderPath, instructionPath);
+    if (input.expectedInstructionHash && existing.hash !== input.expectedInstructionHash) throw new AgentDefinitionConflictError();
+  }
+  writeAtomic(filePath, input.content.endsWith("\n") ? input.content : `${input.content}\n`);
+  if (creating) {
+    try {
+      writeInstructionOrder(document, [...document.definition.instructionFiles, instructionPath]);
+    } catch (error) {
+      rmSync(filePath, { force: true });
+      throw error;
+    }
+  }
+  return agentDocumentBundle(projectPath, relativePath);
+}
+
+export function renameAgentInstruction(
+  projectPath: string,
+  relativePath: string,
+  input: { instructionPath: string; name: string; expectedDefinitionHash: string; expectedInstructionHash: string }
+) {
+  const document = requireDefinitionHash(projectPath, relativePath, input.expectedDefinitionHash);
+  const instructionPath = requiredInstructionReference(document, input.instructionPath);
+  const existing = readInstruction(document.folderPath, instructionPath);
+  if (existing.hash !== input.expectedInstructionHash) throw new AgentDefinitionConflictError();
+  const nextPath = normalizeInstructionName(input.name);
+  if (nextPath === instructionPath) return agentDocumentBundle(projectPath, relativePath);
+  const nextFilePath = path.resolve(document.folderPath, nextPath);
+  if (existsSync(nextFilePath)) throw new Error(`Instruction file already exists: ${nextPath}`);
+  renameSync(existing.filePath, nextFilePath);
+  try {
+    writeInstructionOrder(document, document.definition.instructionFiles.map((value) => value === instructionPath ? nextPath : value));
+  } catch (error) {
+    renameSync(nextFilePath, existing.filePath);
+    throw error;
+  }
+  return agentDocumentBundle(projectPath, relativePath);
+}
+
+export function removeAgentInstruction(
+  projectPath: string,
+  relativePath: string,
+  input: { instructionPath: string; expectedDefinitionHash: string; expectedInstructionHash: string }
+) {
+  const document = requireDefinitionHash(projectPath, relativePath, input.expectedDefinitionHash);
+  const instructionPath = requiredInstructionReference(document, input.instructionPath);
+  const existing = readInstruction(document.folderPath, instructionPath);
+  if (existing.hash !== input.expectedInstructionHash) throw new AgentDefinitionConflictError();
+  const temporaryPath = `${existing.filePath}.${process.pid}.${randomUUID()}.remove`;
+  renameSync(existing.filePath, temporaryPath);
+  try {
+    writeInstructionOrder(document, document.definition.instructionFiles.filter((value) => value !== instructionPath));
+    unlinkSync(temporaryPath);
+  } catch (error) {
+    if (existsSync(temporaryPath)) renameSync(temporaryPath, existing.filePath);
+    throw error;
+  }
+  return agentDocumentBundle(projectPath, relativePath);
+}
+
+export function reorderAgentInstructions(
+  projectPath: string,
+  relativePath: string,
+  input: { instructionPaths: string[]; expectedDefinitionHash: string }
+) {
+  const document = requireDefinitionHash(projectPath, relativePath, input.expectedDefinitionHash);
+  const normalized = input.instructionPaths.map((value) => requiredInstructionReference(document, value));
+  if (new Set(normalized).size !== normalized.length ||
+      [...normalized].sort().join("\n") !== [...document.definition.instructionFiles].sort().join("\n")) {
+    throw new Error("Instruction order must contain each referenced instruction exactly once.");
+  }
+  writeInstructionOrder(document, normalized);
+  return agentDocumentBundle(projectPath, relativePath);
+}
+
+export function cloneAgentDefinition(
+  projectPath: string,
+  sourceRelativePath: string,
+  agent: AgentRecord
+) {
+  const source = readAgentDefinition(projectPath, sourceRelativePath);
+  const folderName = `${slugify(agent.name)}--${agent.id.slice(0, 8)}`;
+  const relativePath = path.posix.join("agent", folderName, "agent.md");
+  const filePath = resolveDefinitionPath(projectPath, relativePath);
+  if (existsSync(path.dirname(filePath))) throw new Error("Cloned agent folder already exists.");
+  mkdirSync(path.join(path.dirname(filePath), "instructions"), { recursive: true, mode: 0o700 });
+  try {
+    for (const instruction of listAgentInstructions(projectPath, sourceRelativePath)) {
+      writeAtomic(path.resolve(path.dirname(filePath), instruction.path), instruction.content);
+    }
+    const raw = renderAgentDocument({
+      frontmatter: {
+        ...source.frontmatter,
+        id: agent.id,
+        name: agent.name,
+        enabled: agent.enabled
+      },
+      sections: source.sections
+    });
+    writeAtomic(filePath, raw);
+    return readAgentDefinition(projectPath, relativePath);
+  } catch (error) {
+    rmSync(path.dirname(filePath), { recursive: true, force: true });
+    throw error;
+  }
+}
+
+export function archiveAgentDefinition(projectPath: string, relativePath: string, expectedHash: string) {
+  const document = readAgentDefinitionSource(projectPath, relativePath);
+  if (!expectedHash || document.hash !== expectedHash) throw new AgentDefinitionConflictError();
+  const archiveRoot = path.join(projectHarnessPath(projectPath), "agent", ".archive");
+  mkdirSync(archiveRoot, { recursive: true, mode: 0o700 });
+  const target = path.join(archiveRoot, path.basename(document.folderPath));
+  if (existsSync(target)) throw new Error("Agent archive folder already exists.");
+  renameSync(document.folderPath, target);
+  return {
+    archivePath: toProjectRelative(projectPath, target),
+    folderPath: target
+  };
+}
+
+export function restoreArchivedAgentDefinition(projectPath: string, archivePath: string, relativePath: string) {
+  const archiveTarget = path.resolve(projectHarnessPath(projectPath), archivePath);
+  const archiveRoot = path.resolve(projectHarnessPath(projectPath), "agent", ".archive");
+  if (!isInside(archiveTarget, archiveRoot)) throw new Error("Agent archive path escapes .harness/agent/.archive.");
+  const definitionTarget = resolveDefinitionPath(projectPath, relativePath);
+  renameSync(archiveTarget, path.dirname(definitionTarget));
+}
+
 export function updateAgentDefinition(
   projectPath: string,
   relativePath: string,
@@ -176,7 +375,7 @@ export function updateAgentDefinition(
 }
 
 export function syncProjectAgentDefinitions(db: DatabaseSync, projectPath: string) {
-  const rows = db.prepare("SELECT * FROM agents").all() as Array<Record<string, unknown>>;
+  const rows = db.prepare("SELECT * FROM agents WHERE archived_at IS NULL").all() as Array<Record<string, unknown>>;
   const results: Array<{ id: string; status: AgentParseStatus; error: string | null }> = [];
   for (const row of rows) {
     const id = String(row.id);
@@ -294,6 +493,52 @@ function validateInstructionPath(folderPath: string, instructionFile: string) {
   return target;
 }
 
+function readInstruction(folderPath: string, instructionPath: string): AgentInstructionDocument {
+  const filePath = validateInstructionPath(folderPath, instructionPath);
+  const content = readFileSync(filePath, "utf8");
+  assertNoSecrets(content);
+  return { path: instructionPath, filePath, content, hash: hashContent(content) };
+}
+
+function requireDefinitionHash(projectPath: string, relativePath: string, expectedHash: string) {
+  const document = readAgentDefinition(projectPath, relativePath);
+  if (!expectedHash || document.hash !== expectedHash) throw new AgentDefinitionConflictError();
+  return document;
+}
+
+function requiredInstructionReference(document: AgentDocument, instructionPath: string) {
+  if (!document.definition.instructionFiles.includes(instructionPath)) {
+    throw new Error(`Instruction file is not referenced by agent.md: ${instructionPath}`);
+  }
+  validateInstructionPath(document.folderPath, instructionPath);
+  return instructionPath;
+}
+
+function normalizeInstructionName(name: string) {
+  const stem = name.trim().replace(/\.md$/i, "").replace(/\s+/g, "-");
+  if (!stem || stem === "." || stem === ".." || /[\\/\0\r\n]/.test(stem)) {
+    throw new Error("Instruction name must be a safe Markdown filename.");
+  }
+  return `instructions/${stem}.md`;
+}
+
+function writeInstructionOrder(document: AgentDocument, instructionFiles: string[]) {
+  for (const instructionFile of instructionFiles) validateInstructionPath(document.folderPath, instructionFile);
+  const raw = renderAgentDocument({
+    frontmatter: { ...document.frontmatter, instructionFiles },
+    sections: document.sections
+  });
+  assertNoSecrets(raw);
+  writeAtomic(document.filePath, raw);
+}
+
+function agentDocumentBundle(projectPath: string, relativePath: string) {
+  return {
+    document: readAgentDefinition(projectPath, relativePath),
+    instructions: listAgentInstructions(projectPath, relativePath)
+  };
+}
+
 function resolveDefinitionPath(projectPath: string, relativePath: string) {
   const normalized = relativePath.replace(/\\/g, "/");
   if (path.posix.isAbsolute(normalized) || normalized.split("/").includes("..") || !normalized.startsWith("agent/")) {
@@ -333,7 +578,9 @@ function legacyAgent(row: Record<string, unknown>): AgentRecord {
     definitionHash: null,
     definitionSchemaVersion: null,
     parseStatus: "legacy",
-    parseError: null
+    parseError: null,
+    archivedAt: null,
+    archivePath: null
   };
 }
 

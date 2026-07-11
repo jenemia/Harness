@@ -169,6 +169,10 @@ folder name은 표시 이름 변경과 분리된 stable path로 취급한다. ap
 
 instruction file은 agent folder 밖을 참조할 수 없고 symlink, `..`와 absolute path를 허용하지 않는다. provider credential과 secret은 agent Markdown에 기록하지 않는다. 각 run은 실행 당시 agent definition hash와 사용한 Markdown snapshot을 기록해 이후 파일이 바뀌어도 실행 맥락을 재현할 수 있게 한다.
 
+agent application service는 structured patch와 raw Markdown save, instruction 생성·수정·이름 변경·순서 변경·제거, clone과 archive를 하나의 atomic writer와 validation 경계로 처리한다. 모든 write는 `agent.md` content hash와 instruction hash를 비교해 stale overwrite를 거부한다. parsing에 실패한 파일도 raw source와 hash는 반환해 수정할 수 있으며 새 run만 차단한다. DB의 name, role, persona와 실행 설정 열은 runtime/planner 조회를 위한 파생 cache로만 사용하고 `agent.md` sync 외 경로에서 독립 편집하지 않는다.
+
+archive는 active 또는 suspended run이 있으면 거부한다. 완료되지 않은 assigned task가 있으면 replacement agent 또는 명시적 unassign을 요구하고, 통과하면 folder 전체를 `.harness/agent/.archive/<agent-folder>/`로 atomic rename한 뒤 DB에는 archive path, runtime 상태와 history 연결만 남긴다. clone은 source의 custom section과 instruction Markdown을 새 stable id folder에 복사하며 기본적으로 disabled 상태로 시작한다.
+
 ## 사용자 전역 데이터
 
 project에 종속되지 않는 다음 정보는 OS application data directory에 둔다.

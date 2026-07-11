@@ -103,7 +103,7 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
     if (preview.tasks.length >= largePlanTaskThreshold && !input.allowLargePlan) {
       throw new Error("Large plans require preview confirmation. Preview the plan first, then set allowLargePlan to true.");
     }
-    const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
+    const agents = db.prepare("SELECT * FROM agents WHERE archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC").all().map(mapAgent);
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
     const inserted: TaskRecord[] = [];
 
@@ -327,7 +327,7 @@ function createDeterministicPlanningProvider(): PlanningProvider {
 
 function previewPlanWithAssignments(db: ReturnType<typeof openProjectDb>, input: PlanRequest) {
   const preview = previewPlan(input);
-  const agents = db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent);
+  const agents = db.prepare("SELECT * FROM agents WHERE archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC").all().map(mapAgent);
   const agentLoads = createAgentPlanningLoads(db);
   return {
     ...preview,

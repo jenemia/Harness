@@ -324,11 +324,15 @@ Status: 완료
 
 Depends on: A03, A20
 
+Status: 완료
+
 - agent Markdown CRUD, instruction file 관리, clone, archive와 folder-open 정보를 공통 service로 통합한다.
 - DB의 편집 원본 중복을 제거하고 runtime·parse·hash·통계 파생 index만 유지한다.
 - active assignment/run archive 차단과 expected hash validation을 제공한다.
 
 완료 조건: desktop, web, CLI와 MCP가 같은 atomic writer와 validation으로 agent 원본을 변경한다.
+
+검증: structured patch와 raw Markdown save, invalid source 복구, instruction 생성·수정·이름·순서·제거, clone, archive와 folder 정보를 공통 application service에 통합했다. DB의 agent 내용 필드는 `agent.md`에서만 sync되는 runtime/planner 파생 cache로 제한하고 archive index를 추가했다. definition/instruction expected hash 충돌, symlink·secret validation, active run 및 assigned task archive 차단, replacement reassignment, archive 원본 보존과 clone instruction 복제를 통합 테스트했다. typed IPC/HTTP/CLI/MCP가 같은 command dispatcher를 사용하며 실제 CLI update와 MCP update/dry-run을 확인했다. 전체 workspace typecheck·build와 server 35개·desktop 2개 테스트를 통과했다.
 
 ### A24: Agent Markdown editor, diff와 validation UI
 

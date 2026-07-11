@@ -50,6 +50,8 @@ import {
 } from "./runtime.js";
 import {
   createAgentService,
+  archiveAgentService,
+  cloneAgentService,
   createDocumentService,
   createFollowUpTasksService,
   createMemoryService,
@@ -57,14 +59,22 @@ import {
   createTaskService,
   decomposeTaskService,
   getDocumentService,
+  getAgentDocumentService,
   importProjectsService,
   registerProjectService,
+  previewAgentRawService,
+  removeAgentInstructionService,
+  renameAgentInstructionService,
+  reorderAgentInstructionsService,
+  saveAgentInstructionService,
+  saveAgentRawService,
   unregisterProjectService,
   updateAgentService,
   updateDocumentService,
   updateMemoryService,
   updateProjectService,
-  updateTaskService
+  updateTaskService,
+  type AgentUpdateInput
 } from "./services.js";
 import type { AgentRecord, TaskRecord } from "./types.js";
 import { enforceProviderEventRetention, replayProviderEvents, subscribeProviderEvents } from "./provider-events.js";
@@ -221,9 +231,45 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["agents:save"];
       const project = requiredProject(value.projectId);
       const agent = value.agentId
-        ? updateAgentService(project, value.agentId, value.payload as Partial<AgentRecord>)
+        ? updateAgentService(project, value.agentId, value.payload as AgentUpdateInput)
         : createAgentService(project, value.payload as Partial<AgentRecord>);
       return { agent, overview: getProjectOverview(project) };
+    }
+    case "agents:get": {
+      const value = input(payload) as HarnessCommandInputs["agents:get"];
+      return getAgentDocumentService(requiredProject(value.projectId), value.agentId);
+    }
+    case "agents:raw-preview": {
+      const value = input(payload) as HarnessCommandInputs["agents:raw-preview"];
+      return previewAgentRawService(requiredProject(value.projectId), value.agentId, value.raw);
+    }
+    case "agents:raw-save": {
+      const value = input(payload) as HarnessCommandInputs["agents:raw-save"];
+      return saveAgentRawService(requiredProject(value.projectId), value.agentId, { raw: value.raw, expectedHash: value.expectedHash });
+    }
+    case "agents:instruction-save": {
+      const value = input(payload) as HarnessCommandInputs["agents:instruction-save"];
+      return saveAgentInstructionService(requiredProject(value.projectId), value.agentId, value.payload as Parameters<typeof saveAgentInstructionService>[2]);
+    }
+    case "agents:instruction-rename": {
+      const value = input(payload) as HarnessCommandInputs["agents:instruction-rename"];
+      return renameAgentInstructionService(requiredProject(value.projectId), value.agentId, value.payload as Parameters<typeof renameAgentInstructionService>[2]);
+    }
+    case "agents:instruction-remove": {
+      const value = input(payload) as HarnessCommandInputs["agents:instruction-remove"];
+      return removeAgentInstructionService(requiredProject(value.projectId), value.agentId, value.payload as Parameters<typeof removeAgentInstructionService>[2]);
+    }
+    case "agents:instruction-reorder": {
+      const value = input(payload) as HarnessCommandInputs["agents:instruction-reorder"];
+      return reorderAgentInstructionsService(requiredProject(value.projectId), value.agentId, value.payload as Parameters<typeof reorderAgentInstructionsService>[2]);
+    }
+    case "agents:clone": {
+      const value = input(payload) as HarnessCommandInputs["agents:clone"];
+      return cloneAgentService(requiredProject(value.projectId), value.agentId, value.payload as Parameters<typeof cloneAgentService>[2]);
+    }
+    case "agents:archive": {
+      const value = input(payload) as HarnessCommandInputs["agents:archive"];
+      return archiveAgentService(requiredProject(value.projectId), value.agentId, value.payload as Parameters<typeof archiveAgentService>[2]);
     }
     case "plans:preview": {
       const value = input(payload) as HarnessCommandInputs["plans:preview"];

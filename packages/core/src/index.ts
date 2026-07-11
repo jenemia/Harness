@@ -26,6 +26,15 @@ export type HarnessCommandInputs = {
   "project-settings:update": { projectId: string; payload: object };
   "system:select-folder": { initialPath?: string };
   "agents:save": { projectId: string; agentId?: string | null; payload: object };
+  "agents:get": { projectId: string; agentId: string };
+  "agents:raw-preview": { projectId: string; agentId: string; raw: string };
+  "agents:raw-save": { projectId: string; agentId: string; raw: string; expectedHash: string };
+  "agents:instruction-save": { projectId: string; agentId: string; payload: object };
+  "agents:instruction-rename": { projectId: string; agentId: string; payload: object };
+  "agents:instruction-remove": { projectId: string; agentId: string; payload: object };
+  "agents:instruction-reorder": { projectId: string; agentId: string; payload: object };
+  "agents:clone": { projectId: string; agentId: string; payload: object };
+  "agents:archive": { projectId: string; agentId: string; payload: object };
   "plans:preview": { projectId: string; payload: object };
   "plans:create": { projectId: string; payload: object };
   "documents:create": { projectId: string; payload: object };
@@ -196,6 +205,13 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "projects:update" || command === "projects:remove" || command === "projects:overview" ||
       command === "projects:report" || command === "projects:init-git" || command === "projects:schedule") return true;
   if (command === "agents:save") return isRecord(payload.payload) && (payload.agentId === undefined || payload.agentId === null || isText(payload.agentId));
+  if (command === "agents:get") return isText(payload.agentId);
+  if (command === "agents:raw-preview") return isText(payload.agentId) && typeof payload.raw === "string";
+  if (command === "agents:raw-save") return isText(payload.agentId) && typeof payload.raw === "string" && isText(payload.expectedHash);
+  if (command === "agents:instruction-save" || command === "agents:instruction-rename" || command === "agents:instruction-remove" ||
+      command === "agents:instruction-reorder" || command === "agents:clone" || command === "agents:archive") {
+    return isText(payload.agentId) && isRecord(payload.payload);
+  }
   if (command === "project-settings:get") return isText(payload.projectId);
   if (command === "project-settings:update" || command === "documents:create" || command === "memories:create") return isRecord(payload.payload);
   if (command === "documents:update") return isText(payload.documentId) && isRecord(payload.payload);
@@ -253,7 +269,8 @@ const commandNames = new Set<HarnessCommand>([
   "projects:report", "projects:init-git", "projects:schedule", "providers:list", "templates:agents", "templates:workflows",
   "mcp:clients", "mcp:client-save", "mcp:diagnose",
   "templates:projects", "templates:agent-create", "templates:workflow-create", "templates:project-create", "settings:get", "settings:update", "project-settings:get", "project-settings:update",
-  "system:select-folder", "agents:save", "plans:preview", "plans:create", "documents:create", "documents:update", "documents:plan-preview", "documents:plan", "global-memories:list", "global-memories:create",
+  "system:select-folder", "agents:save", "agents:get", "agents:raw-preview", "agents:raw-save", "agents:instruction-save", "agents:instruction-rename", "agents:instruction-remove", "agents:instruction-reorder", "agents:clone", "agents:archive",
+  "plans:preview", "plans:create", "documents:create", "documents:update", "documents:plan-preview", "documents:plan", "global-memories:list", "global-memories:create",
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
   "interactions:list", "interactions:respond",
   "reviews:report", "reviews:diff", "reviews:file-update", "reviews:comment-create", "reviews:comment-update", "reviews:followup",

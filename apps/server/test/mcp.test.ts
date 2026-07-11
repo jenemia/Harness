@@ -43,7 +43,7 @@ test("MCP tools enforce client scopes, dry-run, project policy, bridge routing, 
 
     const initialized = await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }, "cursor-test");
     assert.equal((initialized as { result: { protocolVersion: string } }).result.protocolVersion, harnessMcpProtocolVersion);
-    assert.equal(harnessMcpTools.length, 15);
+    assert.equal(harnessMcpTools.length, 22);
     assert.ok(harnessMcpTools.every((tool) => tool.inputSchema["x-harness-schema-version"] === harnessMcpSchemaVersion));
     assert.ok(harnessMcpTools.every((tool) => tool.outputSchema["x-harness-schema-version"] === harnessMcpSchemaVersion));
     await assert.rejects(
@@ -83,6 +83,25 @@ test("MCP tools enforce client scopes, dry-run, project policy, bridge routing, 
     );
 
     saveMcpClient({ id: "cursor-test", writeScope: true });
+    const agents = await callMcpTool("cursor-test", "list_agents", { projectId: first.project.id }) as { agents: Array<{ id: string }> };
+    assert.ok(agents.agents.length > 0);
+    const agentDocument = await callMcpTool("cursor-test", "get_agent", { projectId: first.project.id, agentId: agents.agents[0].id }) as { document: { hash: string; raw: string } };
+    assert.ok(agentDocument.document.hash);
+    await callMcpTool("cursor-test", "save_agent", {
+      projectId: first.project.id,
+      agentId: agents.agents[0].id,
+      payload: { persona: "Updated through the shared MCP agent service.", expectedHash: agentDocument.document.hash }
+    });
+    const updatedAgentDocument = await callMcpTool("cursor-test", "get_agent", { projectId: first.project.id, agentId: agents.agents[0].id }) as { document: { hash: string; raw: string } };
+    assert.match(updatedAgentDocument.document.raw, /Updated through the shared MCP agent service/);
+    const agentPreview = await callMcpTool("cursor-test", "save_agent_markdown", {
+      projectId: first.project.id,
+      agentId: agents.agents[0].id,
+      raw: updatedAgentDocument.document.raw,
+      expectedHash: updatedAgentDocument.document.hash,
+      dryRun: true
+    }) as { dryRun: boolean; command: string };
+    assert.deepEqual({ dryRun: agentPreview.dryRun, command: agentPreview.command }, { dryRun: true, command: "agents:raw-save" });
     const created = await callMcpTool("cursor-test", "create_task", {
       projectId: first.project.id,
       task: { title: "MCP-created task", status: "Backlog", workspaceMode: "harness" }

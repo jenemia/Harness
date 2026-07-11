@@ -1,16 +1,12 @@
 # Harness TODO
 
-이 문서는 아직 완료되지 않은 작업만 관리한다. 완료된 A01–A22 구현과 티켓별 검증·커밋 이력은 [Harness TODO Automation Tickets](Document/todo-automation-tickets.md)에서 확인한다.
+이 문서는 아직 완료되지 않은 작업만 관리한다. 완료된 A01–A23 구현과 티켓별 검증·커밋 이력은 [Harness TODO Automation Tickets](Document/todo-automation-tickets.md)에서 확인한다.
 
 구조 변경 작업은 [Harness Local Desktop Architecture](Document/local-desktop-architecture.md)를 먼저 확인하고 application service 경계, project-local `.harness/`, typed transport와 CLI-owned 인증 원칙을 따른다.
 
 ## `.harness/agent` 관리 완성
 
 기준 원본은 project별 `.harness/agent/<agent-slug>--<short-id>/agent.md`와 명시적으로 연결된 instruction Markdown이다.
-
-### 파생 index 정리
-
-- [ ] DB에는 agent id, 파일 경로, content hash, parse 상태, runtime 상태, current task와 실행 통계만 파생 index로 남긴다.
 
 ### App 및 Web 관리 UI
 
@@ -24,13 +20,11 @@
 - [ ] agent 복제, 비활성화, archive와 folder 열기를 제공한다.
 - [ ] archive 시 `.harness/agent/.archive/<agent-folder>/`에 원본 Markdown을 보존한다.
 - [ ] active run 또는 assigned task가 있는 agent의 archive·삭제를 차단하고 reassignment 흐름을 제공한다.
-- [ ] desktop typed IPC와 선택적 web transport가 동일 agent application service를 사용하게 한다.
 
 ### 외부 편집과 충돌 처리
 
 - [ ] file watcher가 외부 editor의 `agent.md`와 instruction 변경을 debounce해 감지한다.
 - [ ] UI 편집 중 외부 파일이 바뀌면 content hash 충돌을 감지하고 overwrite, reload 또는 수동 merge를 선택하게 한다.
-- [ ] app, web, CLI와 MCP의 agent 저장이 같은 validation과 atomic writer를 사용하게 한다.
 
 ## 진행하면 좋은 것들 (자동 진행 대상 아님)
 

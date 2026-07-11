@@ -36,8 +36,17 @@ const commands: Record<string, CommandHandler> = {
   "mcp:client-save": saveMcpClientCommand,
   "mcp:diagnose": diagnoseMcpCommand,
   "agents:list": listAgentsCommand,
+  "agents:get": getAgentCommand,
   "agents:create": createAgentCommand,
   "agents:update": updateAgentCommand,
+  "agents:raw-preview": previewAgentRawCommand,
+  "agents:raw-save": saveAgentRawCommand,
+  "agents:instruction-save": saveAgentInstructionCommand,
+  "agents:instruction-rename": renameAgentInstructionCommand,
+  "agents:instruction-remove": removeAgentInstructionCommand,
+  "agents:instruction-reorder": reorderAgentInstructionsCommand,
+  "agents:clone": cloneAgentCommand,
+  "agents:archive": archiveAgentCommand,
   "plans:preview": previewPlanCommand,
   "plans:create": createPlanCommand,
   "documents:list": listDocumentsCommand,
@@ -289,6 +298,11 @@ async function listAgentsCommand(args: string[]) {
   return { agents: overview.agents, overview };
 }
 
+function getAgentCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:get", { projectId: getRequiredOption(options, "project"), agentId: getRequiredOption(options, "agent") });
+}
+
 function createAgentCommand(args: string[]) {
   const options = parseOptions(args);
   const projectId = getRequiredOption(options, "project");
@@ -320,7 +334,81 @@ function updateAgentCommand(args: string[]) {
     allowedTools: options.allowedTools !== undefined ? parseCsv(options.allowedTools) : undefined,
     boundaries: readOptionalText(options, "boundaries", "boundariesFile"),
     maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined,
+    enabled: parseOptionalBoolean(options.enabled, "enabled"),
+    expectedHash: options.expectedHash
+  } });
+}
+
+function previewAgentRawCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:raw-preview", {
+    projectId: getRequiredOption(options, "project"),
+    agentId: getRequiredOption(options, "agent"),
+    raw: readRequiredText(options, "raw", "rawFile")
+  });
+}
+
+function saveAgentRawCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:raw-save", {
+    projectId: getRequiredOption(options, "project"),
+    agentId: getRequiredOption(options, "agent"),
+    raw: readRequiredText(options, "raw", "rawFile"),
+    expectedHash: getRequiredOption(options, "expectedHash")
+  });
+}
+
+function saveAgentInstructionCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:instruction-save", { projectId: getRequiredOption(options, "project"), agentId: getRequiredOption(options, "agent"), payload: {
+    instructionPath: options.instruction,
+    name: options.name,
+    content: readRequiredText(options, "content", "contentFile"),
+    expectedDefinitionHash: getRequiredOption(options, "expectedHash"),
+    expectedInstructionHash: options.expectedInstructionHash
+  } });
+}
+
+function renameAgentInstructionCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:instruction-rename", { projectId: getRequiredOption(options, "project"), agentId: getRequiredOption(options, "agent"), payload: {
+    instructionPath: getRequiredOption(options, "instruction"),
+    name: getRequiredOption(options, "name"),
+    expectedDefinitionHash: getRequiredOption(options, "expectedHash"),
+    expectedInstructionHash: getRequiredOption(options, "expectedInstructionHash")
+  } });
+}
+
+function removeAgentInstructionCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:instruction-remove", { projectId: getRequiredOption(options, "project"), agentId: getRequiredOption(options, "agent"), payload: {
+    instructionPath: getRequiredOption(options, "instruction"),
+    expectedDefinitionHash: getRequiredOption(options, "expectedHash"),
+    expectedInstructionHash: getRequiredOption(options, "expectedInstructionHash")
+  } });
+}
+
+function reorderAgentInstructionsCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:instruction-reorder", { projectId: getRequiredOption(options, "project"), agentId: getRequiredOption(options, "agent"), payload: {
+    instructionPaths: parseCsv(getRequiredOption(options, "instructions")),
+    expectedDefinitionHash: getRequiredOption(options, "expectedHash")
+  } });
+}
+
+function cloneAgentCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:clone", { projectId: getRequiredOption(options, "project"), agentId: getRequiredOption(options, "agent"), payload: {
+    name: options.name,
     enabled: parseOptionalBoolean(options.enabled, "enabled")
+  } });
+}
+
+function archiveAgentCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("agents:archive", { projectId: getRequiredOption(options, "project"), agentId: getRequiredOption(options, "agent"), payload: {
+    expectedHash: getRequiredOption(options, "expectedHash"),
+    ...(options.reassignTo !== undefined ? { reassignToAgentId: options.reassignTo || null } : {})
   } });
 }
 
@@ -980,8 +1068,17 @@ Usage:
   pnpm --filter @harness/server cli mcp:client-save --client <id> [--label <name>] [--read true|false] [--write true|false] [--projects project1,project2] [--enabled true|false]
   pnpm --filter @harness/server cli mcp:diagnose
   pnpm --filter @harness/server cli agents:list --project <projectId>
+  pnpm --filter @harness/server cli agents:get --project <projectId> --agent <agentId>
   pnpm --filter @harness/server cli agents:create --project <projectId> --name <text> [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
-  pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
+  pnpm --filter @harness/server cli agents:update --project <projectId> --agent <agentId> [--expectedHash <sha256>] [--name <text>] [--role <role>] [--persona <text>|--personaFile <file>] [--modelBackend <id>] [--cliCommand <command>|--clearCliCommand] [--capabilities a,b] [--allowedTools shell,tests] [--boundaries <text>|--boundariesFile <file>] [--maxParallel 2]
+  pnpm --filter @harness/server cli agents:raw-preview --project <projectId> --agent <agentId> (--raw <markdown>|--rawFile <file>)
+  pnpm --filter @harness/server cli agents:raw-save --project <projectId> --agent <agentId> --expectedHash <sha256> (--raw <markdown>|--rawFile <file>)
+  pnpm --filter @harness/server cli agents:instruction-save --project <projectId> --agent <agentId> --expectedHash <sha256> [--instruction <path>|--name <name>] (--content <markdown>|--contentFile <file>) [--expectedInstructionHash <sha256>]
+  pnpm --filter @harness/server cli agents:instruction-rename --project <projectId> --agent <agentId> --instruction <path> --name <name> --expectedHash <sha256> --expectedInstructionHash <sha256>
+  pnpm --filter @harness/server cli agents:instruction-remove --project <projectId> --agent <agentId> --instruction <path> --expectedHash <sha256> --expectedInstructionHash <sha256>
+  pnpm --filter @harness/server cli agents:instruction-reorder --project <projectId> --agent <agentId> --instructions <path1,path2> --expectedHash <sha256>
+  pnpm --filter @harness/server cli agents:clone --project <projectId> --agent <agentId> [--name <text>] [--enabled true|false]
+  pnpm --filter @harness/server cli agents:archive --project <projectId> --agent <agentId> --expectedHash <sha256> [--reassignTo <agentId>]
   pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>]
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>
