@@ -310,11 +310,15 @@ Status: 완료
 
 Depends on: A06, A20
 
+Status: 완료
+
 - CLI로 제공할 수 없는 직접 provider만 OAuth 2.1 PKCE/device flow를 선언할 수 있는 adapter contract를 만든다.
 - credential storage를 macOS Keychain, Windows Credential Manager와 Linux Secret Service adapter 뒤로 격리한다.
 - project에는 비민감 account reference만 저장하고 지원 provider가 없을 때 UI/API가 기능을 노출하지 않게 한다.
 
 완료 조건: 직접 인증 기능이 opt-in capability로만 존재하고 token이 project·DB·event·trace에 저장되지 않는다.
+
+검증: RFC 7636 `S256` PKCE와 RFC 8628 device authorization public-client 정의를 opt-in contract로 추가하고 client secret, 비-HTTPS endpoint와 미등록 redirect를 거부한다. macOS Keychain, Windows Credential Manager/Credential Locker와 Linux Secret Service를 공통 adapter 뒤로 격리하고 secret은 command stdin 또는 OS store에서만 다룬다. global/project DB에는 비민감 account reference만 저장하며, 기본 provider catalog에는 direct provider가 없어 로그인 UI/API capability가 노출되지 않는다. PKCE/device, OS별 adapter, rollback·disconnect, raw DB/`.harness/` token 비저장 테스트와 전체 workspace typecheck·build, server 34개·desktop 2개 테스트를 통과했다.
 
 ### A23: Agent Markdown application service와 derived index
 

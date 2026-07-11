@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { spawnSync } from "node:child_process";
 import type { ProviderCapabilities, ProviderEventType } from "@harness/core";
+import type { DirectProviderOAuthDefinition } from "./direct-provider-auth.js";
 import type { AgentRecord, ApprovalRecord, CommentRecord, MemoryRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 import { parseCursorStreamLine } from "./cursor-provider.js";
 
@@ -131,13 +132,14 @@ export type LlmProvider = {
 export type LlmProviderDefinition = {
   id: string;
   label: string;
-  kind: "mock" | "generic-shell" | "llm-cli";
+  kind: "mock" | "generic-shell" | "llm-cli" | "direct-api";
   description: string;
   requiresCommand: boolean;
   commandExample: string | null;
   defaultCommand?: string | null;
   capabilities: ProviderCapabilities;
   authentication?: CliAuthenticationDefinition;
+  directAuthentication?: DirectProviderOAuthDefinition;
 };
 
 const nonStreamingCapabilities: ProviderCapabilities = {

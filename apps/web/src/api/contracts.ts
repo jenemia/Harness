@@ -566,7 +566,7 @@ export type ProviderCatalog = {
   llmProviders: Array<{
     id: string;
     label: string;
-    kind: "mock" | "generic-shell" | "llm-cli";
+    kind: "mock" | "generic-shell" | "llm-cli" | "direct-api";
     description: string;
     requiresCommand: boolean;
     commandExample: string | null;
@@ -581,6 +581,13 @@ export type ProviderCatalog = {
       gracefulStop: boolean;
     };
     authenticationStatus: CliAuthenticationStatus | null;
+    directAuthentication?: {
+      providerId: string;
+      label: string;
+      strategy: "oauth2-pkce" | "oauth2-device";
+      clientId: string;
+      scopes: string[];
+    };
   }>;
 };
 

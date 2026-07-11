@@ -29,10 +29,12 @@ import type {
   InlineReviewCommentRecord,
   MemoryRecord,
   McpClientRecord,
+  OAuthAccountReferenceRecord,
   ProjectListItem,
   ProjectImportCandidate,
   ProjectImportResult,
   ProjectImportSkipped,
+  ProjectOAuthAccountLink,
   ProjectOverview,
   ProjectRecord,
   ProjectSettings,
@@ -108,6 +110,16 @@ export function openGlobalDb() {
     );
     CREATE INDEX IF NOT EXISTS mcp_audits_client_created
       ON mcp_audits(client_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS oauth_account_references (
+      id TEXT PRIMARY KEY,
+      provider_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      strategy TEXT NOT NULL,
+      scopes TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS agent_templates (
       id TEXT PRIMARY KEY,
@@ -1304,6 +1316,13 @@ export function openProjectDb(projectPath: string) {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS provider_account_refs (
+      provider_id TEXT PRIMARY KEY,
+      account_reference TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   migrateDraftReviewRequestsForConversationTurns(db);
   ensureColumn(db, "approvals", "interaction_id", "TEXT");
@@ -2101,6 +2120,109 @@ export function updateGlobalMemory(memoryId: string, input: Partial<Pick<MemoryR
   }
 }
 
+export function saveOAuthAccountReference(input: Omit<OAuthAccountReferenceRecord, "createdAt" | "updatedAt">) {
+  assertNoCredentialMaterial(input, "OAuth account metadata");
+  if (!input.id || !input.providerId.trim() || !input.displayName.trim()) throw new Error("OAuth account reference metadata is incomplete.");
+  const db = openGlobalDb();
+  try {
+    const timestamp = now();
+    db.prepare(`
+      INSERT INTO oauth_account_references (id, provider_id, display_name, strategy, scopes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        display_name = excluded.display_name,
+        scopes = excluded.scopes,
+        updated_at = excluded.updated_at
+    `).run(input.id, input.providerId, input.displayName.trim(), input.strategy, JSON.stringify(input.scopes), timestamp, timestamp);
+    return mapOAuthAccountReference(db.prepare("SELECT * FROM oauth_account_references WHERE id = ?").get(input.id));
+  } finally {
+    db.close();
+  }
+}
+
+export function listOAuthAccountReferences() {
+  const db = openGlobalDb();
+  try {
+    return db.prepare("SELECT * FROM oauth_account_references ORDER BY updated_at DESC").all().map(mapOAuthAccountReference);
+  } finally {
+    db.close();
+  }
+}
+
+export function deleteOAuthAccountReference(accountReference: string) {
+  const db = openGlobalDb();
+  try {
+    db.prepare("DELETE FROM oauth_account_references WHERE id = ?").run(accountReference);
+  } finally {
+    db.close();
+  }
+}
+
+function linkProjectOAuthAccountMutation(
+  projectPath: string,
+  input: Omit<ProjectOAuthAccountLink, "updatedAt">
+) {
+  assertNoCredentialMaterial(input, "Project OAuth account reference");
+  if (!input.providerId.trim() || !input.accountReference.trim() || !input.displayName.trim()) {
+    throw new Error("Project OAuth account reference metadata is incomplete.");
+  }
+  const db = openProjectDb(projectPath);
+  try {
+    db.prepare(`
+      INSERT INTO provider_account_refs (provider_id, account_reference, display_name, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(provider_id) DO UPDATE SET
+        account_reference = excluded.account_reference,
+        display_name = excluded.display_name,
+        updated_at = excluded.updated_at
+    `).run(input.providerId, input.accountReference, input.displayName.trim(), now());
+    return mapProjectOAuthAccountLink(db.prepare("SELECT * FROM provider_account_refs WHERE provider_id = ?").get(input.providerId));
+  } finally {
+    db.close();
+  }
+}
+
+export function listProjectOAuthAccountLinks(projectPath: string) {
+  const db = openProjectDb(projectPath);
+  try {
+    return db.prepare("SELECT * FROM provider_account_refs ORDER BY provider_id").all().map(mapProjectOAuthAccountLink);
+  } finally {
+    db.close();
+  }
+}
+
+function unlinkProjectOAuthAccountMutation(projectPath: string, providerId: string, accountReference: string) {
+  const db = openProjectDb(projectPath);
+  try {
+    db.prepare("DELETE FROM provider_account_refs WHERE provider_id = ? AND account_reference = ?").run(providerId, accountReference);
+  } finally {
+    db.close();
+  }
+}
+
+function mapOAuthAccountReference(row: unknown): OAuthAccountReferenceRecord {
+  const value = row as Record<string, string>;
+  return {
+    id: value.id,
+    providerId: value.provider_id,
+    displayName: value.display_name,
+    strategy: value.strategy as OAuthAccountReferenceRecord["strategy"],
+    scopes: JSON.parse(value.scopes) as string[],
+    createdAt: value.created_at,
+    updatedAt: value.updated_at
+  };
+}
+
+function mapProjectOAuthAccountLink(row: unknown): ProjectOAuthAccountLink {
+  const value = row as Record<string, string>;
+  return {
+    providerId: value.provider_id,
+    accountReference: value.account_reference,
+    displayName: value.display_name,
+    updatedAt: value.updated_at
+  };
+}
+
 function seedDefaultAgentsMutation(projectPath: string) {
   const db = openProjectDb(projectPath);
   try {
@@ -2196,6 +2318,8 @@ function projectPathMutation<TArgs extends unknown[], TResult>(
 
 export const seedProjectFromTemplate = projectPathMutation(seedProjectFromTemplateMutation);
 export const updateProjectSettings = projectPathMutation(updateProjectSettingsMutation);
+export const linkProjectOAuthAccount = projectPathMutation(linkProjectOAuthAccountMutation);
+export const unlinkProjectOAuthAccount = projectPathMutation(unlinkProjectOAuthAccountMutation);
 export const moveTaskInBoard = projectPathMutation(moveTaskInBoardMutation);
 export const seedDefaultAgents = projectPathMutation(seedDefaultAgentsMutation);
 

@@ -1,15 +1,8 @@
 # Harness TODO
 
-이 문서는 아직 완료되지 않은 작업만 관리한다. 완료된 A01–A21 구현과 티켓별 검증·커밋 이력은 [Harness TODO Automation Tickets](Document/todo-automation-tickets.md)에서 확인한다.
+이 문서는 아직 완료되지 않은 작업만 관리한다. 완료된 A01–A22 구현과 티켓별 검증·커밋 이력은 [Harness TODO Automation Tickets](Document/todo-automation-tickets.md)에서 확인한다.
 
 구조 변경 작업은 [Harness Local Desktop Architecture](Document/local-desktop-architecture.md)를 먼저 확인하고 application service 경계, project-local `.harness/`, typed transport와 CLI-owned 인증 원칙을 따른다.
-
-## 직접 provider 인증 경계
-
-### 직접 provider 인증 예외
-
-- [ ] CLI로 제공할 수 없어 provider API 직접 접근이 필요한 기능만 OAuth 2.1 PKCE 또는 device authorization으로 설계한다.
-- [ ] OAuth credential은 OS keychain에 저장하고 `.harness/`에는 account reference와 비민감 metadata만 기록한다.
 
 ## `.harness/agent` 관리 완성
 

@@ -116,6 +116,23 @@ export type McpClientRecord = {
   updatedAt: string;
 };
 
+export type OAuthAccountReferenceRecord = {
+  id: string;
+  providerId: string;
+  displayName: string;
+  strategy: "oauth2-pkce" | "oauth2-device";
+  scopes: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectOAuthAccountLink = {
+  providerId: string;
+  accountReference: string;
+  displayName: string;
+  updatedAt: string;
+};
+
 export type ProjectSettings = {
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;
