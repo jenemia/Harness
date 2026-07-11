@@ -54,7 +54,7 @@
 
 ### 선택적 Worktree 산출물 Preview
 
-Electron desktop이 기본 실행 경로이므로 Harness는 project별 개발 서버를 기본으로 시작하거나 worktree별 port를 자동 배정하지 않는다.
+Electron desktop이 제품의 기본 실행 경로이므로 Harness는 project별 개발 서버를 기본으로 시작하거나 worktree별 port를 자동 배정하지 않는다. 단, 웹 UI 개발·브라우저 테스트에서는 `pnpm dev`로 API와 Vite 개발 서버를 명시적으로 실행한다.
 
 - [ ] 사용자가 명시적으로 등록한 preview command 또는 생성된 산출물 경로만 카드에 연결한다.
 - [ ] preview 실행의 URL·산출물 경로·PID·log와 `booting`, `live`, `crashed`, `stopped` 상태를 저장한다.

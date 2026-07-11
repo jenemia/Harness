@@ -278,6 +278,66 @@ Status: 완료
 
 검증: activity EMA/stage·waiting/completed override, stable 5종 dog assignment, reduced motion, toast dedupe, privacy allowlist와 asset manifest/provenance를 단위 테스트했다. macOS transparent/focusless/always-on-top/click-through window와 display/Spaces/full-screen 설정을 compile·Electron smoke로 확인하고, 동일 interface의 Windows stub contract 및 overlay 실패 비전파를 검증했다.
 
+### A20: Shared transport dispatcher와 CLI desktop bridge
+
+Depends on: A01, A04, A05, A16
+
+- HTTP, IPC, CLI와 MCP mutation을 versioned application command dispatcher로 통합한다.
+- active desktop에서는 CLI가 MCP와 같은 Unix socket 또는 Windows named pipe bridge를 사용한다.
+- offline CLI fallback은 project writer lock과 동일 validation·approval·audit을 적용한다.
+
+완료 조건: 같은 명령이 transport에 관계없이 같은 결과와 오류를 만들고 active desktop과 offline fallback에서 중복 mutation이 없다.
+
+### A21: Provider event retention과 safe compaction
+
+Depends on: A07, A20
+
+- project별 event 최대량과 보존 기간 설정을 추가한다.
+- 긴 tool output은 credential redaction 후 bounded summary로 저장한다.
+- terminal event와 audit 연결을 보존하면서 원본 event를 안전하게 정리한다.
+
+완료 조건: 대량 event가 설정 한도를 넘지 않고 replay·terminal idempotency·민감정보 보호가 유지된다.
+
+### A22: Direct provider OAuth와 OS keychain 경계
+
+Depends on: A06, A20
+
+- CLI로 제공할 수 없는 직접 provider만 OAuth 2.1 PKCE/device flow를 선언할 수 있는 adapter contract를 만든다.
+- credential storage를 macOS Keychain, Windows Credential Manager와 Linux Secret Service adapter 뒤로 격리한다.
+- project에는 비민감 account reference만 저장하고 지원 provider가 없을 때 UI/API가 기능을 노출하지 않게 한다.
+
+완료 조건: 직접 인증 기능이 opt-in capability로만 존재하고 token이 project·DB·event·trace에 저장되지 않는다.
+
+### A23: Agent Markdown application service와 derived index
+
+Depends on: A03, A20
+
+- agent Markdown CRUD, instruction file 관리, clone, archive와 folder-open 정보를 공통 service로 통합한다.
+- DB의 편집 원본 중복을 제거하고 runtime·parse·hash·통계 파생 index만 유지한다.
+- active assignment/run archive 차단과 expected hash validation을 제공한다.
+
+완료 조건: desktop, web, CLI와 MCP가 같은 atomic writer와 validation으로 agent 원본을 변경한다.
+
+### A24: Agent Markdown editor, diff와 validation UI
+
+Depends on: A23
+
+- 구조화 form과 raw Markdown editor가 하나의 in-memory document를 편집한다.
+- 변경 결과에서 원본 대비 diff와 validation 결과를 표시하고 오류가 있을 때만 저장을 막는다.
+- preview, instruction ordering, clone, disable, archive와 folder-open UI를 제공한다.
+
+완료 조건: 사용자가 앱과 웹에서 agent Markdown을 손실 없이 편집하고 결과·검증을 확인할 수 있다.
+
+### A25: External agent edit watcher와 conflict resolution
+
+Depends on: A23, A24
+
+- agent Markdown/instruction 변경을 debounce하는 file watcher와 version event를 구현한다.
+- 편집 중 content hash가 바뀌면 overwrite, reload와 manual merge 선택을 제공한다.
+- watcher restart, atomic rename과 multi-process writer lock 회귀를 검증한다.
+
+완료 조건: 외부 편집이 다음 run과 UI에 반영되고 동시 편집이 사용자 선택 없이 덮어쓰지 않는다.
+
 ## 실행 순서
 
-기본 순서는 A01부터 A19까지다. 의존성이 충족된 티켓만 시작하며, 각 티켓의 검증과 커밋이 끝난 후 다음 티켓으로 진행한다.
+기본 순서는 A01부터 A25까지다. 의존성이 충족된 티켓만 시작하며, 각 티켓의 검증과 커밋이 끝난 후 다음 티켓으로 진행한다. `todo.md`의 선택적 Worktree Preview는 자동 진행 대상이 아니다.
