@@ -7,7 +7,7 @@ import {
   type HarnessEventFilters
 } from "@harness/core";
 
-const allowedEvents = new Set<HarnessEvent>(["provider:event", "draft:event"]);
+const allowedEvents = new Set<HarnessEvent>(["provider:event", "draft:event", "agent:event"]);
 let nextSubscriptionId = 0;
 
 contextBridge.exposeInMainWorld("harness", {

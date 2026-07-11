@@ -56,4 +56,6 @@ test("desktop window and IPC contract keep renderer privileges narrow", () => {
   assert.equal(isHarnessEventFilter("provider:event", { projectId: "p", afterSequence: 1 }), false);
   assert.equal(isHarnessEventFilter("draft:event", { projectId: "p", draftId: "d", afterSequence: 2 }), true);
   assert.equal(isHarnessEventFilter("draft:event", { projectId: "p", afterSequence: 2 }), false);
+  assert.equal(isHarnessEventFilter("agent:event", { projectId: "p", agentId: "a", afterSequence: 2 }), true);
+  assert.equal(isHarnessEventFilter("agent:event", { projectId: "p", agentId: 2 }), false);
 });

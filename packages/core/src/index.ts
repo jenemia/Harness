@@ -119,10 +119,11 @@ export type HarnessCommandInputs = {
 };
 
 export type HarnessCommand = keyof HarnessCommandInputs;
-export type HarnessEvent = "provider:event" | "draft:event";
+export type HarnessEvent = "provider:event" | "draft:event" | "agent:event";
 export type HarnessEventFilters = {
   "provider:event": { projectId: string; runId?: string; afterSequence?: number };
   "draft:event": { projectId: string; draftId: string; afterSequence?: number };
+  "agent:event": { projectId: string; agentId?: string; afterSequence?: number };
 };
 
 export type HarnessInvokeRequest<C extends HarnessCommand = HarnessCommand> = {
@@ -142,11 +143,24 @@ export function isHarnessEventFilter(event: HarnessEvent, filter: unknown): filt
   if (event === "provider:event") {
     if (filter.runId !== undefined && !isText(filter.runId)) return false;
     if (filter.afterSequence !== undefined && filter.runId === undefined) return false;
-  } else if (!isText(filter.draftId)) {
+  } else if (event === "draft:event" && !isText(filter.draftId)) {
+    return false;
+  } else if (event === "agent:event" && filter.agentId !== undefined && !isText(filter.agentId)) {
     return false;
   }
   return filter.afterSequence === undefined || isNonNegativeInteger(filter.afterSequence);
 }
+
+export type AgentFileEventEnvelope = {
+  version: typeof harnessIpcVersion;
+  sequence: number;
+  projectId: string;
+  agentId: string;
+  timestamp: string;
+  kind: "definition" | "instruction" | "removed";
+  documentHash: string | null;
+  contentVersion: string;
+};
 
 export const providerEventVersion = 1 as const;
 export type ProviderEventType =

@@ -1,4 +1,4 @@
-import type { DraftEventEnvelope, HarnessCommand, HarnessCommandInputs, HarnessEventFilters, ProviderEventEnvelope } from "@harness/core";
+import type { AgentFileEventEnvelope, DraftEventEnvelope, HarnessCommand, HarnessCommandInputs, HarnessEventFilters, ProviderEventEnvelope } from "@harness/core";
 import {
   createAgentTemplate,
   createGlobalMemory,
@@ -98,6 +98,7 @@ import {
 import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
 import { listInteractions } from "./interactions.js";
 import { correlationAttributes, operationSpanName, withTelemetrySpan } from "./telemetry.js";
+import { subscribeAgentFileEvents } from "./agent-file-events.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -119,6 +120,13 @@ export function subscribeApplicationDraftEvents(
   const unsubscribe = subscribeDraftEvents(filter.draftId, filter.afterSequence || 0, listener);
   const replay = replayDraftEvents(project, filter.draftId, filter.afterSequence || 0);
   return { replay, unsubscribe };
+}
+
+export function subscribeApplicationAgentEvents(
+  filter: HarnessEventFilters["agent:event"],
+  listener: (event: AgentFileEventEnvelope) => void
+) {
+  return subscribeAgentFileEvents(requiredProject(filter.projectId), filter, listener);
 }
 
 export function recoverApplicationState() {

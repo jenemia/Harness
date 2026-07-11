@@ -352,11 +352,15 @@ Status: 완료
 
 Depends on: A23, A24
 
+Status: 완료
+
 - agent Markdown/instruction 변경을 debounce하는 file watcher와 version event를 구현한다.
 - 편집 중 content hash가 바뀌면 overwrite, reload와 manual merge 선택을 제공한다.
 - watcher restart, atomic rename과 multi-process writer lock 회귀를 검증한다.
 
 완료 조건: 외부 편집이 다음 run과 UI에 반영되고 동시 편집이 사용자 선택 없이 덮어쓰지 않는다.
+
+검증: project별 agent/instruction directory를 OS file watcher로 감시하고 120ms debounce 뒤 definition hash와 instruction hash를 합친 version event를 typed IPC로 전달한다. watcher는 atomic rename 후 directory 구성을 다시 수집하며 마지막 구독 종료 시 handle을 정리하고 재구독 시 현재 파일을 새 baseline으로 사용한다. 브라우저/headless HTTP 경로는 같은 bundle hash를 polling해 동일 충돌 상태를 만든다. 편집 중 외부 변경은 local draft를 유지한 채 overwrite, external reload 또는 merge marker 기반 manual merge를 명시적으로 요구하며 validation을 통과하기 전에는 저장하지 않는다. 통합 테스트에서 atomic external definition 변경, instruction burst debounce, watcher 재시작과 stale expected hash writer 거부를 확인했다. `pnpm dev` 브라우저 테스트에서 local 구조화 draft 중 외부 파일 변경 감지, reload, manual merge validation 차단과 최신 external hash에 대한 명시적 overwrite 저장을 확인했다. 전체 workspace typecheck·build와 server 37개·web 2개·desktop 2개 테스트를 통과했다.
 
 ## 실행 순서
 

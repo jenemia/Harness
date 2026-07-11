@@ -1,5 +1,5 @@
 import { Archive, ArrowDown, ArrowUp, Copy, Eye, FolderOpen, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Agent, Overview, ProviderCatalog } from "../../api/contracts";
 import { agentService, type AgentDocumentBundle, type AgentInstructionDocument } from "../../services/agentService";
 import { buildLineDiff, parseAgentMarkdownDraft, type ParsedAgentMarkdownDraft, updateAgentMarkdownDraft } from "./agentMarkdownDraft";
@@ -28,6 +28,8 @@ export function AgentMarkdownEditor(props: {
   const [instructionName, setInstructionName] = useState("");
   const [renameInstructionName, setRenameInstructionName] = useState("");
   const [archiveReplacement, setArchiveReplacement] = useState("");
+  const [externalBundle, setExternalBundle] = useState<AgentDocumentBundle | null>(null);
+  const acceptedExternalVersion = useRef("");
 
   const parsed = useMemo(() => {
     try {
@@ -48,6 +50,8 @@ export function AgentMarkdownEditor(props: {
     setBaseRaw(source.raw);
     setBaseHash(source.hash);
     setDraftRaw(source.raw);
+    acceptedExternalVersion.current = "";
+    setExternalBundle(null);
     setValidation(props.bundle.validation.valid
       ? { status: "valid", message: "Markdown and instruction references are valid." }
       : { status: "invalid", message: props.bundle.validation.error || "Agent Markdown is invalid." });
@@ -58,6 +62,33 @@ export function AgentMarkdownEditor(props: {
     setSelectedInstructionPath(selected?.path || "");
     setInstructionContent(selected?.content || "");
   }, [props.bundle.instructions]);
+
+  useEffect(() => {
+    let active = true;
+    let checking = false;
+    const loadedVersion = acceptedExternalVersion.current || bundleVersion(props.bundle);
+    const checkExternalVersion = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const latest = await agentService.get(projectId, agentId);
+        if (!active || bundleVersion(latest) === loadedVersion) return;
+        if (draftRaw === baseRaw) props.onBundleChanged(latest);
+        else setExternalBundle(latest);
+      } catch {
+        // Background version checks retry on the next event or poll.
+      } finally {
+        checking = false;
+      }
+    };
+    const unsubscribe = window.harness?.subscribe("agent:event", { projectId, agentId }, () => void checkExternalVersion());
+    const poll = window.harness ? 0 : window.setInterval(() => void checkExternalVersion(), 1000);
+    return () => {
+      active = false;
+      unsubscribe?.();
+      if (poll) window.clearInterval(poll);
+    };
+  }, [agentId, baseRaw, draftRaw, projectId, props.bundle, props.onBundleChanged]);
 
   useEffect(() => {
     if (!initialSource) return;
@@ -111,8 +142,41 @@ export function AgentMarkdownEditor(props: {
     });
   }
 
+  async function overwriteExternal() {
+    const externalHash = externalBundle?.source?.hash;
+    if (!externalHash) return;
+    await props.runAction(async () => {
+      const bundle = await agentService.saveRaw(projectId, agentId, draftRaw, externalHash);
+      acceptedExternalVersion.current = "";
+      setExternalBundle(null);
+      props.onBundleChanged(bundle);
+      await props.onProjectChanged();
+    });
+  }
+
+  function reloadExternal() {
+    if (!externalBundle) return;
+    setExternalBundle(null);
+    acceptedExternalVersion.current = "";
+    props.onBundleChanged(externalBundle);
+  }
+
+  function startManualMerge() {
+    const externalRaw = externalBundle?.source?.raw;
+    const externalHash = externalBundle?.source?.hash;
+    if (!externalRaw || !externalHash) return;
+    const localRaw = draftRaw;
+    acceptedExternalVersion.current = bundleVersion(externalBundle);
+    setBaseRaw(externalRaw);
+    setBaseHash(externalHash);
+    setDraftRaw(`<<<<<<< LOCAL\n${localRaw.trimEnd()}\n=======\n${externalRaw.trimEnd()}\n>>>>>>> EXTERNAL\n`);
+    setExternalBundle(null);
+    setValidation({ status: "invalid", message: "Resolve every merge marker in raw Markdown before saving." });
+  }
+
   async function resetDraft() {
     const bundle = await reloadBundle();
+    setExternalBundle(null);
     setBaseRaw(bundle.source?.raw || "");
     setBaseHash(bundle.source?.hash || "");
     setDraftRaw(bundle.source?.raw || "");
@@ -269,6 +333,18 @@ export function AgentMarkdownEditor(props: {
         <span>{validation.message}</span>
       </div>
 
+      {externalBundle && <div className="agent-external-conflict" role="alert">
+        <div>
+          <strong>External edit detected</strong>
+          <span>agent.md or an instruction changed while this draft had unsaved edits. Choose how to resolve it.</span>
+        </div>
+        <div className="inline-actions">
+          <button className="mini-button danger" type="button" onClick={() => void overwriteExternal()}>Overwrite external</button>
+          <button className="mini-button" type="button" onClick={reloadExternal}>Reload external</button>
+          <button className="mini-button" type="button" onClick={startManualMerge}>Manual merge</button>
+        </div>
+      </div>}
+
       <div className="agent-result-grid">
         <section>
           <h3>Change result</h3>
@@ -329,4 +405,8 @@ export function AgentMarkdownEditor(props: {
 
 function parseList(value: string) {
   return Array.from(new Set(value.split(",").map((item) => item.trim()).filter(Boolean)));
+}
+
+function bundleVersion(bundle: AgentDocumentBundle) {
+  return `${bundle.source?.hash || "missing"}|${bundle.instructions.map((item) => `${item.path}:${item.hash}`).join("|")}`;
 }

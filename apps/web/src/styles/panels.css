@@ -506,6 +506,22 @@ textarea {
 .agent-validation.pending { background: #fff9e8; border-color: #ecd38c; color: #755914; }
 .agent-validation.invalid { background: #fff1f0; border-color: #f1b5b0; color: #9c2821; }
 
+.agent-external-conflict {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.agent-external-conflict > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
 .agent-diff {
   background: #16181d;
   border-radius: 7px;
