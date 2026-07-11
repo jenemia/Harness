@@ -6,7 +6,8 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { invokeApplicationCommand } from "../src/application.js";
-import { getProjectOverview, now, openProjectDb } from "../src/db.js";
+import { now, openProjectDb } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 
 type AgentBundle = {
   agent: { id: string; definitionHash: string; definitionPath: string | null; archivedAt: string | null; archivePath: string | null };

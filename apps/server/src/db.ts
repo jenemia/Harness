@@ -52,6 +52,7 @@ import type {
 } from "./types.js";
 
 const appName = "Harness";
+const initializedProjectDatabases = new Set<string>();
 
 export function now() {
   return new Date().toISOString();
@@ -952,7 +953,9 @@ export function projectHarnessDir(projectPath: string) {
 
 export function openProjectDb(projectPath: string) {
   const layout = ensureProjectLayout(projectPath);
+  const databaseWasPresent = existsSync(layout.databasePath);
   const db = new DatabaseSync(layout.databasePath);
+  const databaseKey = path.resolve(layout.databasePath);
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
@@ -960,6 +963,12 @@ export function openProjectDb(projectPath: string) {
     PRAGMA foreign_keys = ON;
     PRAGMA user_version = 1;
   `);
+  if (databaseWasPresent && initializedProjectDatabases.has(databaseKey)) {
+    purgeCredentialProviderCommands(db, "project_settings");
+    syncProjectAgentDefinitions(db, projectPath);
+    migrateApprovalsToInteractions(db, layout.manifest.projectId);
+    return db;
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
@@ -1402,8 +1411,23 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "runs", "agent_definition_hash", "TEXT");
   ensureColumn(db, "runs", "agent_definition_schema_version", "INTEGER");
   ensureColumn(db, "runs", "agent_definition_snapshot", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS tasks_status_order ON tasks(status, task_order, created_at);
+    CREATE INDEX IF NOT EXISTS tasks_parent ON tasks(parent_task_id);
+    CREATE INDEX IF NOT EXISTS events_created ON events(created_at DESC);
+    CREATE INDEX IF NOT EXISTS events_task_created ON events(task_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS runs_started ON runs(started_at DESC);
+    CREATE INDEX IF NOT EXISTS runs_task_status_started ON runs(task_id, status, started_at DESC);
+    CREATE INDEX IF NOT EXISTS runs_agent_status ON runs(agent_id, status);
+    CREATE INDEX IF NOT EXISTS handoffs_created ON handoffs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS comments_created ON comments(created_at DESC);
+    CREATE INDEX IF NOT EXISTS comments_task_created ON comments(task_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS approvals_created ON approvals(created_at DESC);
+    CREATE INDEX IF NOT EXISTS approvals_status_created ON approvals(status, created_at DESC);
+  `);
   purgeCredentialProviderCommands(db, "project_settings");
   syncProjectAgentDefinitions(db, projectPath);
+  initializedProjectDatabases.add(databaseKey);
   return db;
 }
 
@@ -2050,42 +2074,7 @@ function normalizeTaskOrderForStatus(db: DatabaseSync, status: TaskStatus) {
   }
 }
 
-export function getProjectOverview(project: ProjectRecord): ProjectOverview {
-  const db = openProjectDb(project.path);
-  try {
-    return {
-      project,
-      settings: getProjectSettingsFromDb(db),
-      agents: db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent),
-      tasks: db.prepare("SELECT * FROM tasks ORDER BY task_order ASC, created_at ASC").all().map(mapTask),
-      documents: db.prepare("SELECT * FROM documents ORDER BY updated_at DESC").all().map(mapDocument),
-      memories: db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory),
-      globalMemories: listGlobalMemories(),
-      approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
-      previews: db.prepare("SELECT * FROM previews ORDER BY created_at ASC").all().map(mapPreview),
-      interactions: db.prepare("SELECT * FROM interactions ORDER BY created_at DESC LIMIT 500").all().map(mapInteraction),
-      handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
-      comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
-      events: db.prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT 200").all().map(mapEvent),
-      providerEvents: db.prepare("SELECT * FROM provider_events ORDER BY timestamp DESC, sequence DESC LIMIT 500").all().map(mapProviderEvent),
-      draftSessions: db.prepare("SELECT * FROM draft_sessions ORDER BY updated_at DESC LIMIT 100").all().map(mapDraftSession),
-      draftRevisions: db.prepare("SELECT * FROM draft_revisions ORDER BY created_at DESC LIMIT 500").all().map(mapDraftRevision),
-      draftReviewers: db.prepare("SELECT * FROM draft_reviewers ORDER BY created_at ASC LIMIT 300").all().map(mapDraftReviewer),
-      draftReviewRequests: db.prepare("SELECT * FROM draft_review_requests ORDER BY requested_at DESC LIMIT 500").all().map(mapDraftReviewRequest),
-      draftComments: db.prepare("SELECT * FROM draft_comments ORDER BY created_at ASC LIMIT 1000").all().map(mapDraftComment),
-      draftApplyHistory: db.prepare("SELECT * FROM draft_apply_history ORDER BY created_at DESC LIMIT 500").all().map(mapDraftApplyHistory),
-      draftEvents: db.prepare("SELECT * FROM draft_events ORDER BY created_at DESC, sequence DESC LIMIT 1000").all().map(mapDraftEvent),
-      runs: db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 100").all().map(mapRun),
-      completionReports: db.prepare("SELECT * FROM completion_reports ORDER BY created_at DESC LIMIT 100").all().map(mapCompletionReport),
-      runFileReviews: db.prepare("SELECT * FROM run_file_reviews ORDER BY recommendation_order IS NULL, recommendation_order, path LIMIT 1000").all().map(mapRunFileReview),
-      inlineReviewComments: db.prepare("SELECT * FROM inline_review_comments ORDER BY created_at DESC LIMIT 1000").all().map(mapInlineReviewComment)
-    };
-  } finally {
-    db.close();
-  }
-}
-
-function mapProviderEvent(row: unknown): ProviderEventEnvelope {
+export function mapProviderEvent(row: unknown): ProviderEventEnvelope {
   const value = row as Record<string, string | number | null>;
   return {
     version: Number(value.version) as 1,

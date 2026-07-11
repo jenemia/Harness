@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentTemplate,
   GlobalSettings,
@@ -11,6 +11,7 @@ import type {
 } from "../api/contracts";
 import { projectService } from "../services/projectService";
 import type { RunAction } from "./types";
+import type { AppSection } from "./AppNavigation";
 
 export function useAppController() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -35,6 +36,9 @@ export function useAppController() {
   const [boardAssigneeId, setBoardAssigneeId] = useState("");
   const [boardLabel, setBoardLabel] = useState("");
   const [isTaskPromptOpen, setIsTaskPromptOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<AppSection>("board");
+  const overviewRequest = useRef(0);
+  const overviewInFlight = useRef<Promise<void> | null>(null);
 
   const runAction: RunAction = useCallback(async (action) => {
     setError("");
@@ -65,24 +69,42 @@ export function useAppController() {
     setSelectedProjectId((current) => current || data.projects[0]?.id || "");
   }, []);
 
-  const loadOverview = useCallback(async (projectId: string) => {
+  const loadOverview = useCallback(async (
+    projectId: string,
+    sections?: Array<"board" | "activity" | "collaboration" | "reviews">,
+  ) => {
     if (!projectId) {
       setOverview(null);
       setHealthReport(null);
       return;
     }
-    const [data, reportResponse] = await Promise.all([
-      projectService.overview(projectId),
-      projectService.healthReport(projectId),
-    ]);
-    setOverview(data);
-    setHealthReport(reportResponse.report);
+    if (overviewInFlight.current) await overviewInFlight.current;
+    const requestId = ++overviewRequest.current;
+    const request = (async () => {
+      const [data, reportResponse] = await Promise.all([
+        sections?.length ? projectService.overviewSections(projectId, sections) : projectService.overview(projectId),
+        !sections || sections.includes("board") ? projectService.healthReport(projectId) : Promise.resolve(null),
+      ]);
+      if (requestId !== overviewRequest.current) return;
+      setOverview((current) => sections && current?.project.id === projectId
+        ? { ...current, ...data }
+        : data as Overview);
+      if (reportResponse) setHealthReport(reportResponse.report);
+    })();
+    overviewInFlight.current = request;
+    try {
+      await request;
+    } finally {
+      if (overviewInFlight.current === request) overviewInFlight.current = null;
+    }
   }, []);
 
-  const refreshOverview = useCallback(
-    () => loadOverview(selectedProjectId),
-    [loadOverview, selectedProjectId],
-  );
+  const refreshOverview = useCallback(() => loadOverview(
+    selectedProjectId,
+    activeSection === "runs"
+      ? ["board", "activity", "reviews"]
+      : ["board", "collaboration", "reviews"],
+  ), [activeSection, loadOverview, selectedProjectId]);
 
   const scheduleReady = useCallback(async () => {
     if (!overview) {
@@ -169,13 +191,21 @@ export function useAppController() {
       return;
     }
     void runAction(() => loadOverview(selectedProjectId));
+  }, [loadOverview, runAction, selectedProjectId]);
+
+  useEffect(() => {
+    if (!selectedProjectId) return;
+    if (window.harness) return;
     const timer = window.setInterval(() => {
-      void loadOverview(selectedProjectId).catch((err) =>
+      const sections = activeSection === "runs"
+        ? ["activity"] as const
+        : ["board", "collaboration", "reviews"] as const;
+      void loadOverview(selectedProjectId, [...sections]).catch((err) =>
         setError(err instanceof Error ? err.message : String(err)),
       );
-    }, 2500);
+    }, 10000);
     return () => window.clearInterval(timer);
-  }, [loadOverview, runAction, selectedProjectId]);
+  }, [activeSection, loadOverview, selectedProjectId]);
 
   useEffect(() => {
     if (!selectedProjectId || !window.harness) return;
@@ -186,17 +216,20 @@ export function useAppController() {
       () => {
         window.clearTimeout(timer);
         timer = window.setTimeout(() => {
-          void loadOverview(selectedProjectId).catch((err) =>
+          const sections = activeSection === "runs"
+            ? ["board", "activity", "reviews"] as const
+            : ["board", "collaboration", "reviews"] as const;
+          void loadOverview(selectedProjectId, [...sections]).catch((err) =>
             setError(err instanceof Error ? err.message : String(err)),
           );
-        }, 50);
+        }, 150);
       },
     );
     return () => {
       window.clearTimeout(timer);
       unsubscribe();
     };
-  }, [loadOverview, selectedProjectId]);
+  }, [activeSection, loadOverview, selectedProjectId]);
 
   useEffect(() => {
     setBoardQuery("");
@@ -258,6 +291,29 @@ export function useAppController() {
       );
     });
   }, [agentsById, boardAssigneeId, boardLabel, boardQuery, overview]);
+  const visibleTasksByStatus = useMemo(() => {
+    const grouped = new Map<string, typeof visibleTasks>();
+    for (const task of visibleTasks) {
+      const tasks = grouped.get(task.status) || [];
+      tasks.push(task);
+      grouped.set(task.status, tasks);
+    }
+    return grouped;
+  }, [visibleTasks]);
+  const pendingInteractionTaskIds = useMemo(() => new Set(
+    (overview?.interactions || [])
+      .filter((interaction) => interaction.status === "pending" && Boolean(interaction.runId) && interaction.taskId)
+      .map((interaction) => interaction.taskId as string),
+  ), [overview?.interactions]);
+  const previewsByTaskId = useMemo(() => {
+    const grouped = new Map<string, NonNullable<typeof overview>["previews"]>();
+    for (const preview of overview?.previews || []) {
+      const previews = grouped.get(preview.taskId) || [];
+      previews.push(preview);
+      grouped.set(preview.taskId, previews);
+    }
+    return grouped;
+  }, [overview?.previews]);
 
   return {
     projects,
@@ -286,8 +342,13 @@ export function useAppController() {
     setBoardLabel,
     isTaskPromptOpen,
     setIsTaskPromptOpen,
+    activeSection,
+    setActiveSection,
     boardLabels,
     visibleTasks,
+    visibleTasksByStatus,
+    pendingInteractionTaskIds,
+    previewsByTaskId,
     hasBoardFilters: Boolean(boardQuery || boardAssigneeId || boardLabel),
     agentsById,
     runAction,

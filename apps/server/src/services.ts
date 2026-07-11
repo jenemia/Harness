@@ -3,7 +3,6 @@ import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import {
-  getProjectOverview,
   getProjectSettings,
   importProjectsFromRoot,
   insertEvent,
@@ -22,6 +21,7 @@ import {
   unregisterProject,
   updateProjectRecord
 } from "./db.js";
+import { getProjectOverview } from "./overview-repository.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import { openLocalFolder } from "./folder-opener.js";
 import { withProjectWriterLock } from "./project-store.js";

@@ -26,6 +26,11 @@ export const projectService = {
   globalSettings: () => desktopOrHttp("settings:get", {}, () => api<{ settings: GlobalSettings }>("/api/settings")),
   overview: (projectId: string) =>
     desktopOrHttp("projects:overview", { projectId }, () => api<Overview>(`/api/projects/${projectId}/overview`)),
+  overviewSections: (projectId: string, sections: Array<"board" | "activity" | "collaboration" | "reviews">) =>
+    desktopOrHttp("projects:overview-sections", { projectId, sections }, () => api<Partial<Overview> & Pick<Overview, "project" | "settings">>(
+      `/api/projects/${projectId}/overview-sections`,
+      { method: "POST", body: JSON.stringify({ sections }) },
+    )),
   healthReport: (projectId: string) =>
     desktopOrHttp("projects:report", { projectId }, () => api<{ report: ProjectHealthReport }>(`/api/projects/${projectId}/report`)),
   schedule: (projectId: string) =>

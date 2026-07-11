@@ -10,10 +10,10 @@ import {
   startApplicationBridge
 } from "../src/application-bridge.js";
 import {
-  getProjectOverview,
   listMcpAudits,
   saveMcpClient
 } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import { createInteraction } from "../src/interactions.js";
 import {
   callMcpTool,

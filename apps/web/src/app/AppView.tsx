@@ -1,8 +1,6 @@
 import { FolderOpen, Play, Plus, RefreshCcw, Wifi } from "lucide-react";
-import { useState } from "react";
-import { ActivityPanels } from "../features/activity/ActivityPanels";
+import { lazy, Suspense } from "react";
 import { ScheduleResultLine } from "../features/activity/ScheduleResultLine";
-import { AgentPanel } from "../features/agents/AgentPanel";
 import { AgentSidebarList } from "../features/agents/AgentSidebarList";
 import { ApprovalsPanel } from "../features/approvals/ApprovalsPanel";
 import { BoardFilters, TaskCard } from "../features/board/BoardComponents";
@@ -15,17 +13,19 @@ import { DocumentsPanel } from "../features/documents/DocumentsPanel";
 import { MemoryPanel } from "../features/memory/MemoryPanel";
 import { ProjectPanel } from "../features/projects/ProjectPanel";
 import { ProjectSwitcher } from "../features/projects/ProjectSwitcher";
-import { SettingsPanel } from "../features/settings/SettingsPanel";
-import { TaskDetailDrawer } from "../features/tasks/TaskDetailDrawer";
-import { TaskPromptModal } from "../features/tasks/TaskPromptModal";
 import { statusMessageKey, useI18n } from "../i18n";
 import { taskStatuses } from "../shared/taskStatus";
-import { AppNavigation, type AppSection } from "./AppNavigation";
+import { AppNavigation } from "./AppNavigation";
 import type { AppController } from "./useAppController";
+
+const ActivityPanels = lazy(() => import("../features/activity/ActivityPanels").then((module) => ({ default: module.ActivityPanels })));
+const AgentPanel = lazy(() => import("../features/agents/AgentPanel").then((module) => ({ default: module.AgentPanel })));
+const SettingsPanel = lazy(() => import("../features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
+const TaskDetailDrawer = lazy(() => import("../features/tasks/TaskDetailDrawer").then((module) => ({ default: module.TaskDetailDrawer })));
+const TaskPromptModal = lazy(() => import("../features/tasks/TaskPromptModal").then((module) => ({ default: module.TaskPromptModal })));
 
 export function AppView({ controller }: { controller: AppController }) {
   const { t } = useI18n();
-  const [activeSection, setActiveSection] = useState<AppSection>("board");
   const {
     projects,
     selectedProjectId,
@@ -54,6 +54,9 @@ export function AppView({ controller }: { controller: AppController }) {
     setIsTaskPromptOpen,
     boardLabels,
     visibleTasks,
+    visibleTasksByStatus,
+    pendingInteractionTaskIds,
+    previewsByTaskId,
     hasBoardFilters,
     agentsById,
     runAction,
@@ -64,6 +67,8 @@ export function AppView({ controller }: { controller: AppController }) {
     updateProject,
     importProjects,
     initializeProjectGit,
+    activeSection,
+    setActiveSection,
   } = controller;
 
   const sectionTitle = {
@@ -74,6 +79,7 @@ export function AppView({ controller }: { controller: AppController }) {
   }[activeSection];
 
   return (
+    <Suspense fallback={<div className="busy-line">{t("app.working")}</div>}>
     <div className="app-shell">
       <AppNavigation
         activeSection={activeSection}
@@ -226,15 +232,12 @@ export function AppView({ controller }: { controller: AppController }) {
                             <span>{t(statusMessageKey(column))}</span>
                             <b>
                               {
-                                visibleTasks.filter(
-                                  (task) => task.status === column,
-                                ).length
+                                (visibleTasksByStatus.get(column) || []).length
                               }
                             </b>
                           </div>
                           <div className="column-list">
-                            {visibleTasks
-                              .filter((task) => task.status === column)
+                            {(visibleTasksByStatus.get(column) || [])
                               .map((task) => (
                                 <TaskCard
                                   key={task.id}
@@ -246,19 +249,15 @@ export function AppView({ controller }: { controller: AppController }) {
                                       : null
                                   }
                                   projectId={overview.project.id}
-                                  hasPendingInteraction={overview.interactions.some(
-                                    (interaction) => interaction.taskId === task.id && interaction.status === "pending" && Boolean(interaction.runId),
-                                  )}
-                                  previews={overview.previews.filter((preview) => preview.taskId === task.id)}
+                                  hasPendingInteraction={pendingInteractionTaskIds.has(task.id)}
+                                  previews={previewsByTaskId.get(task.id) || []}
                                   onOpen={() => setSelectedTaskId(task.id)}
                                   runAction={runAction}
                                   onChanged={refreshOverview}
                                 />
                               ))}
                             {hasBoardFilters &&
-                              visibleTasks.filter(
-                                (task) => task.status === column,
-                              ).length === 0 && (
+                              (visibleTasksByStatus.get(column) || []).length === 0 && (
                                 <div className="column-empty">
                                   {t("board.noMatchingTasks")}
                                 </div>
@@ -364,5 +363,6 @@ export function AppView({ controller }: { controller: AppController }) {
         )}
       </main>
     </div>
+    </Suspense>
   );
 }

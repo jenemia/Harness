@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { startApplicationBridge } from "../src/application-bridge.js";
 import { invokeApplicationCommand } from "../src/application.js";
-import { getProjectOverview } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 
 const execFileAsync = promisify(execFile);
 

@@ -3,6 +3,7 @@ export const harnessIpcVersion = 1 as const;
 export type HarnessCommandInputs = {
   "projects:list": Record<string, never>;
   "projects:overview": { projectId: string };
+  "projects:overview-sections": { projectId: string; sections: Array<"board" | "activity" | "collaboration" | "reviews"> };
   "projects:create": { path: string; name?: string; seedDefaults?: boolean; projectTemplateId?: string };
   "projects:update": { projectId: string; name?: string; path?: string };
   "projects:remove": { projectId: string };
@@ -12,48 +13,48 @@ export type HarnessCommandInputs = {
   "projects:schedule": { projectId: string };
   "providers:list": Record<string, never>;
   "mcp:clients": Record<string, never>;
-  "mcp:client-save": { payload: object };
+  "mcp:client-save": { payload: Record<string, unknown> };
   "mcp:diagnose": Record<string, never>;
   "templates:agents": Record<string, never>;
-  "templates:agent-create": { payload: object };
+  "templates:agent-create": { payload: Record<string, unknown> };
   "templates:workflows": Record<string, never>;
-  "templates:workflow-create": { payload: object };
+  "templates:workflow-create": { payload: Record<string, unknown> };
   "templates:projects": Record<string, never>;
-  "templates:project-create": { payload: object };
+  "templates:project-create": { payload: Record<string, unknown> };
   "settings:get": Record<string, never>;
-  "settings:update": { payload: object };
+  "settings:update": { payload: Record<string, unknown> };
   "project-settings:get": { projectId: string };
-  "project-settings:update": { projectId: string; payload: object };
+  "project-settings:update": { projectId: string; payload: Record<string, unknown> };
   "system:select-folder": { initialPath?: string };
-  "agents:save": { projectId: string; agentId?: string | null; payload: object };
+  "agents:save": { projectId: string; agentId?: string | null; payload: Record<string, unknown> };
   "agents:get": { projectId: string; agentId: string };
   "agents:raw-preview": { projectId: string; agentId: string; raw: string };
   "agents:raw-save": { projectId: string; agentId: string; raw: string; expectedHash: string };
-  "agents:instruction-save": { projectId: string; agentId: string; payload: object };
-  "agents:instruction-rename": { projectId: string; agentId: string; payload: object };
-  "agents:instruction-remove": { projectId: string; agentId: string; payload: object };
-  "agents:instruction-reorder": { projectId: string; agentId: string; payload: object };
-  "agents:clone": { projectId: string; agentId: string; payload: object };
-  "agents:archive": { projectId: string; agentId: string; payload: object };
+  "agents:instruction-save": { projectId: string; agentId: string; payload: Record<string, unknown> };
+  "agents:instruction-rename": { projectId: string; agentId: string; payload: Record<string, unknown> };
+  "agents:instruction-remove": { projectId: string; agentId: string; payload: Record<string, unknown> };
+  "agents:instruction-reorder": { projectId: string; agentId: string; payload: Record<string, unknown> };
+  "agents:clone": { projectId: string; agentId: string; payload: Record<string, unknown> };
+  "agents:archive": { projectId: string; agentId: string; payload: Record<string, unknown> };
   "agents:open-folder": { projectId: string; agentId: string };
   "previews:list": { projectId: string; taskId?: string };
-  "previews:register": { projectId: string; taskId: string; payload: object };
+  "previews:register": { projectId: string; taskId: string; payload: Record<string, unknown> };
   "previews:remove": { projectId: string; previewId: string };
   "previews:start": { projectId: string; previewId: string };
   "previews:stop": { projectId: string; previewId: string };
   "previews:restart": { projectId: string; previewId: string };
   "previews:open": { projectId: string; previewId: string; target: "artifact" | "url" };
-  "plans:preview": { projectId: string; payload: object };
-  "plans:create": { projectId: string; payload: object };
-  "documents:create": { projectId: string; payload: object };
-  "documents:update": { projectId: string; documentId: string; payload: object };
-  "documents:plan-preview": { projectId: string; documentId: string; payload: object };
-  "documents:plan": { projectId: string; documentId: string; payload: object };
+  "plans:preview": { projectId: string; payload: Record<string, unknown> };
+  "plans:create": { projectId: string; payload: Record<string, unknown> };
+  "documents:create": { projectId: string; payload: Record<string, unknown> };
+  "documents:update": { projectId: string; documentId: string; payload: Record<string, unknown> };
+  "documents:plan-preview": { projectId: string; documentId: string; payload: Record<string, unknown> };
+  "documents:plan": { projectId: string; documentId: string; payload: Record<string, unknown> };
   "global-memories:list": Record<string, never>;
-  "global-memories:create": { payload: object };
-  "global-memories:update": { memoryId: string; payload: object };
-  "memories:create": { projectId: string; payload: object };
-  "memories:update": { projectId: string; memoryId: string; payload: object };
+  "global-memories:create": { payload: Record<string, unknown> };
+  "global-memories:update": { memoryId: string; payload: Record<string, unknown> };
+  "memories:create": { projectId: string; payload: Record<string, unknown> };
+  "memories:update": { projectId: string; memoryId: string; payload: Record<string, unknown> };
   "approvals:decide": { projectId: string; approvalId: string; action: "approve" | "reject" };
   "runs:followups": { projectId: string; runId: string };
   "reviews:report": { projectId: string; runId: string };
@@ -112,14 +113,14 @@ export type HarnessCommandInputs = {
   "drafts:events": { projectId: string; draftId: string; afterSequence?: number };
   "drafts:recover": { projectId: string };
   "tasks:create-from-prompt": { projectId: string; prompt: string };
-  "tasks:create": { projectId: string; payload: object };
-  "tasks:update": { projectId: string; taskId: string; payload: object };
+  "tasks:create": { projectId: string; payload: Record<string, unknown> };
+  "tasks:update": { projectId: string; taskId: string; payload: Record<string, unknown> };
   "tasks:start": { projectId: string; taskId: string };
   "tasks:pause": { projectId: string; taskId: string; reason?: string };
   "tasks:resume": { projectId: string; taskId: string };
   "tasks:move": { projectId: string; taskId: string; direction: "up" | "down" };
   "tasks:comment": { projectId: string; taskId: string; author?: string; body?: string };
-  "tasks:decompose": { projectId: string; taskId: string; payload: object };
+  "tasks:decompose": { projectId: string; taskId: string; payload: Record<string, unknown> };
   "tasks:merge": { projectId: string; taskId: string };
   "tasks:resolve-merge": { projectId: string; taskId: string };
   "tasks:request-changes": { projectId: string; taskId: string; reason?: string };
@@ -224,6 +225,8 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (!isText(payload.projectId)) return false;
   if (command === "plans:preview" || command === "plans:create") return isRecord(payload.payload);
   if (command === "documents:plan-preview" || command === "documents:plan") return isText(payload.documentId) && isRecord(payload.payload);
+  if (command === "projects:overview-sections") return Array.isArray(payload.sections) && payload.sections.length > 0 && payload.sections.every((section) =>
+    section === "board" || section === "activity" || section === "collaboration" || section === "reviews");
   if (command === "projects:update" || command === "projects:remove" || command === "projects:overview" ||
       command === "projects:report" || command === "projects:init-git" || command === "projects:schedule") return true;
   if (command === "agents:save") return isRecord(payload.payload) && (payload.agentId === undefined || payload.agentId === null || isText(payload.agentId));
@@ -292,7 +295,7 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
 }
 
 const commandNames = new Set<HarnessCommand>([
-  "projects:list", "projects:overview", "projects:create", "projects:update", "projects:remove", "projects:import",
+  "projects:list", "projects:overview", "projects:overview-sections", "projects:create", "projects:update", "projects:remove", "projects:import",
   "projects:report", "projects:init-git", "projects:schedule", "providers:list", "templates:agents", "templates:workflows",
   "mcp:clients", "mcp:client-save", "mcp:diagnose",
   "templates:projects", "templates:agent-create", "templates:workflow-create", "templates:project-create", "settings:get", "settings:update", "project-settings:get", "project-settings:update",

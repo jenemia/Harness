@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { getProjectOverview, openProjectDb } from "../src/db.js";
+import { openProjectDb } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import {
   acquireProjectWriterLock,
   ensureProjectLayout,

@@ -2,7 +2,7 @@ import { existsSync, readdirSync, watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import { harnessIpcVersion, type AgentFileEventEnvelope, type HarnessEventFilters } from "@harness/core";
 import type { ProjectRecord } from "./types.js";
-import { getProjectOverview } from "./db.js";
+import { getProjectOverviewSections } from "./overview-repository.js";
 import { getAgentDocumentService } from "./services.js";
 
 type Snapshot = { documentHash: string | null; contentVersion: string };
@@ -87,7 +87,7 @@ function scan(session: Session) {
 
 function readSnapshots(project: ProjectRecord) {
   const snapshots = new Map<string, Snapshot>();
-  for (const agent of getProjectOverview(project).agents) {
+  for (const agent of getProjectOverviewSections(project, ["board"]).agents || []) {
     if (agent.archivedAt) continue;
     try {
       const bundle = getAgentDocumentService(project, agent.id);

@@ -10,7 +10,7 @@ import {
   readAgentDefinition,
   updateAgentDefinition
 } from "../src/agent-store.js";
-import { getProjectOverview } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import { startTask } from "../src/runtime.js";
 import { createAgentService, createTaskService, registerProjectService, updateAgentService } from "../src/services.js";
 

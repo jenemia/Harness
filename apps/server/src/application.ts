@@ -6,7 +6,6 @@ import {
   createWorkflowTemplate,
   getGlobalSettings,
   getProject,
-  getProjectOverview,
   getProjectSettings,
   listAgentTemplates,
   listGlobalMemories,
@@ -22,6 +21,7 @@ import {
   updateGlobalSettings,
   updateProjectSettings
 } from "./db.js";
+import { getProjectOverview, getProjectOverviewSections } from "./overview-repository.js";
 import { selectFolder } from "./folder-picker.js";
 import { createPlan, previewProjectPlan, type PlanningMode } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
@@ -174,6 +174,10 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
   switch (command) {
     case "projects:list": return { projects: listProjectsWithSummaries() };
     case "projects:overview": return getProjectOverview(requiredProject(input(payload).projectId));
+    case "projects:overview-sections": {
+      const value = input(payload) as HarnessCommandInputs["projects:overview-sections"];
+      return getProjectOverviewSections(requiredProject(value.projectId), value.sections);
+    }
     case "projects:create": return registerProjectService(input(payload) as HarnessCommandInputs["projects:create"]);
     case "projects:update": {
       const value = input(payload) as HarnessCommandInputs["projects:update"];

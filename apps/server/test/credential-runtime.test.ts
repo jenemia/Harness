@@ -5,7 +5,6 @@ import path from "node:path";
 import test from "node:test";
 import {
   getGlobalSettings,
-  getProjectOverview,
   getProjectSettings,
   now,
   openGlobalDb,
@@ -13,6 +12,7 @@ import {
   updateGlobalSettings,
   updateProjectSettings
 } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import { startTask } from "../src/runtime.js";
 import { createAgentService, createTaskService, registerProjectService } from "../src/services.js";
 

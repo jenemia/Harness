@@ -54,7 +54,7 @@ export const taskService = {
       method: "POST",
       body: JSON.stringify(payload),
     })),
-  decompose: (projectId: string, taskId: string, payload: unknown) => desktopOrHttp("tasks:decompose", { projectId, taskId, payload: payload as object }, () =>
+  decompose: (projectId: string, taskId: string, payload: unknown) => desktopOrHttp("tasks:decompose", { projectId, taskId, payload: payload as Record<string, unknown> }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/decompose`, {
       method: "POST",
       body: JSON.stringify(payload),

@@ -196,6 +196,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "POST" && childPath === "overview-sections") {
+        const body = await readBody<{ sections: Array<"board" | "activity" | "collaboration" | "reviews"> }>(req);
+        sendJson(res, await invokeApplicationCommand("projects:overview-sections", { projectId: project.id, sections: body.sections }));
+        return;
+      }
+
       if (req.method === "GET" && childPath === "report") {
         sendJson(res, await invokeApplicationCommand("projects:report", { projectId: project.id }));
         return;
@@ -447,7 +453,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (childPath === "previews" && req.method === "POST") {
-        const body = await readBody<{ taskId?: string; payload?: object }>(req);
+        const body = await readBody<{ taskId?: string; payload?: Record<string, unknown> }>(req);
         sendJson(res, await invokeApplicationCommand("previews:register", { projectId: project.id, taskId: body.taskId || "", payload: body.payload || {} }), 201);
         return;
       }

@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { getProject, getProjectOverview } from "../src/db.js";
+import { getProject } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import {
   createAgentService,
   createDocumentService,

@@ -4,7 +4,8 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync }
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { getProjectOverview, openProjectDb, updateProjectSettings } from "../src/db.js";
+import { openProjectDb, updateProjectSettings } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import { respondInteraction, startTask } from "../src/runtime.js";
 import { createAgentService, createTaskService, registerProjectService } from "../src/services.js";
 import {

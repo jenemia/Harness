@@ -7,7 +7,7 @@ import { trace } from "@opentelemetry/api";
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { invokeApplicationCommand } from "../src/application.js";
-import { getProjectOverview } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import { registerProjectService } from "../src/services.js";
 import {
   currentTraceContext,

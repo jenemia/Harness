@@ -14,7 +14,8 @@ import {
   updateInlineReviewComment,
   updateRunFileReview
 } from "../src/completion-reviews.js";
-import { getProjectOverview, openProjectDb, updateProjectSettings } from "../src/db.js";
+import { openProjectDb, updateProjectSettings } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
 import { startTask } from "../src/runtime.js";
 import { createTaskService, registerProjectService } from "../src/services.js";
 
