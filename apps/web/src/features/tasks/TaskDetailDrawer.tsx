@@ -35,6 +35,7 @@ import {
   TaskRuns,
   TaskTimeline,
 } from "./TaskDetailSections";
+import { TaskPreviewPanel } from "./TaskPreviewPanel";
 
 export function TaskDetailDrawer(props: {
   overview: Overview;
@@ -494,6 +495,15 @@ export function TaskDetailDrawer(props: {
             <DetailItem label="Reporter" value={props.task.reporter} />
           </div>
         </section>
+
+        <TaskPreviewPanel
+          projectId={props.overview.project.id}
+          task={props.task}
+          previews={props.overview.previews.filter((preview) => preview.taskId === props.task.id)}
+          approvals={props.overview.approvals}
+          runAction={props.runAction}
+          onChanged={props.onChanged}
+        />
 
         {props.task.labels.length > 0 && (
           <section className="drawer-section">

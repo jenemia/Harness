@@ -394,11 +394,15 @@ Status: 완료
 
 Depends on: A27
 
+Status: 완료
+
 - task 카드와 상세 화면에 preview 상태, URL·산출물과 최근 log를 표시한다.
 - 시작·중지·재시작, 산출물 folder/file 열기와 HTTPS 또는 loopback URL 열기를 typed IPC와 선택적 HTTP transport로 제공한다.
 - desktop과 웹 개발 경로에서 동일 application service 결과와 오류를 사용한다.
 
 완료 조건: 사용자가 카드에서 preview 상태를 확인하고 안전하게 제어·열 수 있다.
+
+검증: project overview에 preview를 포함해 task 카드에는 preview 수와 집계 상태를, 상세 화면에는 runtime, PID, URL·artifact, approval, 오류와 bounded log를 표시했다. 등록 form과 시작·중지·재시작·삭제·open action은 desktop typed IPC와 선택적 HTTP가 공유하는 application command를 사용하며, artifact open은 실행 직전 task workspace realpath 경계를 다시 검증하고 OS opener에 shell interpolation 없이 argument로 전달한다. 단위 테스트에서 macOS·Windows·Linux opener 명령, 공백과 shell metacharacter 보존, 외부 symlink 차단을 확인했다. `pnpm dev` 브라우저 테스트에서 artifact 등록·live·중지, process approval, local server의 booting→live, log 표시, 재시작 PID 변경과 중지 후 log 유지를 확인했고 브라우저 console 오류가 없었다. 전체 workspace typecheck·build와 server·web·desktop 테스트를 통과했다.
 
 ## 실행 순서
 

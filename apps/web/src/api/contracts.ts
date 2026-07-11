@@ -263,6 +263,33 @@ export type Approval = {
   interactionId: string | null;
 };
 
+export type Preview = {
+  id: string;
+  taskId: string;
+  contractVersion: 1;
+  label: string;
+  runtime: "artifact" | "local" | "docker-compose";
+  executable: string | null;
+  args: string[];
+  packageRoot: string;
+  composeFile: string | null;
+  service: string | null;
+  artifactPath: string | null;
+  readinessUrl: string | null;
+  environmentKeys: string[];
+  commandPreview: string | null;
+  approvalId: string | null;
+  status: "stopped" | "booting" | "live" | "crashed";
+  pid: number | null;
+  ownerInstanceId: string | null;
+  processStartedAt: string | null;
+  logPath: string | null;
+  logTail: string;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Interaction = {
   id: string;
   projectId: string;
@@ -470,6 +497,7 @@ export type Overview = {
   memories: MemoryRecord[];
   globalMemories: MemoryRecord[];
   approvals: Approval[];
+  previews: Preview[];
   interactions: Interaction[];
   handoffs: Handoff[];
   comments: CommentRecord[];

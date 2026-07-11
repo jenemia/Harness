@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { assertNoCredentialMaterial, redactCredentialMaterial } from "./credential-security.js";
-import { insertEvent, mapTask, now, openProjectDb } from "./db.js";
+import { insertEvent, mapPreview, mapTask, now, openProjectDb } from "./db.js";
 import { detectRiskyCommand } from "./providers.js";
-import type { PreviewRecord, PreviewRuntime, ProjectRecord, TaskRecord } from "./types.js";
+import type { PreviewRuntime, ProjectRecord, TaskRecord } from "./types.js";
 
 export type PreviewRegistrationInput = {
   label?: string;
@@ -219,34 +219,4 @@ function requiredText(value: unknown, label: string, maxLength: number) {
 
 function formatCommandPreview(executable: string, args: string[]) {
   return redactCredentialMaterial([executable, ...args].map((part) => /^[A-Za-z0-9_./:@%+=,-]+$/.test(part) ? part : JSON.stringify(part)).join(" "));
-}
-
-export function mapPreview(row: unknown): PreviewRecord {
-  const value = row as Record<string, string | number | null>;
-  return {
-    id: String(value.id),
-    taskId: String(value.task_id),
-    contractVersion: 1,
-    label: String(value.label),
-    runtime: String(value.runtime) as PreviewRuntime,
-    executable: value.executable ? String(value.executable) : null,
-    args: JSON.parse(String(value.args || "[]")) as string[],
-    packageRoot: String(value.package_root || "."),
-    composeFile: value.compose_file ? String(value.compose_file) : null,
-    service: value.service ? String(value.service) : null,
-    artifactPath: value.artifact_path ? String(value.artifact_path) : null,
-    readinessUrl: value.readiness_url ? String(value.readiness_url) : null,
-    environmentKeys: JSON.parse(String(value.environment_keys || "[]")) as string[],
-    commandPreview: value.command_preview ? String(value.command_preview) : null,
-    approvalId: value.approval_id ? String(value.approval_id) : null,
-    status: String(value.status || "stopped") as PreviewRecord["status"],
-    pid: value.pid === null || value.pid === undefined ? null : Number(value.pid),
-    ownerInstanceId: value.owner_instance_id ? String(value.owner_instance_id) : null,
-    processStartedAt: value.process_started_at ? String(value.process_started_at) : null,
-    logPath: value.log_path ? String(value.log_path) : null,
-    logTail: String(value.log_tail || ""),
-    lastError: value.last_error ? String(value.last_error) : null,
-    createdAt: String(value.created_at),
-    updatedAt: String(value.updated_at)
-  };
 }

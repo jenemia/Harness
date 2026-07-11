@@ -462,6 +462,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, await invokeApplicationCommand(`previews:${action}`, { projectId: project.id, previewId: previewActionMatch[1] }));
         return;
       }
+      const previewOpenMatch = childPath.match(/^previews\/([^/]+)\/open$/);
+      if (previewOpenMatch && req.method === "POST") {
+        const body = await readBody<{ target?: "artifact" | "url" }>(req);
+        sendJson(res, await invokeApplicationCommand("previews:open", { projectId: project.id, previewId: previewOpenMatch[1], target: body.target || "artifact" }));
+        return;
+      }
 
       if (req.method === "POST" && childPath === "tasks") {
         sendJson(res, await invokeApplicationCommand("tasks:create", { projectId: project.id, payload: await readBody(req) }), 201);

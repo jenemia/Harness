@@ -53,6 +53,7 @@ const commands: Record<string, CommandHandler> = {
   "previews:start": startPreviewCommand,
   "previews:stop": stopPreviewCommand,
   "previews:restart": restartPreviewCommand,
+  "previews:open": openPreviewCommand,
   "plans:preview": previewPlanCommand,
   "plans:create": createPlanCommand,
   "documents:list": listDocumentsCommand,
@@ -453,6 +454,14 @@ function removePreviewCommand(args: string[]) {
 function startPreviewCommand(args: string[]) { return previewActionCommand("previews:start", args); }
 function stopPreviewCommand(args: string[]) { return previewActionCommand("previews:stop", args); }
 function restartPreviewCommand(args: string[]) { return previewActionCommand("previews:restart", args); }
+
+function openPreviewCommand(args: string[]) {
+  const options = parseOptions(args);
+  const targetOption = getRequiredOption(options, "target");
+  if (targetOption !== "artifact" && targetOption !== "url") throw new Error("--target must be artifact or url.");
+  const target = targetOption as "artifact" | "url";
+  return invokeTransport("previews:open", { projectId: getRequiredOption(options, "project"), previewId: getRequiredOption(options, "preview"), target });
+}
 
 function previewActionCommand(command: "previews:start" | "previews:stop" | "previews:restart", args: string[]) {
   const options = parseOptions(args);
@@ -1130,6 +1139,7 @@ Usage:
   pnpm --filter @harness/server cli previews:register --project <projectId> --task <taskId> --runtime artifact|local|docker-compose [--label <text>] [--executable <program> --args '["arg"]'] [--packageRoot <relative>] [--composeFile <relative> --service <name>] [--artifactPath <relative>] [--readinessUrl <url>] [--environmentKeys KEY1,KEY2]
   pnpm --filter @harness/server cli previews:remove --project <projectId> --preview <previewId>
   pnpm --filter @harness/server cli previews:start|stop|restart --project <projectId> --preview <previewId>
+  pnpm --filter @harness/server cli previews:open --project <projectId> --preview <previewId> --target artifact|url
   pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>]
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>

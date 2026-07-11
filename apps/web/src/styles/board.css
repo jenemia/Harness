@@ -202,6 +202,7 @@ button:disabled {
 .dependency-chip,
 .label-chip,
 .merge-chip,
+.preview-chip,
 .run-state {
   border-radius: 999px;
   font-size: 10px;
@@ -209,6 +210,11 @@ button:disabled {
   min-height: 20px;
   padding: 4px 7px;
 }
+
+.preview-chip.live { background: #e6f4ea; color: #176b35; }
+.preview-chip.booting { background: #fff4ce; color: #755914; }
+.preview-chip.crashed { background: #fff1f0; color: #9c2821; }
+.preview-chip.stopped { background: #f1f2f4; color: #626f86; }
 
 .issue-key {
   color: #8a8e97;

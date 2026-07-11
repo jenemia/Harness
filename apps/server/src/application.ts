@@ -101,6 +101,7 @@ import { correlationAttributes, operationSpanName, withTelemetrySpan } from "./t
 import { subscribeAgentFileEvents } from "./agent-file-events.js";
 import { listPreviews, registerPreview, removePreview, type PreviewRegistrationInput } from "./previews.js";
 import { recoverPreviewProcesses, restartPreview, startPreview, stopPreview } from "./preview-runtime.js";
+import { openPreviewTarget } from "./preview-opener.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -312,6 +313,10 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "previews:restart": {
       const value = input(payload) as HarnessCommandInputs["previews:restart"];
       return { preview: await restartPreview(requiredProject(value.projectId), value.previewId) };
+    }
+    case "previews:open": {
+      const value = input(payload) as HarnessCommandInputs["previews:open"];
+      return openPreviewTarget(requiredProject(value.projectId), value.previewId, value.target);
     }
     case "plans:preview": {
       const value = input(payload) as HarnessCommandInputs["plans:preview"];

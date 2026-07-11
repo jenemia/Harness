@@ -768,6 +768,82 @@
   text-transform: uppercase;
 }
 
+.preview-heading,
+.preview-item-top {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.preview-register-form,
+.preview-list {
+  display: grid;
+  gap: 8px;
+}
+
+.preview-register-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preview-register-form .primary-button {
+  grid-column: 1 / -1;
+}
+
+.preview-item {
+  border: 1px solid #dfe1e6;
+  border-left-width: 4px;
+  border-radius: 8px;
+  display: grid;
+  font-size: 11px;
+  gap: 7px;
+  padding: 10px;
+}
+
+.preview-item.status-live { border-left-color: #2e7d46; }
+.preview-item.status-booting { border-left-color: #d59b12; }
+.preview-item.status-crashed { border-left-color: #c9372c; }
+.preview-item.status-stopped { border-left-color: #8590a2; }
+
+.preview-item-top strong {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+}
+
+.preview-status {
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+}
+
+.preview-status.live { background: #e6f4ea; color: #176b35; }
+.preview-status.booting { background: #fff4ce; color: #755914; }
+.preview-status.crashed { background: #fff1f0; color: #9c2821; }
+.preview-status.stopped { background: #f1f2f4; color: #626f86; }
+
+.preview-item code,
+.preview-item pre {
+  background: #16181d;
+  border-radius: 6px;
+  color: #d8dbe2;
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+
+.preview-item pre { max-height: 180px; }
+.preview-approval { color: #755914; }
+.preview-error { color: #9c2821; }
+
+@media (max-width: 720px) {
+  .preview-register-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .drawer-copy {
   color: #44546f;
   font-size: 13px;

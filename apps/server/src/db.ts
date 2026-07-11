@@ -35,6 +35,8 @@ import type {
   ProjectImportResult,
   ProjectImportSkipped,
   ProjectOAuthAccountLink,
+  PreviewRecord,
+  PreviewRuntime,
   ProjectOverview,
   ProjectRecord,
   ProjectSettings,
@@ -2060,6 +2062,7 @@ export function getProjectOverview(project: ProjectRecord): ProjectOverview {
       memories: db.prepare("SELECT * FROM memories ORDER BY updated_at DESC").all().map(mapMemory),
       globalMemories: listGlobalMemories(),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
+      previews: db.prepare("SELECT * FROM previews ORDER BY created_at ASC").all().map(mapPreview),
       interactions: db.prepare("SELECT * FROM interactions ORDER BY created_at DESC LIMIT 500").all().map(mapInteraction),
       handoffs: db.prepare("SELECT * FROM handoffs ORDER BY created_at DESC LIMIT 100").all().map(mapHandoff),
       comments: db.prepare("SELECT * FROM comments ORDER BY created_at DESC LIMIT 200").all().map(mapComment),
@@ -2536,6 +2539,36 @@ export function mapApproval(row: unknown): ApprovalRecord {
     createdAt: String(r.created_at),
     decidedAt: r.decided_at ? String(r.decided_at) : null,
     interactionId: r.interaction_id ? String(r.interaction_id) : null
+  };
+}
+
+export function mapPreview(row: unknown): PreviewRecord {
+  const value = row as Record<string, string | number | null>;
+  return {
+    id: String(value.id),
+    taskId: String(value.task_id),
+    contractVersion: 1,
+    label: String(value.label),
+    runtime: String(value.runtime) as PreviewRuntime,
+    executable: value.executable ? String(value.executable) : null,
+    args: JSON.parse(String(value.args || "[]")) as string[],
+    packageRoot: String(value.package_root || "."),
+    composeFile: value.compose_file ? String(value.compose_file) : null,
+    service: value.service ? String(value.service) : null,
+    artifactPath: value.artifact_path ? String(value.artifact_path) : null,
+    readinessUrl: value.readiness_url ? String(value.readiness_url) : null,
+    environmentKeys: JSON.parse(String(value.environment_keys || "[]")) as string[],
+    commandPreview: value.command_preview ? String(value.command_preview) : null,
+    approvalId: value.approval_id ? String(value.approval_id) : null,
+    status: String(value.status || "stopped") as PreviewRecord["status"],
+    pid: value.pid === null || value.pid === undefined ? null : Number(value.pid),
+    ownerInstanceId: value.owner_instance_id ? String(value.owner_instance_id) : null,
+    processStartedAt: value.process_started_at ? String(value.process_started_at) : null,
+    logPath: value.log_path ? String(value.log_path) : null,
+    logTail: String(value.log_tail || ""),
+    lastError: value.last_error ? String(value.last_error) : null,
+    createdAt: String(value.created_at),
+    updatedAt: String(value.updated_at)
   };
 }
 

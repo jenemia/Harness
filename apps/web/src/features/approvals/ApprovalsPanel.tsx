@@ -109,7 +109,7 @@ export function ApprovalsPanel(props: {
               <div>
                 <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
                 <span>
-                  {agent?.name || "Unknown agent"} ·{" "}
+                  {agent?.name || (approval.kind === "preview" ? "Preview runtime" : "Unknown agent")} ·{" "}
                   {approval.kind.replace("_", " ")}
                   {targetAgent ? ` · to ${targetAgent.name}` : ""}
                 </span>

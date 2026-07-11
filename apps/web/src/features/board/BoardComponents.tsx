@@ -8,6 +8,7 @@ import {
   GitFork,
   GitMerge,
   Link2,
+  Monitor,
   Play,
   RefreshCcw,
   Search,
@@ -15,7 +16,7 @@ import {
   UserRoundCog,
   X,
 } from "lucide-react";
-import type { Agent, Task } from "../../api/contracts";
+import type { Agent, Preview, Task } from "../../api/contracts";
 import { taskService } from "../../services/taskService";
 import { useI18n } from "../../i18n";
 
@@ -89,6 +90,7 @@ export function TaskCard(props: {
   assignee: Agent | null | undefined;
   projectId: string;
   hasPendingInteraction: boolean;
+  previews: Preview[];
   onOpen: () => void;
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
@@ -220,6 +222,10 @@ export function TaskCard(props: {
         {props.task.mergeError && (
           <span className="blocked-note">{props.task.mergeError}</span>
         )}
+        {props.previews.length > 0 && <span className={`preview-chip ${previewSummaryStatus(props.previews)}`}>
+          <Monitor size={14} />
+          {props.previews.length} preview · {previewSummaryStatus(props.previews)}
+        </span>}
       </div>
       <div className="card-controls">
         <select
@@ -316,4 +322,11 @@ export function TaskCard(props: {
       </div>
     </article>
   );
+}
+
+function previewSummaryStatus(previews: Preview[]) {
+  if (previews.some((preview) => preview.status === "crashed")) return "crashed";
+  if (previews.some((preview) => preview.status === "booting")) return "booting";
+  if (previews.some((preview) => preview.status === "live")) return "live";
+  return "stopped";
 }

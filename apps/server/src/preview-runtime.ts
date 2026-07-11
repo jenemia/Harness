@@ -3,8 +3,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { insertEvent, mapTask, now, openProjectDb, projectHarnessDir } from "./db.js";
-import { mapPreview } from "./previews.js";
+import { insertEvent, mapPreview, mapTask, now, openProjectDb, projectHarnessDir } from "./db.js";
 import type { PreviewRecord, ProjectRecord, TaskRecord } from "./types.js";
 
 const previewOwnerInstanceId = randomUUID();

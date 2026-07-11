@@ -562,6 +562,7 @@ export type ProjectOverview = {
   memories: MemoryRecord[];
   globalMemories: MemoryRecord[];
   approvals: ApprovalRecord[];
+  previews: PreviewRecord[];
   interactions: InteractionRecord[];
   handoffs: HandoffRecord[];
   comments: CommentRecord[];

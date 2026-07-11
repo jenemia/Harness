@@ -71,6 +71,7 @@ pnpm cli previews:list --project <projectId> --task <taskId>
 pnpm cli previews:start --project <projectId> --preview <previewId>
 pnpm cli previews:stop --project <projectId> --preview <previewId>
 pnpm cli previews:restart --project <projectId> --preview <previewId>
+pnpm cli previews:open --project <projectId> --preview <previewId> --target artifact|url
 pnpm cli agents:instruction-save --project <projectId> --agent <agentId> --name security-review --expectedHash <sha256> --contentFile ./security-review.md
 pnpm cli agents:clone --project <projectId> --agent <agentId> --name "Agent Copy"
 pnpm cli agents:archive --project <projectId> --agent <agentId> --expectedHash <sha256> --reassignTo <replacementAgentId>
