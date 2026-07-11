@@ -35,7 +35,8 @@
 - [ ] `에이전트 관리`에서 project agent 목록과 파일 parse 상태를 보여준다.
 - [ ] agent 생성 시 folder와 기본 `agent.md`를 만들고 template 또는 빈 정의로 시작할 수 있게 한다.
 - [ ] 구조화 form과 raw Markdown editor가 같은 in-memory document를 편집하게 한다.
-- [ ] 저장 전 diff와 validation 결과를 보여준다.
+- [ ] 변경 결과에서 원본 대비 diff와 validation 결과를 보여준다.
+- [ ] validation 오류가 있는 경우에만 저장을 차단하고 수정 위치를 안내한다.
 - [ ] persona와 instruction Markdown preview를 제공한다.
 - [ ] instruction file 생성, 이름 변경, 순서 변경, 편집과 제거를 지원한다.
 - [ ] agent 복제, 비활성화, archive와 folder 열기를 제공한다.
