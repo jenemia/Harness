@@ -63,6 +63,7 @@ import {
   importProjectsService,
   registerProjectService,
   previewAgentRawService,
+  openAgentFolderService,
   removeAgentInstructionService,
   renameAgentInstructionService,
   reorderAgentInstructionsService,
@@ -238,6 +239,10 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "agents:get": {
       const value = input(payload) as HarnessCommandInputs["agents:get"];
       return getAgentDocumentService(requiredProject(value.projectId), value.agentId);
+    }
+    case "agents:open-folder": {
+      const value = input(payload) as HarnessCommandInputs["agents:open-folder"];
+      return openAgentFolderService(requiredProject(value.projectId), value.agentId);
     }
     case "agents:raw-preview": {
       const value = input(payload) as HarnessCommandInputs["agents:raw-preview"];

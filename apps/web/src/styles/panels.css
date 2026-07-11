@@ -425,6 +425,120 @@ textarea {
   padding: 0 8px;
 }
 
+.agent-editor-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.agent-editor-card.archived { background: #fafafb; }
+
+.agent-editor-toolbar,
+.agent-editor-actions,
+.agent-archive-controls,
+.instruction-rename-row,
+.instruction-controls .inline-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.agent-editor-toolbar > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.agent-editor-toolbar span,
+.agent-archive-controls > span { color: var(--muted); font-size: 11px; }
+
+.agent-editor-grid,
+.agent-result-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agent-structured-editor,
+.agent-raw-editor,
+.agent-result-grid > section,
+.agent-instruction-editor,
+.agent-archive-controls {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px;
+}
+
+.agent-editor-card h3 {
+  align-items: center;
+  color: #353841;
+  display: flex;
+  font-size: 12px;
+  gap: 5px;
+  margin: 0;
+}
+
+.agent-structured-editor textarea { min-height: 76px; }
+.agent-raw-editor textarea {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  min-height: 520px;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.agent-validation {
+  align-items: flex-start;
+  border: 1px solid #d9dde5;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  gap: 3px;
+  padding: 9px 11px;
+}
+
+.agent-validation.valid { background: #effaf3; border-color: #a8ddb9; color: #176b35; }
+.agent-validation.pending { background: #fff9e8; border-color: #ecd38c; color: #755914; }
+.agent-validation.invalid { background: #fff1f0; border-color: #f1b5b0; color: #9c2821; }
+
+.agent-diff {
+  background: #16181d;
+  border-radius: 7px;
+  color: #d8dbe2;
+  font-size: 10px;
+  line-height: 1.55;
+  margin: 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.agent-diff span { display: block; }
+.agent-diff .diff-add { background: #173b28; color: #b8f5cc; }
+.agent-diff .diff-remove { background: #4a2226; color: #ffc0c4; }
+
+.markdown-preview {
+  background: #f7f8fa;
+  border-radius: 7px;
+  color: #363940;
+  font-size: 12px;
+  line-height: 1.55;
+  min-height: 56px;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
+.agent-instruction-editor .instruction-controls { display: grid; gap: 8px; }
+.agent-instruction-editor textarea { font-family: "SFMono-Regular", Consolas, monospace; min-height: 150px; }
+.instruction-rename-row input { flex: 1 1 180px; }
+.danger { color: #a3312b; }
+
 .compact-row {
   justify-content: space-between;
   min-height: 30px;

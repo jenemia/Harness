@@ -173,6 +173,8 @@ agent application service는 structured patch와 raw Markdown save, instruction 
 
 archive는 active 또는 suspended run이 있으면 거부한다. 완료되지 않은 assigned task가 있으면 replacement agent 또는 명시적 unassign을 요구하고, 통과하면 folder 전체를 `.harness/agent/.archive/<agent-folder>/`로 atomic rename한 뒤 DB에는 archive path, runtime 상태와 history 연결만 남긴다. clone은 source의 custom section과 instruction Markdown을 새 stable id folder에 복사하며 기본적으로 disabled 상태로 시작한다.
 
+agent 관리 UI는 구조화 form과 raw Markdown editor가 하나의 in-memory draft를 공유한다. 구조화 변경은 unknown frontmatter와 custom section을 보존해 raw 원문에 반영하며, 원본 대비 line diff와 application service validation 결과를 작업 결과로 함께 표시한다. parse 또는 reference validation 오류가 있을 때만 저장을 차단하고 reload 전까지 사용자의 invalid draft를 유지한다. instruction 편집, clone, enabled 전환, archive/reassignment와 folder 열기는 renderer가 filesystem을 직접 다루지 않고 동일한 typed application command를 호출한다.
+
 ## 사용자 전역 데이터
 
 project에 종속되지 않는 다음 정보는 OS application data directory에 둔다.

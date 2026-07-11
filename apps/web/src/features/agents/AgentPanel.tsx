@@ -6,9 +6,10 @@ import type {
   Overview,
   ProviderCatalog,
 } from "../../api/contracts";
-import { agentService } from "../../services/agentService";
+import { agentService, type AgentDocumentBundle } from "../../services/agentService";
 import { formatDate } from "../../shared/format";
 import { useI18n } from "../../i18n";
+import { AgentMarkdownEditor } from "./AgentMarkdownEditor";
 export function AgentPanel(props: {
   overview: Overview;
   providerCatalog: ProviderCatalog | null;
@@ -29,6 +30,7 @@ export function AgentPanel(props: {
   const [boundaries, setBoundaries] = useState("");
   const [maxParallel, setMaxParallel] = useState(1);
   const [enabled, setEnabled] = useState(true);
+  const [editorBundle, setEditorBundle] = useState<AgentDocumentBundle | null>(null);
   const selectedProvider = props.providerCatalog?.llmProviders.find(
     (provider) => provider.id === modelBackend,
   );
@@ -131,18 +133,12 @@ export function AgentPanel(props: {
     setMaxParallel(template.maxParallel);
   }
 
-  function editAgent(agent: Agent) {
-    setEditingAgentId(agent.id);
-    setName(agent.name);
-    setRole(agent.role);
-    setPersona(agent.persona);
-    setCliCommand(agent.cliCommand || "");
-    setCapabilitiesText(agent.capabilities.join(", "));
-    setAllowedToolsText(agent.allowedTools.join(", "));
-    setBoundaries(agent.boundaries);
-    setModelBackend(agent.modelBackend);
-    setMaxParallel(agent.maxParallel);
-    setEnabled(agent.enabled);
+  async function editAgent(agent: Agent) {
+    await props.runAction(async () => {
+      const bundle = await agentService.get(props.overview.project.id, agent.id);
+      setEditingAgentId(agent.id);
+      setEditorBundle(bundle);
+    });
   }
 
   function resetForm() {
@@ -157,6 +153,7 @@ export function AgentPanel(props: {
     setModelBackend(props.overview.settings.defaultModelBackend);
     setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
     setEnabled(true);
+    setEditorBundle(null);
   }
 
   return (
@@ -177,7 +174,7 @@ export function AgentPanel(props: {
                   <button
                     className="mini-button"
                     type="button"
-                    onClick={() => editAgent(agent)}
+                    onClick={() => void editAgent(agent)}
                   >
                     {t("common.edit")}
                   </button>
@@ -188,6 +185,7 @@ export function AgentPanel(props: {
                 <span>
                   definition: {agent.parseStatus} · {agent.definitionPath || "not materialized"}
                 </span>
+                {agent.archivedAt && <span>archived: {agent.archivePath}</span>}
                 {agent.parseError && <span>definition error: {agent.parseError}</span>}
                 {agent.capabilities.length > 0 && (
                   <span>{agent.capabilities.join(", ")}</span>
@@ -217,7 +215,18 @@ export function AgentPanel(props: {
           );
         })}
       </div>
-      <form className="stack-form" onSubmit={submit}>
+      {editorBundle && (
+        <AgentMarkdownEditor
+          overview={props.overview}
+          providerCatalog={props.providerCatalog}
+          bundle={editorBundle}
+          runAction={props.runAction}
+          onBundleChanged={setEditorBundle}
+          onClose={resetForm}
+          onProjectChanged={props.onChanged}
+        />
+      )}
+      {!editorBundle && <form className="stack-form" onSubmit={submit}>
         {editingAgentId && (
           <div className="form-group-title">Editing agent</div>
         )}
@@ -333,7 +342,7 @@ export function AgentPanel(props: {
           <Plus size={16} />
           <span>{editingAgentId ? "Save agent" : "Agent"}</span>
         </button>
-      </form>
+      </form>}
     </section>
   );
 }

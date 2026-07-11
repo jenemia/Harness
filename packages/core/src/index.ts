@@ -35,6 +35,7 @@ export type HarnessCommandInputs = {
   "agents:instruction-reorder": { projectId: string; agentId: string; payload: object };
   "agents:clone": { projectId: string; agentId: string; payload: object };
   "agents:archive": { projectId: string; agentId: string; payload: object };
+  "agents:open-folder": { projectId: string; agentId: string };
   "plans:preview": { projectId: string; payload: object };
   "plans:create": { projectId: string; payload: object };
   "documents:create": { projectId: string; payload: object };
@@ -206,6 +207,7 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
       command === "projects:report" || command === "projects:init-git" || command === "projects:schedule") return true;
   if (command === "agents:save") return isRecord(payload.payload) && (payload.agentId === undefined || payload.agentId === null || isText(payload.agentId));
   if (command === "agents:get") return isText(payload.agentId);
+  if (command === "agents:open-folder") return isText(payload.agentId);
   if (command === "agents:raw-preview") return isText(payload.agentId) && typeof payload.raw === "string";
   if (command === "agents:raw-save") return isText(payload.agentId) && typeof payload.raw === "string" && isText(payload.expectedHash);
   if (command === "agents:instruction-save" || command === "agents:instruction-rename" || command === "agents:instruction-remove" ||
@@ -269,7 +271,7 @@ const commandNames = new Set<HarnessCommand>([
   "projects:report", "projects:init-git", "projects:schedule", "providers:list", "templates:agents", "templates:workflows",
   "mcp:clients", "mcp:client-save", "mcp:diagnose",
   "templates:projects", "templates:agent-create", "templates:workflow-create", "templates:project-create", "settings:get", "settings:update", "project-settings:get", "project-settings:update",
-  "system:select-folder", "agents:save", "agents:get", "agents:raw-preview", "agents:raw-save", "agents:instruction-save", "agents:instruction-rename", "agents:instruction-remove", "agents:instruction-reorder", "agents:clone", "agents:archive",
+  "system:select-folder", "agents:save", "agents:get", "agents:raw-preview", "agents:raw-save", "agents:instruction-save", "agents:instruction-rename", "agents:instruction-remove", "agents:instruction-reorder", "agents:clone", "agents:archive", "agents:open-folder",
   "plans:preview", "plans:create", "documents:create", "documents:update", "documents:plan-preview", "documents:plan", "global-memories:list", "global-memories:create",
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
   "interactions:list", "interactions:respond",

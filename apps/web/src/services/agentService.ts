@@ -72,4 +72,6 @@ export const agentService = {
     "agents:clone", { projectId, agentId, payload }, () => api<AgentDocumentBundle>(`/api/projects/${projectId}/agents/${agentId}/clone`, { method: "POST", body: JSON.stringify(payload) })),
   archive: (projectId: string, agentId: string, payload: { expectedHash: string; reassignToAgentId?: string | null }) => desktopOrHttp(
     "agents:archive", { projectId, agentId, payload }, () => api(`/api/projects/${projectId}/agents/${agentId}/archive`, { method: "POST", body: JSON.stringify(payload) })),
+  openFolder: (projectId: string, agentId: string) => desktopOrHttp(
+    "agents:open-folder", { projectId, agentId }, () => api(`/api/projects/${projectId}/agents/${agentId}/open-folder`, { method: "POST" })),
 };

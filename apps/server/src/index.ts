@@ -435,6 +435,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      const agentOpenFolderMatch = childPath.match(/^agents\/([^/]+)\/open-folder$/);
+      if (agentOpenFolderMatch && req.method === "POST") {
+        sendJson(res, await invokeApplicationCommand("agents:open-folder", { projectId: project.id, agentId: agentOpenFolderMatch[1] }));
+        return;
+      }
+
       if (req.method === "POST" && childPath === "tasks") {
         sendJson(res, await invokeApplicationCommand("tasks:create", { projectId: project.id, payload: await readBody(req) }), 201);
         return;

@@ -23,6 +23,7 @@ import {
   updateProjectRecord
 } from "./db.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
+import { openLocalFolder } from "./folder-opener.js";
 import { withProjectWriterLock } from "./project-store.js";
 import {
   archiveAgentDefinition,
@@ -242,6 +243,12 @@ export function previewAgentRawService(project: ProjectRecord, agentId: string, 
   const document = validateAgentDefinitionRaw(project.path, current.agent.definitionPath, raw);
   if (document.definition.id !== agentId) throw new Error("Agent definition id cannot be changed.");
   return { current: current.source, document, instructions: listAgentInstructions(project.path, current.agent.definitionPath), validation: { valid: true, error: null } };
+}
+
+export async function openAgentFolderService(project: ProjectRecord, agentId: string) {
+  const bundle = getAgentDocumentService(project, agentId);
+  if (!bundle.folderPath) throw new Error("Agent folder path is unavailable.");
+  return openLocalFolder(bundle.folderPath);
 }
 
 function saveAgentRawMutation(project: ProjectRecord, agentId: string, input: { raw: string; expectedHash: string }) {

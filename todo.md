@@ -1,27 +1,10 @@
 # Harness TODO
 
-이 문서는 아직 완료되지 않은 작업만 관리한다. 완료된 A01–A23 구현과 티켓별 검증·커밋 이력은 [Harness TODO Automation Tickets](Document/todo-automation-tickets.md)에서 확인한다.
+이 문서는 아직 완료되지 않은 작업만 관리한다. 완료된 A01–A24 구현과 티켓별 검증·커밋 이력은 [Harness TODO Automation Tickets](Document/todo-automation-tickets.md)에서 확인한다.
 
 구조 변경 작업은 [Harness Local Desktop Architecture](Document/local-desktop-architecture.md)를 먼저 확인하고 application service 경계, project-local `.harness/`, typed transport와 CLI-owned 인증 원칙을 따른다.
 
-## `.harness/agent` 관리 완성
-
-기준 원본은 project별 `.harness/agent/<agent-slug>--<short-id>/agent.md`와 명시적으로 연결된 instruction Markdown이다.
-
-### App 및 Web 관리 UI
-
-- [ ] `에이전트 관리`에서 project agent 목록과 파일 parse 상태를 보여준다.
-- [ ] agent 생성 시 folder와 기본 `agent.md`를 만들고 template 또는 빈 정의로 시작할 수 있게 한다.
-- [ ] 구조화 form과 raw Markdown editor가 같은 in-memory document를 편집하게 한다.
-- [ ] 변경 결과에서 원본 대비 diff와 validation 결과를 보여준다.
-- [ ] validation 오류가 있는 경우에만 저장을 차단하고 수정 위치를 안내한다.
-- [ ] persona와 instruction Markdown preview를 제공한다.
-- [ ] instruction file 생성, 이름 변경, 순서 변경, 편집과 제거를 지원한다.
-- [ ] agent 복제, 비활성화, archive와 folder 열기를 제공한다.
-- [ ] archive 시 `.harness/agent/.archive/<agent-folder>/`에 원본 Markdown을 보존한다.
-- [ ] active run 또는 assigned task가 있는 agent의 archive·삭제를 차단하고 reassignment 흐름을 제공한다.
-
-### 외부 편집과 충돌 처리
+## 외부 편집과 충돌 처리
 
 - [ ] file watcher가 외부 editor의 `agent.md`와 instruction 변경을 debounce해 감지한다.
 - [ ] UI 편집 중 외부 파일이 바뀌면 content hash 충돌을 감지하고 overwrite, reload 또는 수동 merge를 선택하게 한다.

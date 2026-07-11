@@ -338,11 +338,15 @@ Status: 완료
 
 Depends on: A23
 
+Status: 완료
+
 - 구조화 form과 raw Markdown editor가 하나의 in-memory document를 편집한다.
 - 변경 결과에서 원본 대비 diff와 validation 결과를 표시하고 오류가 있을 때만 저장을 막는다.
 - preview, instruction ordering, clone, disable, archive와 folder-open UI를 제공한다.
 
 완료 조건: 사용자가 앱과 웹에서 agent Markdown을 손실 없이 편집하고 결과·검증을 확인할 수 있다.
+
+검증: project agent 목록과 parse 상태, template 기반 생성, 구조화 form과 raw Markdown의 단일 draft, lossless custom field/section 보존, validation 오류 위치, 원본 대비 diff, persona/instruction preview와 instruction 생성·수정·이름·순서·제거 UI를 구현했다. clone은 disabled 상태로 생성하고, enabled 전환, folder 열기, archive 원본 보존과 active run 차단·open task 재배정 흐름을 공통 application command로 연결했다. 단위 테스트에서 draft round-trip·invalid Markdown과 OS별 folder-open 명령의 shell interpolation 방지를 확인했다. `pnpm dev` 브라우저 테스트에서 구조화 변경의 raw/diff 반영, invalid raw 저장 차단·reload 복원, 저장 후 hash 갱신, instruction 생성, disabled clone, open task를 replacement agent로 재배정하는 archive와 API 상태를 확인했다.
 
 ### A25: External agent edit watcher와 conflict resolution
 

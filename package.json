@@ -12,7 +12,7 @@
     "start": "pnpm --filter @harness/server start",
     "cli": "pnpm --filter @harness/server cli",
     "smoke:quick-start": "bash scripts/quick-start-smoke.sh",
-    "test": "pnpm --filter @harness/server test && pnpm --filter @harness/desktop test",
+    "test": "pnpm --filter @harness/server test && pnpm --filter @harness/web test && pnpm --filter @harness/desktop test",
     "build": "pnpm --recursive build",
     "typecheck": "pnpm --recursive typecheck"
   },
