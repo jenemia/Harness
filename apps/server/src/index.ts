@@ -3,78 +3,16 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  createAgentTemplate,
-  createGlobalMemory,
-  createProjectTemplate,
-  createWorkflowTemplate,
   getProject,
-  getProjectOverview,
-  getGlobalSettings,
-  getProjectSettings,
   globalHarnessDir,
-  listAgentTemplates,
-  listGlobalMemories,
-  listMcpAudits,
-  listMcpClients,
-  listProjectTemplates,
   listProjects,
-  listProjectsWithSummaries,
-  listWorkflowTemplates,
-  moveTaskInBoard,
-  saveMcpClient,
-  updateGlobalMemory,
-  updateGlobalSettings,
-  updateProjectSettings
 } from "./db.js";
-import { createPlan, previewProjectPlan, type PlanningMode } from "./planner.js";
-import { createProjectHealthReport } from "./report.js";
-import {
-  approveMerge,
-  decideApproval,
-  initializeProjectWorkspace,
-  listRuntimeProviders,
-  pauseTask,
-  recoverInterruptedRuns,
-  requestMergeChanges,
-  respondInteraction,
-  resolveMerge,
-  resumeTask,
-  startReadyTasks,
-  startTask,
-  unblockReadyDependents
-} from "./runtime.js";
-import { selectFolder } from "./folder-picker.js";
-import { createDraftReply, createDraftSession, decideDraftApply, getDraftSnapshot, recordDraftApplyAttempt, recoverDraftReviewRequests, replayDraftEvents, restoreDraftRevision, undoDraftApply, updateDraftCommentStatus, updateDraftRevision } from "./drafts.js";
-import { ensureDraftReviewAgentRuntime, retryDraftReview, stopDraftReview } from "./draft-review-agents.js";
-import { listInteractions } from "./interactions.js";
-import { applicationBridgeDiagnostics } from "./application-bridge.js";
+import type { PlanningMode } from "./planner.js";
+import { recoverInterruptedRuns } from "./runtime.js";
+import { recoverDraftReviewRequests, replayDraftEvents } from "./drafts.js";
+import { ensureDraftReviewAgentRuntime } from "./draft-review-agents.js";
+import { invokeApplicationCommand } from "./application.js";
 import { initializeTelemetry, shutdownTelemetry, withTelemetrySpan } from "./telemetry.js";
-import {
-  createInlineReviewComment,
-  createReviewFollowUp,
-  readCompletionReportHtml,
-  readRunDiff,
-  updateInlineReviewComment,
-  updateRunFileReview
-} from "./completion-reviews.js";
-import {
-  createAgentService,
-  createDocumentService,
-  createFollowUpTasksService,
-  createMemoryService,
-  createTaskCommentService,
-  createTaskService,
-  decomposeTaskService,
-  getDocumentService,
-  importProjectsService,
-  registerProjectService,
-  unregisterProjectService,
-  updateAgentService,
-  updateDocumentService,
-  updateMemoryService,
-  updateProjectService,
-  updateTaskService
-} from "./services.js";
 import type {
   AgentTemplateRecord,
   ProjectTemplateRecord,
@@ -108,101 +46,89 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === "GET /api/projects") {
-      sendJson(res, { projects: listProjectsWithSummaries() });
+      sendJson(res, await invokeApplicationCommand("projects:list", {}));
       return;
     }
 
     if (route === "GET /api/providers") {
-      sendJson(res, listRuntimeProviders());
+      sendJson(res, await invokeApplicationCommand("providers:list", {}));
       return;
     }
 
     if (route === "GET /api/global-memories") {
-      sendJson(res, { memories: listGlobalMemories() });
+      sendJson(res, await invokeApplicationCommand("global-memories:list", {}));
       return;
     }
 
     if (route === "POST /api/global-memories") {
-      const memory = createGlobalMemory(await readBody(req));
-      sendJson(res, { memory, memories: listGlobalMemories() }, 201);
+      sendJson(res, await invokeApplicationCommand("global-memories:create", { payload: await readBody(req) }), 201);
       return;
     }
 
     const globalMemoryMatch = requestUrl.pathname.match(/^\/api\/global-memories\/([^/]+)$/);
     if (globalMemoryMatch && req.method === "PATCH") {
-      const memory = updateGlobalMemory(globalMemoryMatch[1], await readBody(req));
-      sendJson(res, { memory, memories: listGlobalMemories() });
+      sendJson(res, await invokeApplicationCommand("global-memories:update", { memoryId: globalMemoryMatch[1], payload: await readBody(req) }));
       return;
     }
 
     if (route === "GET /api/agent-templates") {
-      sendJson(res, { templates: listAgentTemplates() });
+      sendJson(res, await invokeApplicationCommand("templates:agents", {}));
       return;
     }
 
     if (route === "POST /api/agent-templates") {
-      const template = createAgentTemplate(await readBody<Partial<AgentTemplateRecord>>(req));
-      sendJson(res, { template, templates: listAgentTemplates() }, 201);
+      sendJson(res, await invokeApplicationCommand("templates:agent-create", { payload: await readBody<Partial<AgentTemplateRecord>>(req) }), 201);
       return;
     }
 
     if (route === "GET /api/workflow-templates") {
-      sendJson(res, { templates: listWorkflowTemplates() });
+      sendJson(res, await invokeApplicationCommand("templates:workflows", {}));
       return;
     }
 
     if (route === "POST /api/workflow-templates") {
-      const template = createWorkflowTemplate(await readBody<Partial<WorkflowTemplateRecord>>(req));
-      sendJson(res, { template, templates: listWorkflowTemplates() }, 201);
+      sendJson(res, await invokeApplicationCommand("templates:workflow-create", { payload: await readBody<Partial<WorkflowTemplateRecord>>(req) }), 201);
       return;
     }
 
     if (route === "GET /api/project-templates") {
-      sendJson(res, { templates: listProjectTemplates() });
+      sendJson(res, await invokeApplicationCommand("templates:projects", {}));
       return;
     }
 
     if (route === "POST /api/project-templates") {
-      const template = createProjectTemplate(await readBody<Partial<ProjectTemplateRecord>>(req));
-      sendJson(res, { template, templates: listProjectTemplates() }, 201);
+      sendJson(res, await invokeApplicationCommand("templates:project-create", { payload: await readBody<Partial<ProjectTemplateRecord>>(req) }), 201);
       return;
     }
 
     if (route === "GET /api/settings") {
-      sendJson(res, { settings: getGlobalSettings() });
+      sendJson(res, await invokeApplicationCommand("settings:get", {}));
       return;
     }
 
     if (route === "PATCH /api/settings") {
-      const settings = updateGlobalSettings(await readBody(req));
-      sendJson(res, { settings });
+      sendJson(res, await invokeApplicationCommand("settings:update", { payload: await readBody(req) }));
       return;
     }
 
     if (route === "GET /api/mcp/clients") {
-      sendJson(res, { clients: listMcpClients() });
+      sendJson(res, await invokeApplicationCommand("mcp:clients", {}));
       return;
     }
 
     if (route === "POST /api/mcp/clients") {
-      const client = saveMcpClient(await readBody(req));
-      sendJson(res, { client, clients: listMcpClients() }, 201);
+      sendJson(res, await invokeApplicationCommand("mcp:client-save", { payload: await readBody(req) }), 201);
       return;
     }
 
     if (route === "GET /api/mcp/diagnose") {
-      sendJson(res, {
-        bridge: applicationBridgeDiagnostics(),
-        clients: listMcpClients(),
-        recentAudits: listMcpAudits(20),
-        command: "pnpm --filter @harness/server mcp -- --client <client-id>"
-      });
+      sendJson(res, await invokeApplicationCommand("mcp:diagnose", {}));
       return;
     }
 
     if (route === "POST /api/system/select-folder") {
       const body = await readBody<{ initialPath?: string }>(req);
-      sendJson(res, await selectFolder({ initialPath: body.initialPath }));
+      sendJson(res, await invokeApplicationCommand("system:select-folder", { initialPath: body.initialPath }));
       return;
     }
 
@@ -218,7 +144,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const result = registerProjectService(body as { path: string; name?: string; seedDefaults?: boolean; projectTemplateId?: string });
+      const result = await invokeApplicationCommand("projects:create", body as { path: string; name?: string; seedDefaults?: boolean; projectTemplateId?: string });
       sendJson(res, result, 201);
       return;
     }
@@ -230,11 +156,11 @@ const server = http.createServer(async (req, res) => {
         seedDefaults?: boolean;
         projectTemplateId?: string;
       }>(req);
-      const result = importProjectsService({
+      const result = await invokeApplicationCommand("projects:import", {
         root: body.root,
         includePlainFolders: body.includePlainFolders,
         seedDefaults: body.seedDefaults,
-        projectTemplateId: body.projectTemplateId || null
+        projectTemplateId: body.projectTemplateId || undefined
       });
       sendJson(res, result, 201);
       return;
@@ -251,40 +177,36 @@ const server = http.createServer(async (req, res) => {
       const childPath = projectMatch[2] || "";
 
       if (req.method === "DELETE" && childPath === "") {
-        const removed = unregisterProjectService(project.id);
-        sendJson(res, { project: removed, projects: listProjectsWithSummaries() });
+        sendJson(res, await invokeApplicationCommand("projects:remove", { projectId: project.id }));
         return;
       }
 
       if (req.method === "PATCH" && childPath === "") {
         const body = await readBody<{ name?: string; path?: string }>(req);
-        const updated = updateProjectService(project.id, {
+        sendJson(res, await invokeApplicationCommand("projects:update", { projectId: project.id,
           name: body.name,
           path: body.path ? path.resolve(body.path) : undefined
-        });
-        sendJson(res, { project: updated, projects: listProjectsWithSummaries() });
+        }));
         return;
       }
 
       if (req.method === "GET" && childPath === "overview") {
-        sendJson(res, getProjectOverview(project));
+        sendJson(res, await invokeApplicationCommand("projects:overview", { projectId: project.id }));
         return;
       }
 
       if (req.method === "GET" && childPath === "report") {
-        sendJson(res, { report: createProjectHealthReport(getProjectOverview(project)) });
+        sendJson(res, await invokeApplicationCommand("projects:report", { projectId: project.id }));
         return;
       }
 
       if (req.method === "POST" && childPath === "init-git") {
-        const result = await initializeProjectWorkspace(project);
-        sendJson(res, { result, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("projects:init-git", { projectId: project.id }), 201);
         return;
       }
 
       if (req.method === "PATCH" && childPath === "settings") {
-        const settings = updateProjectSettings(project.path, await readBody(req));
-        sendJson(res, { settings, overview: getProjectOverview(project) });
+        sendJson(res, await invokeApplicationCommand("project-settings:update", { projectId: project.id, payload: await readBody(req) }));
         return;
       }
 
@@ -296,11 +218,7 @@ const server = http.createServer(async (req, res) => {
           workflowTemplateId?: string;
           allowLargePlan?: boolean;
         }>(req);
-        const settings = getProjectSettings(project.path);
-        const plan = createPlan(project, { ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold });
-        const shouldAutoStart = body.autoStart ?? settings.autoStartPlans;
-        const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
-        sendJson(res, { plan, schedule, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("plans:create", { projectId: project.id, payload: body }), 201);
         return;
       }
 
@@ -310,63 +228,61 @@ const server = http.createServer(async (req, res) => {
           mode?: PlanningMode;
           workflowTemplateId?: string;
         }>(req);
-        const settings = getProjectSettings(project.path);
-        const preview = previewProjectPlan(project, { ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold });
-        sendJson(res, { preview, overview: getProjectOverview(project) });
+        sendJson(res, await invokeApplicationCommand("plans:preview", { projectId: project.id, payload: body }));
         return;
       }
 
       if (req.method === "POST" && childPath === "drafts") {
-        sendJson(res, { draft: createDraftSession(project, await readBody(req)) }, 201);
+        sendJson(res, await invokeApplicationCommand("drafts:create", { projectId: project.id, payload: await readBody<{ content?: string; reviewers?: Array<{ role: "planning-reviewer" | "edge-case-reviewer" | "planner"; agentId?: string | null }> }>(req) }), 201);
         return;
       }
 
       const draftMatch = childPath.match(/^drafts\/([^/]+)$/);
       if (draftMatch && req.method === "GET") {
-        sendJson(res, { draft: getDraftSnapshot(project, draftMatch[1]) });
+        sendJson(res, await invokeApplicationCommand("drafts:get", { projectId: project.id, draftId: draftMatch[1] }));
         return;
       }
       if (draftMatch && req.method === "PATCH") {
         const body = await readBody<{ expectedRevision: number; content: string }>(req);
-        sendJson(res, { draft: updateDraftRevision(project, draftMatch[1], body) });
+        sendJson(res, await invokeApplicationCommand("drafts:update", { projectId: project.id, draftId: draftMatch[1], ...body }));
         return;
       }
 
       const draftReplyMatch = childPath.match(/^drafts\/([^/]+)\/replies$/);
       if (draftReplyMatch && req.method === "POST") {
-        sendJson(res, { comment: createDraftReply(project, draftReplyMatch[1], await readBody(req)) }, 201);
+        sendJson(res, await invokeApplicationCommand("drafts:reply", { projectId: project.id, draftId: draftReplyMatch[1], payload: await readBody<{ parentCommentId: string; body: string; author?: string; idempotencyKey?: string }>(req) }), 201);
         return;
       }
 
       const draftCommentMatch = childPath.match(/^drafts\/([^/]+)\/comments\/([^/]+)$/);
       if (draftCommentMatch && req.method === "PATCH") {
         const body = await readBody<{ status: "open" | "resolved" }>(req);
-        sendJson(res, { comment: updateDraftCommentStatus(project, draftCommentMatch[1], draftCommentMatch[2], body.status) });
+        sendJson(res, await invokeApplicationCommand("drafts:comment-status", { projectId: project.id, draftId: draftCommentMatch[1], commentId: draftCommentMatch[2], status: body.status }));
         return;
       }
 
       const draftAppliesMatch = childPath.match(/^drafts\/([^/]+)\/applies$/);
       if (draftAppliesMatch && req.method === "POST") {
-        sendJson(res, { apply: recordDraftApplyAttempt(project, draftAppliesMatch[1], await readBody(req)) }, 201);
+        sendJson(res, await invokeApplicationCommand("drafts:apply-request", { projectId: project.id, draftId: draftAppliesMatch[1], payload: await readBody<{ expectedRevision: number; selectedCommentIds: string[]; idempotencyKey: string }>(req) }), 201);
         return;
       }
 
       const draftApplyDecisionMatch = childPath.match(/^drafts\/([^/]+)\/applies\/([^/]+)\/decision$/);
       if (draftApplyDecisionMatch && req.method === "POST") {
         const body = await readBody<{ decision: "approved" | "rejected" }>(req);
-        sendJson(res, { apply: decideDraftApply(project, draftApplyDecisionMatch[1], draftApplyDecisionMatch[2], body.decision) });
+        sendJson(res, await invokeApplicationCommand("drafts:apply-decision", { projectId: project.id, draftId: draftApplyDecisionMatch[1], applyId: draftApplyDecisionMatch[2], decision: body.decision }));
         return;
       }
 
       const draftApplyUndoMatch = childPath.match(/^drafts\/([^/]+)\/applies\/([^/]+)\/undo$/);
       if (draftApplyUndoMatch && req.method === "POST") {
-        sendJson(res, { apply: undoDraftApply(project, draftApplyUndoMatch[1], draftApplyUndoMatch[2]) });
+        sendJson(res, await invokeApplicationCommand("drafts:apply-undo", { projectId: project.id, draftId: draftApplyUndoMatch[1], applyId: draftApplyUndoMatch[2] }));
         return;
       }
 
       const draftRestoreMatch = childPath.match(/^drafts\/([^/]+)\/restore$/);
       if (draftRestoreMatch && req.method === "POST") {
-        sendJson(res, { draft: restoreDraftRevision(project, draftRestoreMatch[1], await readBody(req)) });
+        sendJson(res, await invokeApplicationCommand("drafts:restore-revision", { projectId: project.id, draftId: draftRestoreMatch[1], ...await readBody<{ expectedRevision: number; revision: number }>(req) }));
         return;
       }
 
@@ -380,51 +296,48 @@ const server = http.createServer(async (req, res) => {
 
       const stopDraftReviewMatch = childPath.match(/^draft-review-requests\/([^/]+)\/stop$/);
       if (stopDraftReviewMatch && req.method === "POST") {
-        sendJson(res, { request: stopDraftReview(project, stopDraftReviewMatch[1]) });
+        sendJson(res, await invokeApplicationCommand("drafts:stop-review", { projectId: project.id, requestId: stopDraftReviewMatch[1] }));
         return;
       }
 
       const retryDraftReviewMatch = childPath.match(/^draft-review-requests\/([^/]+)\/retry$/);
       if (retryDraftReviewMatch && req.method === "POST") {
-        sendJson(res, { request: retryDraftReview(project, retryDraftReviewMatch[1]) });
+        sendJson(res, await invokeApplicationCommand("drafts:retry-review", { projectId: project.id, requestId: retryDraftReviewMatch[1] }));
         return;
       }
 
       if (req.method === "POST" && childPath === "schedule") {
-        const schedule = await startReadyTasks(project);
-        sendJson(res, { schedule, overview: getProjectOverview(project) }, 202);
+        sendJson(res, await invokeApplicationCommand("projects:schedule", { projectId: project.id }), 202);
         return;
       }
 
       if (req.method === "GET" && childPath === "interactions") {
         const status = requestUrl.searchParams.get("status") || undefined;
         const kind = requestUrl.searchParams.get("kind") || undefined;
-        sendJson(res, { interactions: listInteractions(project, {
-          status: status as NonNullable<Parameters<typeof listInteractions>[1]>["status"],
-          kind: kind as NonNullable<Parameters<typeof listInteractions>[1]>["kind"],
+        sendJson(res, await invokeApplicationCommand("interactions:list", { projectId: project.id,
+          status: status as "pending" | "resolved" | "rejected" | "expired" | undefined,
+          kind: kind as "question" | "approval" | "permission" | "review" | undefined,
           taskId: requestUrl.searchParams.get("taskId") || undefined,
           runId: requestUrl.searchParams.get("runId") || undefined
-        }) });
+        }));
         return;
       }
 
       const interactionResponseMatch = childPath.match(/^interactions\/([^/]+)\/respond$/);
       if (interactionResponseMatch && req.method === "POST") {
-        sendJson(res, {
-          result: await respondInteraction(project, interactionResponseMatch[1], await readBody(req))
-        });
+        sendJson(res, await invokeApplicationCommand("interactions:respond", { projectId: project.id, interactionId: interactionResponseMatch[1], ...await readBody<{ action: "resolve" | "reject"; responsePayload: Record<string, unknown>; idempotencyKey: string }>(req) }));
         return;
       }
 
       const runReportMatch = childPath.match(/^runs\/([^/]+)\/completion-report$/);
       if (runReportMatch && req.method === "GET") {
-        sendJson(res, readCompletionReportHtml(project, runReportMatch[1]));
+        sendJson(res, await invokeApplicationCommand("reviews:report", { projectId: project.id, runId: runReportMatch[1] }));
         return;
       }
 
       const runDiffMatch = childPath.match(/^runs\/([^/]+)\/diff$/);
       if (runDiffMatch && req.method === "GET") {
-        sendJson(res, readRunDiff(project, runDiffMatch[1], requestUrl.searchParams.get("filePath") || "", {
+        sendJson(res, await invokeApplicationCommand("reviews:diff", { projectId: project.id, runId: runDiffMatch[1], filePath: requestUrl.searchParams.get("filePath") || "",
           ignoreWhitespace: requestUrl.searchParams.get("ignoreWhitespace") === "true",
           offset: Number(requestUrl.searchParams.get("offset") || 0),
           limit: Number(requestUrl.searchParams.get("limit") || 400)
@@ -435,46 +348,43 @@ const server = http.createServer(async (req, res) => {
       const runFileReviewMatch = childPath.match(/^runs\/([^/]+)\/file-review$/);
       if (runFileReviewMatch && req.method === "PATCH") {
         const body = await readBody<{ filePath: string; status?: "unreviewed" | "reviewed"; recommendationOrder?: number | null }>(req);
-        sendJson(res, { file: updateRunFileReview(project, runFileReviewMatch[1], body.filePath, body) });
+        sendJson(res, await invokeApplicationCommand("reviews:file-update", { projectId: project.id, runId: runFileReviewMatch[1], ...body }));
         return;
       }
 
       const runReviewCommentMatch = childPath.match(/^runs\/([^/]+)\/review-comments$/);
       if (runReviewCommentMatch && req.method === "POST") {
-        sendJson(res, { comment: createInlineReviewComment(project, runReviewCommentMatch[1], await readBody(req)) }, 201);
+        sendJson(res, await invokeApplicationCommand("reviews:comment-create", { projectId: project.id, runId: runReviewCommentMatch[1], ...await readBody<{ filePath: string; line: number; side: "old" | "new"; body: string }>(req) }), 201);
         return;
       }
 
       const reviewCommentMatch = childPath.match(/^review-comments\/([^/]+)$/);
       if (reviewCommentMatch && req.method === "PATCH") {
         const body = await readBody<{ status: "open" | "addressed" | "dismissed" }>(req);
-        sendJson(res, { comment: updateInlineReviewComment(project, reviewCommentMatch[1], body.status) });
+        sendJson(res, await invokeApplicationCommand("reviews:comment-update", { projectId: project.id, commentId: reviewCommentMatch[1], status: body.status }));
         return;
       }
 
       const reviewFollowUpMatch = childPath.match(/^runs\/([^/]+)\/review-followups$/);
       if (reviewFollowUpMatch && req.method === "POST") {
         const body = await readBody<{ commentIds: string[] }>(req);
-        sendJson(res, createReviewFollowUp(project, reviewFollowUpMatch[1], body.commentIds), 201);
+        sendJson(res, await invokeApplicationCommand("reviews:followup", { projectId: project.id, runId: reviewFollowUpMatch[1], commentIds: body.commentIds }), 201);
         return;
       }
 
       if (req.method === "POST" && childPath === "agents") {
-        const agent = createAgentService(project, await readBody(req));
-        sendJson(res, { agent, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("agents:save", { projectId: project.id, payload: await readBody(req) }), 201);
         return;
       }
 
       const agentActionMatch = childPath.match(/^agents\/([^/]+)$/);
       if (agentActionMatch && req.method === "PATCH") {
-        const agent = updateAgentService(project, agentActionMatch[1], await readBody(req));
-        sendJson(res, { agent, overview: getProjectOverview(project) });
+        sendJson(res, await invokeApplicationCommand("agents:save", { projectId: project.id, agentId: agentActionMatch[1], payload: await readBody(req) }));
         return;
       }
 
       if (req.method === "POST" && childPath === "tasks") {
-        const task = createTaskService(project, await readBody(req));
-        sendJson(res, { task, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("tasks:create", { projectId: project.id, payload: await readBody(req) }), 201);
         return;
       }
 
@@ -484,33 +394,23 @@ const server = http.createServer(async (req, res) => {
           sendError(res, 400, "Work prompt is required.");
           return;
         }
-        const settings = getProjectSettings(project.path);
-        const plan = createPlan(project, {
-          goal: body.prompt,
-          mode: "auto",
-          allowLargePlan: true,
-          largePlanTaskThreshold: settings.largePlanTaskThreshold
-        });
-        sendJson(res, { plan, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("tasks:create-from-prompt", { projectId: project.id, prompt: body.prompt }), 201);
         return;
       }
 
       if (req.method === "POST" && childPath === "documents") {
-        const document = createDocumentService(project, await readBody(req));
-        sendJson(res, { document, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("documents:create", { projectId: project.id, payload: await readBody(req) }), 201);
         return;
       }
 
       if (req.method === "POST" && childPath === "memories") {
-        const memory = createMemoryService(project, await readBody(req));
-        sendJson(res, { memory, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("memories:create", { projectId: project.id, payload: await readBody(req) }), 201);
         return;
       }
 
       const runActionMatch = childPath.match(/^runs\/([^/]+)\/followups$/);
       if (runActionMatch && req.method === "POST") {
-        const tasks = createFollowUpTasksService(project, runActionMatch[1]);
-        sendJson(res, { tasks, overview: getProjectOverview(project) }, 201);
+        sendJson(res, await invokeApplicationCommand("runs:followups", { projectId: project.id, runId: runActionMatch[1] }), 201);
         return;
       }
 
@@ -520,28 +420,26 @@ const server = http.createServer(async (req, res) => {
         const action = taskActionMatch[2] || "";
 
         if (req.method === "PATCH" && !action) {
-          const task = updateTaskService(project, taskId, await readBody(req));
-          const unblocked = task.status === "Done" ? unblockReadyDependents(project, task.id) : [];
-          sendJson(res, { task, unblocked, overview: getProjectOverview(project) });
+          sendJson(res, await invokeApplicationCommand("tasks:update", { projectId: project.id, taskId, payload: await readBody(req) }));
           return;
         }
 
         if (req.method === "POST" && action === "start") {
-          const result = await startTask(project, taskId);
-          sendJson(res, { result, overview: getProjectOverview(project) }, result.accepted ? 202 : 409);
+          const response = await invokeApplicationCommand("tasks:start", { projectId: project.id, taskId }) as { result: { accepted: boolean } };
+          sendJson(res, response, response.result.accepted ? 202 : 409);
           return;
         }
 
         if (req.method === "POST" && action === "pause") {
           const body = await readBody<{ reason?: string }>(req);
-          const result = pauseTask(project, taskId, body.reason?.trim() || undefined);
-          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          const response = await invokeApplicationCommand("tasks:pause", { projectId: project.id, taskId, reason: body.reason?.trim() || undefined }) as { result: { ok: boolean } };
+          sendJson(res, response, response.result.ok ? 200 : 409);
           return;
         }
 
         if (req.method === "POST" && action === "resume") {
-          const result = resumeTask(project, taskId);
-          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          const response = await invokeApplicationCommand("tasks:resume", { projectId: project.id, taskId }) as { result: { ok: boolean } };
+          sendJson(res, response, response.result.ok ? 200 : 409);
           return;
         }
 
@@ -551,51 +449,44 @@ const server = http.createServer(async (req, res) => {
             sendError(res, 400, "Task move direction must be up or down.");
             return;
           }
-          const result = moveTaskInBoard(project.path, taskId, body.direction);
-          sendJson(res, { result, overview: getProjectOverview(project) });
+          sendJson(res, await invokeApplicationCommand("tasks:move", { projectId: project.id, taskId, direction: body.direction }));
           return;
         }
 
         if (req.method === "POST" && action === "decompose") {
-          const tasks = decomposeTaskService(project, taskId, await readBody(req));
-          sendJson(res, { tasks, overview: getProjectOverview(project) }, 201);
+          sendJson(res, await invokeApplicationCommand("tasks:decompose", { projectId: project.id, taskId, payload: await readBody(req) }), 201);
           return;
         }
 
         if (req.method === "POST" && action === "merge") {
-          const result = await approveMerge(project, taskId);
-          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          const response = await invokeApplicationCommand("tasks:merge", { projectId: project.id, taskId }) as { result: { ok: boolean } };
+          sendJson(res, response, response.result.ok ? 200 : 409);
           return;
         }
 
         if (req.method === "POST" && action === "resolve-merge") {
-          const result = await resolveMerge(project, taskId);
-          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          const response = await invokeApplicationCommand("tasks:resolve-merge", { projectId: project.id, taskId }) as { result: { ok: boolean } };
+          sendJson(res, response, response.result.ok ? 200 : 409);
           return;
         }
 
         if (req.method === "POST" && action === "request-changes") {
           const body = await readBody<{ reason?: string }>(req);
-          const result = await requestMergeChanges(project, taskId, body.reason?.trim() || undefined);
-          sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+          const response = await invokeApplicationCommand("tasks:request-changes", { projectId: project.id, taskId, reason: body.reason?.trim() || undefined }) as { result: { ok: boolean } };
+          sendJson(res, response, response.result.ok ? 200 : 409);
           return;
         }
 
         if (req.method === "POST" && action === "comments") {
-          const comment = createTaskCommentService(project, taskId, await readBody(req));
-          sendJson(res, { comment, overview: getProjectOverview(project) }, 201);
+          sendJson(res, await invokeApplicationCommand("tasks:comment", { projectId: project.id, taskId, ...await readBody<{ author?: string; body?: string }>(req) }), 201);
           return;
         }
       }
 
       const approvalActionMatch = childPath.match(/^approvals\/([^/]+)\/(approve|reject)$/);
       if (approvalActionMatch && req.method === "POST") {
-        const result = await decideApproval(
-          project,
-          approvalActionMatch[1],
-          approvalActionMatch[2] === "approve" ? "approved" : "rejected"
-        );
-        sendJson(res, { result, overview: getProjectOverview(project) }, result.ok ? 200 : 409);
+        const response = await invokeApplicationCommand("approvals:decide", { projectId: project.id, approvalId: approvalActionMatch[1], action: approvalActionMatch[2] === "approve" ? "approve" : "reject" }) as { result: { ok: boolean } };
+        sendJson(res, response, response.result.ok ? 200 : 409);
         return;
       }
 
@@ -605,8 +496,7 @@ const server = http.createServer(async (req, res) => {
         const action = documentActionMatch[2] || "";
 
         if (req.method === "PATCH" && !action) {
-          const document = updateDocumentService(project, documentId, await readBody(req));
-          sendJson(res, { document, overview: getProjectOverview(project) });
+          sendJson(res, await invokeApplicationCommand("documents:update", { projectId: project.id, documentId, payload: await readBody(req) }));
           return;
         }
 
@@ -617,20 +507,7 @@ const server = http.createServer(async (req, res) => {
             workflowTemplateId?: string;
             allowLargePlan?: boolean;
           }>(req);
-          const document = getDocumentService(project, documentId);
-          const settings = getProjectSettings(project.path);
-          const plan = createPlan(project, {
-            goal: `Document: ${document.title}\n\n${document.content}`,
-            mode: body.mode,
-            autoStart: body.autoStart,
-            workflowTemplateId: body.workflowTemplateId,
-            allowLargePlan: body.allowLargePlan,
-            largePlanTaskThreshold: settings.largePlanTaskThreshold,
-            sourceDocumentId: document.id
-          });
-          const shouldAutoStart = body.autoStart ?? settings.autoStartPlans;
-          const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
-          sendJson(res, { document, plan, schedule, overview: getProjectOverview(project) }, 201);
+          sendJson(res, await invokeApplicationCommand("documents:plan", { projectId: project.id, documentId, payload: body }), 201);
           return;
         }
 
@@ -639,24 +516,14 @@ const server = http.createServer(async (req, res) => {
             mode?: PlanningMode;
             workflowTemplateId?: string;
           }>(req);
-          const document = getDocumentService(project, documentId);
-          const settings = getProjectSettings(project.path);
-          const preview = previewProjectPlan(project, {
-            goal: `Document: ${document.title}\n\n${document.content}`,
-            mode: body.mode,
-            workflowTemplateId: body.workflowTemplateId,
-            largePlanTaskThreshold: settings.largePlanTaskThreshold,
-            sourceDocumentId: document.id
-          });
-          sendJson(res, { document, preview, overview: getProjectOverview(project) });
+          sendJson(res, await invokeApplicationCommand("documents:plan-preview", { projectId: project.id, documentId, payload: body }));
           return;
         }
       }
 
       const memoryActionMatch = childPath.match(/^memories\/([^/]+)$/);
       if (memoryActionMatch && req.method === "PATCH") {
-        const memory = updateMemoryService(project, memoryActionMatch[1], await readBody(req));
-        sendJson(res, { memory, overview: getProjectOverview(project) });
+        sendJson(res, await invokeApplicationCommand("memories:update", { projectId: project.id, memoryId: memoryActionMatch[1], payload: await readBody(req) }));
         return;
       }
     }

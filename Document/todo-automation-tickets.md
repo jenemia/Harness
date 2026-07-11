@@ -282,11 +282,15 @@ Status: 완료
 
 Depends on: A01, A04, A05, A16
 
+Status: 완료
+
 - HTTP, IPC, CLI와 MCP mutation을 versioned application command dispatcher로 통합한다.
 - active desktop에서는 CLI가 MCP와 같은 Unix socket 또는 Windows named pipe bridge를 사용한다.
 - offline CLI fallback은 project writer lock과 동일 validation·approval·audit을 적용한다.
 
 완료 조건: 같은 명령이 transport에 관계없이 같은 결과와 오류를 만들고 active desktop과 offline fallback에서 중복 mutation이 없다.
+
+검증: HTTP route, typed IPC, CLI와 MCP가 versioned application command dispatcher를 공유하도록 통합했다. 실제 HTTP server 요청, active desktop bridge를 강제한 CLI 요청, offline CLI fallback에서 동일 task mutation과 validation 오류를 확인하고 중복 저장이 없음을 검증했다. 전체 workspace typecheck·build와 server 30개·desktop 2개 테스트를 통과했다.
 
 ### A21: Provider event retention과 safe compaction
 

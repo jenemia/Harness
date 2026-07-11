@@ -2,11 +2,14 @@ import type { DraftEventEnvelope, HarnessCommand, HarnessCommandInputs, HarnessE
 import {
   createAgentTemplate,
   createGlobalMemory,
+  createProjectTemplate,
+  createWorkflowTemplate,
   getGlobalSettings,
   getProject,
   getProjectOverview,
   getProjectSettings,
   listAgentTemplates,
+  listGlobalMemories,
   listMcpAudits,
   listMcpClients,
   listProjectTemplates,
@@ -20,7 +23,7 @@ import {
   updateProjectSettings
 } from "./db.js";
 import { selectFolder } from "./folder-picker.js";
-import { createPlan } from "./planner.js";
+import { createPlan, previewProjectPlan, type PlanningMode } from "./planner.js";
 import { createProjectHealthReport } from "./report.js";
 import {
   createInlineReviewComment,
@@ -53,6 +56,7 @@ import {
   createTaskCommentService,
   createTaskService,
   decomposeTaskService,
+  getDocumentService,
   importProjectsService,
   registerProjectService,
   unregisterProjectService,
@@ -190,9 +194,21 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       return { template, templates: listAgentTemplates() };
     }
     case "templates:workflows": return { templates: listWorkflowTemplates() };
+    case "templates:workflow-create": {
+      const template = createWorkflowTemplate(input(payload).payload);
+      return { template, templates: listWorkflowTemplates() };
+    }
     case "templates:projects": return { templates: listProjectTemplates() };
+    case "templates:project-create": {
+      const template = createProjectTemplate(input(payload).payload);
+      return { template, templates: listProjectTemplates() };
+    }
     case "settings:get": return { settings: getGlobalSettings() };
     case "settings:update": return { settings: updateGlobalSettings(input(payload).payload) };
+    case "project-settings:get": {
+      const project = requiredProject(input(payload).projectId);
+      return { settings: getProjectSettings(project.path), overview: getProjectOverview(project) };
+    }
     case "project-settings:update": {
       const value = input(payload) as HarnessCommandInputs["project-settings:update"];
       const project = requiredProject(value.projectId);
@@ -207,6 +223,22 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
         : createAgentService(project, value.payload as Partial<AgentRecord>);
       return { agent, overview: getProjectOverview(project) };
     }
+    case "plans:preview": {
+      const value = input(payload) as HarnessCommandInputs["plans:preview"];
+      const project = requiredProject(value.projectId);
+      const body = value.payload as { goal?: string; mode?: PlanningMode; workflowTemplateId?: string };
+      const settings = getProjectSettings(project.path);
+      return { preview: previewProjectPlan(project, { ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold }), overview: getProjectOverview(project) };
+    }
+    case "plans:create": {
+      const value = input(payload) as HarnessCommandInputs["plans:create"];
+      const project = requiredProject(value.projectId);
+      const body = value.payload as { goal?: string; mode?: PlanningMode; autoStart?: boolean; workflowTemplateId?: string; allowLargePlan?: boolean };
+      const settings = getProjectSettings(project.path);
+      const plan = createPlan(project, { ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold });
+      const schedule = (body.autoStart ?? settings.autoStartPlans) ? await startReadyTasks(project) : null;
+      return { plan, schedule, overview: getProjectOverview(project) };
+    }
     case "documents:create": {
       const value = input(payload) as HarnessCommandInputs["documents:create"];
       const project = requiredProject(value.projectId);
@@ -217,6 +249,26 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const project = requiredProject(value.projectId);
       return { document: updateDocumentService(project, value.documentId, value.payload), overview: getProjectOverview(project) };
     }
+    case "documents:plan-preview": {
+      const value = input(payload) as HarnessCommandInputs["documents:plan-preview"];
+      const project = requiredProject(value.projectId);
+      const document = getDocumentService(project, value.documentId);
+      const body = value.payload as { mode?: PlanningMode; workflowTemplateId?: string };
+      const settings = getProjectSettings(project.path);
+      const preview = previewProjectPlan(project, { goal: `Document: ${document.title}\n\n${document.content}`, ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold, sourceDocumentId: document.id });
+      return { document, preview, overview: getProjectOverview(project) };
+    }
+    case "documents:plan": {
+      const value = input(payload) as HarnessCommandInputs["documents:plan"];
+      const project = requiredProject(value.projectId);
+      const document = getDocumentService(project, value.documentId);
+      const body = value.payload as { mode?: PlanningMode; autoStart?: boolean; workflowTemplateId?: string; allowLargePlan?: boolean };
+      const settings = getProjectSettings(project.path);
+      const plan = createPlan(project, { goal: `Document: ${document.title}\n\n${document.content}`, ...body, largePlanTaskThreshold: settings.largePlanTaskThreshold, sourceDocumentId: document.id });
+      const schedule = (body.autoStart ?? settings.autoStartPlans) ? await startReadyTasks(project) : null;
+      return { document, plan, schedule, overview: getProjectOverview(project) };
+    }
+    case "global-memories:list": return { memories: listGlobalMemories() };
     case "global-memories:create": {
       const memory = createGlobalMemory(input(payload).payload as { title: string; content: string });
       return { memory };

@@ -2,101 +2,16 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import {
-  createAgentTemplate,
-  createGlobalMemory,
-  createProjectTemplate,
-  createWorkflowTemplate,
-  getGlobalSettings,
-  getProject,
-  getProjectOverview,
-  getProjectSettings,
-  listAgentTemplates,
-  listGlobalMemories,
-  listMcpAudits,
-  listMcpClients,
-  listProjectTemplates,
-  listProjectsWithSummaries,
-  listWorkflowTemplates,
-  moveTaskInBoard,
-  saveMcpClient,
-  updateGlobalMemory,
-  updateGlobalSettings,
-  updateProjectSettings
-} from "./db.js";
-import { createPlan, previewProjectPlan, type PlanningMode } from "./planner.js";
-import { createProjectHealthReport } from "./report.js";
-import {
-  approveMerge,
-  decideApproval,
-  initializeProjectWorkspace,
-  listRuntimeProviders,
-  pauseTask,
-  requestMergeChanges,
-  respondInteraction,
-  resolveMerge,
-  resumeTask,
-  startReadyTasks,
-  startTask,
-  unblockReadyDependents
-} from "./runtime.js";
-import { listInteractions } from "./interactions.js";
-import { applicationBridgeDiagnostics } from "./application-bridge.js";
+import type { HarnessCommand, HarnessCommandInputs } from "@harness/core";
+import type { PlanningMode } from "./planner.js";
+import { invokeApplicationCommandTransport } from "./application-bridge.js";
 import { correlationAttributes, initializeTelemetry, operationSpanName, shutdownTelemetry, withTelemetrySpan } from "./telemetry.js";
 import { parseWorkspaceModeOption } from "./workspace-mode.js";
-import { withProjectWriterLockAsync } from "./project-store.js";
-import {
-  createAgentService,
-  createDocumentService,
-  createFollowUpTasksService,
-  createMemoryService,
-  createTaskCommentService,
-  createTaskService,
-  decomposeTaskService,
-  getDocumentService,
-  importProjectsService,
-  registerProjectService,
-  unregisterProjectService,
-  updateAgentService,
-  updateDocumentService,
-  updateMemoryService,
-  updateProjectService,
-  updateTaskService
-} from "./services.js";
-import type { ApprovalRecord, TaskRecord, TaskStatus } from "./types.js";
+import type { ApprovalRecord, ProjectOverview, TaskRecord, TaskStatus } from "./types.js";
 
 type CommandHandler = (args: string[]) => Promise<unknown> | unknown;
 
 const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
-const projectMutationCommands = new Set([
-  "projects:init-git",
-  "project-settings:update",
-  "agents:create",
-  "agents:update",
-  "plans:create",
-  "documents:create",
-  "documents:update",
-  "documents:plan",
-  "memories:create",
-  "memories:update",
-  "approvals:approve",
-  "approvals:reject",
-  "runs:followups",
-  "interactions:respond",
-  "tasks:create",
-  "tasks:update",
-  "tasks:decompose",
-  "tasks:comment",
-  "tasks:merge",
-  "tasks:resolve-merge",
-  "tasks:request-changes",
-  "tasks:move",
-  "tasks:pause",
-  "tasks:resume",
-  "tasks:start",
-  "tasks:schedule"
-]);
-
 const commands: Record<string, CommandHandler> = {
   "projects:list": listProjectsCommand,
   "projects:register": registerProjectCommand,
@@ -175,10 +90,6 @@ async function main() {
 
   const options = parseOptions(args);
   const projectId = options.project;
-  const project = projectId && projectMutationCommands.has(commandName) ? getProject(projectId) : null;
-  if (projectId && projectMutationCommands.has(commandName) && !project) {
-    throw new Error(`Project not found: ${projectId}`);
-  }
   const result = await withTelemetrySpan(operationSpanName(commandName), correlationAttributes({
     projectId,
     taskId: options.task,
@@ -186,24 +97,26 @@ async function main() {
     interactionId: options.interaction
   }, commandName), async (span) => {
     if (/retry|resume/.test(commandName)) span.addEvent("operation.resumed", { "harness.resume.count": 1 });
-    return project
-      ? withProjectWriterLockAsync(project.path, async () => command(args))
-      : command(args);
+    return command(args);
   });
   if (result !== undefined) {
     console.log(JSON.stringify(result, null, 2));
   }
 }
 
+function invokeTransport<C extends HarnessCommand>(command: C, payload: HarnessCommandInputs[C]) {
+  return invokeApplicationCommandTransport(command, payload);
+}
+
 function listProjectsCommand() {
-  return { projects: listProjectsWithSummaries() };
+  return invokeTransport("projects:list", {});
 }
 
 function registerProjectCommand(args: string[]) {
   const options = parseOptions(args);
   const projectPath = getRequiredOption(options, "path");
   const seedDefaults = options.seedDefaults !== "false";
-  return registerProjectService({
+  return invokeTransport("projects:create", {
     path: projectPath,
     name: options.name,
     seedDefaults,
@@ -213,55 +126,48 @@ function registerProjectCommand(args: string[]) {
 
 function importProjectsFromRootCommand(args: string[]) {
   const options = parseOptions(args);
-  return importProjectsService({
+  return invokeTransport("projects:import", {
     root: options.root ? path.resolve(options.root) : undefined,
     includePlainFolders: parseOptionalBoolean(options.includePlainFolders, "includePlainFolders"),
     seedDefaults: parseOptionalBoolean(options.seedDefaults, "seedDefaults"),
-    projectTemplateId: options.projectTemplate || null
+    projectTemplateId: options.projectTemplate || undefined
   });
 }
 
 function unregisterProjectCommand(args: string[]) {
   const options = parseOptions(args);
   const projectId = getRequiredOption(options, "project");
-  const project = unregisterProjectService(projectId);
-  return { project, projects: listProjectsWithSummaries() };
+  return invokeTransport("projects:remove", { projectId });
 }
 
 function updateProjectCommand(args: string[]) {
   const options = parseOptions(args);
   const projectId = getRequiredOption(options, "project");
-  const project = updateProjectService(projectId, {
+  return invokeTransport("projects:update", { projectId,
     name: options.name,
     path: options.path ? path.resolve(options.path) : undefined
   });
-  return { project, projects: listProjectsWithSummaries() };
 }
 
 function overviewCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  return getProjectOverview(project);
+  return invokeTransport("projects:overview", { projectId: getRequiredOption(parseOptions(args), "project") });
 }
 
 async function initializeProjectGitCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  const result = await initializeProjectWorkspace(project);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("projects:init-git", { projectId: getRequiredOption(parseOptions(args), "project") });
 }
 
 function reportCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
-  return { report: createProjectHealthReport(overview) };
+  return invokeTransport("projects:report", { projectId: getRequiredOption(parseOptions(args), "project") });
 }
 
 function getSettingsCommand() {
-  return { settings: getGlobalSettings() };
+  return invokeTransport("settings:get", {});
 }
 
 function updateSettingsCommand(args: string[]) {
   const options = parseOptions(args);
-  const settings = updateGlobalSettings({
+  return invokeTransport("settings:update", { payload: {
     defaultProjectRoot: options.defaultProjectRoot,
     defaultModelBackend: options.defaultModelBackend,
     defaultAgentMaxParallel: options.defaultAgentMaxParallel ? Number(options.defaultAgentMaxParallel) : undefined,
@@ -269,46 +175,38 @@ function updateSettingsCommand(args: string[]) {
     largePlanTaskThreshold: options.largePlanTaskThreshold ? Number(options.largePlanTaskThreshold) : undefined,
     maxRunSeconds: options.maxRunSeconds ? Number(options.maxRunSeconds) : undefined,
     providerCommands: readOptionalJsonMap(options, "providerCommands", "providerCommandsFile")
-  });
-  return { settings };
+  } });
 }
 
 function getProjectSettingsCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  return { settings: getProjectSettings(project.path), overview: getProjectOverview(project) };
+  return invokeTransport("project-settings:get", { projectId: getRequiredOption(parseOptions(args), "project") });
 }
 
 function listMcpClientsCommand() {
-  return { clients: listMcpClients() };
+  return invokeTransport("mcp:clients", {});
 }
 
 function saveMcpClientCommand(args: string[]) {
   const options = parseOptions(args);
   const id = getRequiredOption(options, "client");
-  const client = saveMcpClient({
+  return invokeTransport("mcp:client-save", { payload: {
     id,
     label: options.label,
     readScope: parseOptionalBoolean(options.read, "read"),
     writeScope: parseOptionalBoolean(options.write, "write"),
     enabled: parseOptionalBoolean(options.enabled, "enabled"),
     allowedProjectIds: options.projects ? parseCsv(options.projects) : undefined
-  });
-  return { client, clients: listMcpClients() };
+  } });
 }
 
 function diagnoseMcpCommand() {
-  return {
-    bridge: applicationBridgeDiagnostics(),
-    clients: listMcpClients(),
-    recentAudits: listMcpAudits(20),
-    command: "pnpm --filter @harness/server mcp -- --client <client-id>"
-  };
+  return invokeTransport("mcp:diagnose", {});
 }
 
 function updateProjectSettingsCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const settings = updateProjectSettings(project.path, {
+  const projectId = getRequiredOption(options, "project");
+  return invokeTransport("project-settings:update", { projectId, payload: {
     defaultModelBackend: options.defaultModelBackend,
     defaultAgentMaxParallel: options.defaultAgentMaxParallel ? Number(options.defaultAgentMaxParallel) : undefined,
     autoStartPlans: parseOptionalBoolean(options.autoStartPlans, "autoStartPlans"),
@@ -325,31 +223,28 @@ function updateProjectSettingsCommand(args: string[]) {
       : undefined,
     handoffRules: readOptionalJsonMap(options, "handoffRules", "handoffRulesFile"),
     providerCommands: readOptionalJsonMap(options, "providerCommands", "providerCommandsFile")
-  });
-  return { settings, overview: getProjectOverview(project) };
+  } });
 }
 
 async function scheduleCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  const schedule = await startReadyTasks(project);
-  return { schedule, overview: getProjectOverview(project) };
+  return invokeTransport("projects:schedule", { projectId: getRequiredOption(parseOptions(args), "project") });
 }
 
 function listAgentTemplatesCommand() {
-  return { templates: listAgentTemplates() };
+  return invokeTransport("templates:agents", {});
 }
 
 function listWorkflowTemplatesCommand() {
-  return { templates: listWorkflowTemplates() };
+  return invokeTransport("templates:workflows", {});
 }
 
 function listProjectTemplatesCommand() {
-  return { templates: listProjectTemplates() };
+  return invokeTransport("templates:projects", {});
 }
 
 function createAgentTemplateCommand(args: string[]) {
   const options = parseOptions(args);
-  const template = createAgentTemplate({
+  return invokeTransport("templates:agent-create", { payload: {
     name: getRequiredOption(options, "name"),
     role: options.role || "worker",
     persona: readOptionalText(options, "persona", "personaFile") || "Perform assigned work carefully and report the result.",
@@ -359,46 +254,42 @@ function createAgentTemplateCommand(args: string[]) {
     allowedTools: parseCsv(options.allowedTools),
     boundaries: readOptionalText(options, "boundaries", "boundariesFile") || "",
     maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined
-  });
-  return { template, templates: listAgentTemplates() };
+  } });
 }
 
 function createWorkflowTemplateCommand(args: string[]) {
   const options = parseOptions(args);
   const steps = readRequiredJson(options, "steps", "stepsFile");
-  const template = createWorkflowTemplate({
+  return invokeTransport("templates:workflow-create", { payload: {
     name: getRequiredOption(options, "name"),
     description: readOptionalText(options, "description", "descriptionFile") || "",
     steps
-  });
-  return { template, templates: listWorkflowTemplates() };
+  } });
 }
 
 function createProjectTemplateCommand(args: string[]) {
   const options = parseOptions(args);
   const agents = readRequiredJson(options, "agents", "agentsFile");
-  const template = createProjectTemplate({
+  return invokeTransport("templates:project-create", { payload: {
     name: getRequiredOption(options, "name"),
     description: readOptionalText(options, "description", "descriptionFile") || "",
     agents
-  });
-  return { template, templates: listProjectTemplates() };
+  } });
 }
 
 function listProvidersCommand() {
-  return listRuntimeProviders();
+  return invokeTransport("providers:list", {});
 }
 
-function listAgentsCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
+async function listAgentsCommand(args: string[]) {
+  const overview = await getOverviewTransport(args);
   return { agents: overview.agents, overview };
 }
 
 function createAgentCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const agent = createAgentService(project, {
+  const projectId = getRequiredOption(options, "project");
+  return invokeTransport("agents:save", { projectId, payload: {
     name: getRequiredOption(options, "name"),
     role: options.role || "worker",
     persona: readOptionalText(options, "persona", "personaFile") || "Perform assigned work carefully and report the result.",
@@ -409,15 +300,14 @@ function createAgentCommand(args: string[]) {
     boundaries: readOptionalText(options, "boundaries", "boundariesFile") || "",
     maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined,
     enabled: parseOptionalBoolean(options.enabled, "enabled")
-  });
-  return { agent, overview: getProjectOverview(project) };
+  } });
 }
 
 function updateAgentCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const agentId = getRequiredOption(options, "agent");
-  const agent = updateAgentService(project, agentId, {
+  return invokeTransport("agents:save", { projectId, agentId, payload: {
     name: options.name,
     role: options.role,
     persona: readOptionalText(options, "persona", "personaFile"),
@@ -428,184 +318,141 @@ function updateAgentCommand(args: string[]) {
     boundaries: readOptionalText(options, "boundaries", "boundariesFile"),
     maxParallel: options.maxParallel ? Math.max(1, Number(options.maxParallel)) : undefined,
     enabled: parseOptionalBoolean(options.enabled, "enabled")
-  });
-  return { agent, overview: getProjectOverview(project) };
+  } });
 }
 
 async function createPlanCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const goal = readGoal(options);
   const mode = normalizeMode(options.mode);
-  const settings = getProjectSettings(project.path);
-  const plan = createPlan(project, {
+  return invokeTransport("plans:create", { projectId, payload: {
     goal,
     mode,
     workflowTemplateId: options.workflowTemplate,
     allowLargePlan: options.allowLargePlan === "true",
-    largePlanTaskThreshold: settings.largePlanTaskThreshold
-  });
-  const shouldAutoStart = options.autoStart === "true";
-  const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
-  return { plan, schedule, overview: getProjectOverview(project) };
+    autoStart: options.autoStart === "true"
+  } });
 }
 
 function previewPlanCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const goal = readGoal(options);
   const mode = normalizeMode(options.mode);
-  const settings = getProjectSettings(project.path);
-  const preview = previewProjectPlan(project, {
-    goal,
-    mode,
-    workflowTemplateId: options.workflowTemplate,
-    largePlanTaskThreshold: settings.largePlanTaskThreshold
-  });
-  return { preview, overview: getProjectOverview(project) };
+  return invokeTransport("plans:preview", { projectId, payload: { goal, mode, workflowTemplateId: options.workflowTemplate } });
 }
 
-function listDocumentsCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
+async function listDocumentsCommand(args: string[]) {
+  const overview = await getOverviewTransport(args);
   return { documents: overview.documents, overview };
 }
 
 function createDocumentCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const document = createDocumentService(project, {
+  const projectId = getRequiredOption(options, "project");
+  return invokeTransport("documents:create", { projectId, payload: {
     title: getRequiredOption(options, "title"),
     content: readOptionalText(options, "content", "contentFile") || ""
-  });
-  return { document, overview: getProjectOverview(project) };
+  } });
 }
 
 function updateDocumentCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const documentId = getRequiredOption(options, "document");
-  const document = updateDocumentService(project, documentId, {
+  return invokeTransport("documents:update", { projectId, documentId, payload: {
     title: options.title,
     content: readOptionalText(options, "content", "contentFile")
-  });
-  return { document, overview: getProjectOverview(project) };
+  } });
 }
 
 async function planDocumentCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const document = getDocumentService(project, getRequiredOption(options, "document"));
+  const projectId = getRequiredOption(options, "project");
+  const documentId = getRequiredOption(options, "document");
   const mode = normalizeMode(options.mode);
-  const settings = getProjectSettings(project.path);
-  const plan = createPlan(project, {
-    goal: `Document: ${document.title}\n\n${document.content}`,
-    mode,
-    workflowTemplateId: options.workflowTemplate,
-    allowLargePlan: options.allowLargePlan === "true",
-    largePlanTaskThreshold: settings.largePlanTaskThreshold,
-    sourceDocumentId: document.id
-  });
-  const shouldAutoStart = options.autoStart === "true";
-  const schedule = shouldAutoStart ? await startReadyTasks(project) : null;
-  return { document, plan, schedule, overview: getProjectOverview(project) };
+  return invokeTransport("documents:plan", { projectId, documentId, payload: { mode, workflowTemplateId: options.workflowTemplate, allowLargePlan: options.allowLargePlan === "true", autoStart: options.autoStart === "true" } });
 }
 
 function previewDocumentPlanCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const document = getDocumentService(project, getRequiredOption(options, "document"));
+  const projectId = getRequiredOption(options, "project");
+  const documentId = getRequiredOption(options, "document");
   const mode = normalizeMode(options.mode);
-  const settings = getProjectSettings(project.path);
-  const preview = previewProjectPlan(project, {
-    goal: `Document: ${document.title}\n\n${document.content}`,
-    mode,
-    workflowTemplateId: options.workflowTemplate,
-    largePlanTaskThreshold: settings.largePlanTaskThreshold,
-    sourceDocumentId: document.id
-  });
-  return { document, preview, overview: getProjectOverview(project) };
+  return invokeTransport("documents:plan-preview", { projectId, documentId, payload: { mode, workflowTemplateId: options.workflowTemplate } });
 }
 
-function listMemoriesCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
+async function listMemoriesCommand(args: string[]) {
+  const overview = await getOverviewTransport(args);
   return { memories: overview.memories, overview };
 }
 
 function createMemoryCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const memory = createMemoryService(project, {
+  const projectId = getRequiredOption(options, "project");
+  return invokeTransport("memories:create", { projectId, payload: {
     title: getRequiredOption(options, "title"),
     content: readOptionalText(options, "content", "contentFile") || ""
-  });
-  return { memory, overview: getProjectOverview(project) };
+  } });
 }
 
 function updateMemoryCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const memoryId = getRequiredOption(options, "memory");
-  const memory = updateMemoryService(project, memoryId, {
+  return invokeTransport("memories:update", { projectId, memoryId, payload: {
     title: options.title,
     content: readOptionalText(options, "content", "contentFile")
-  });
-  return { memory, overview: getProjectOverview(project) };
+  } });
 }
 
 function listGlobalMemoriesCommand() {
-  return { memories: listGlobalMemories() };
+  return invokeTransport("global-memories:list", {});
 }
 
 function createGlobalMemoryCommand(args: string[]) {
   const options = parseOptions(args);
-  const memory = createGlobalMemory({
+  return invokeTransport("global-memories:create", { payload: {
     title: getRequiredOption(options, "title"),
     content: readOptionalText(options, "content", "contentFile") || ""
-  });
-  return { memory, memories: listGlobalMemories() };
+  } });
 }
 
 function updateGlobalMemoryCommand(args: string[]) {
   const options = parseOptions(args);
   const memoryId = getRequiredOption(options, "memory");
-  const memory = updateGlobalMemory(memoryId, {
+  return invokeTransport("global-memories:update", { memoryId, payload: {
     title: options.title,
     content: readOptionalText(options, "content", "contentFile")
-  });
-  return { memory, memories: listGlobalMemories() };
+  } });
 }
 
 async function startTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
-  const result = await startTask(project, taskId);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("tasks:start", { projectId, taskId });
 }
 
 function pauseTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
   const reason = readOptionalText(options, "reason", "reasonFile") || undefined;
-  const result = pauseTask(project, taskId, reason);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("tasks:pause", { projectId, taskId, reason });
 }
 
 function resumeTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
-  const result = resumeTask(project, taskId);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("tasks:resume", { projectId, taskId });
 }
 
-function listApprovalsCommand(args: string[]) {
+async function listApprovalsCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
+  const overview = await getOverviewTransport(args);
   const statuses = options.status
     ? new Set(parseCsv(options.status).map((status) => normalizeApprovalStatus(status)))
     : null;
@@ -632,53 +479,47 @@ function listApprovalsCommand(args: string[]) {
 
 async function approveApprovalCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const approvalId = getRequiredOption(options, "approval");
-  const result = await decideApproval(project, approvalId, "approved");
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("approvals:decide", { projectId, approvalId, action: "approve" });
 }
 
 async function rejectApprovalCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const approvalId = getRequiredOption(options, "approval");
-  const result = await decideApproval(project, approvalId, "rejected");
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("approvals:decide", { projectId, approvalId, action: "reject" });
 }
 
 function listInteractionsCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
   const status = options.status ? normalizeInteractionStatus(options.status) : undefined;
   const kind = options.kind ? normalizeInteractionKind(options.kind) : undefined;
-  return {
-    interactions: listInteractions(project, {
-      status,
-      kind,
-      taskId: options.task || undefined,
-      runId: options.run || undefined
-    })
-  };
+  return invokeTransport("interactions:list", {
+    projectId: getRequiredOption(options, "project"),
+    status,
+    kind,
+    taskId: options.task || undefined,
+    runId: options.run || undefined
+  });
 }
 
 async function respondInteractionCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const interactionId = getRequiredOption(options, "interaction");
   const action = options.action === "reject" ? "reject" : options.action === "resolve" ? "resolve" : null;
   if (!action) throw new Error("--action must be resolve or reject");
   const response = readOptionalText(options, "response", "responseFile") || "";
-  const result = await respondInteraction(project, interactionId, {
+  return invokeTransport("interactions:respond", { projectId, interactionId,
     action,
     responsePayload: { text: response },
     idempotencyKey: options.idempotencyKey || randomUUID()
   });
-  return { result, overview: getProjectOverview(project) };
 }
 
-function showBoardCommand(args: string[]) {
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
+async function showBoardCommand(args: string[]) {
+  const overview = await getOverviewTransport(args);
   const columns = taskStatuses.map((status) => ({
     status,
     tasks: overview.tasks.filter((task) => task.status === status)
@@ -693,10 +534,9 @@ function showBoardCommand(args: string[]) {
   };
 }
 
-function listRunsCommand(args: string[]) {
+async function listRunsCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
+  const overview = await getOverviewTransport(args);
   const statuses = options.status ? new Set(parseCsv(options.status).map((status) => normalizeRunStatus(status))) : null;
   const taskId = options.task || null;
   const agentId = options.agent || null;
@@ -723,11 +563,10 @@ function listRunsCommand(args: string[]) {
   return { runs, overview };
 }
 
-function showRunCommand(args: string[]) {
+async function showRunCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
   const runId = getRequiredOption(options, "run");
-  const overview = getProjectOverview(project);
+  const overview = await getOverviewTransport(args);
   const run = overview.runs.find((item) => item.id === runId);
   if (!run) {
     throw new Error("Run not found.");
@@ -744,16 +583,14 @@ function showRunCommand(args: string[]) {
 
 function createRunFollowUpsCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const runId = getRequiredOption(options, "run");
-  const tasks = createFollowUpTasksService(project, runId);
-  return { tasks, overview: getProjectOverview(project) };
+  return invokeTransport("runs:followups", { projectId, runId });
 }
 
-function listTasksCommand(args: string[]) {
+async function listTasksCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const overview = getProjectOverview(project);
+  const overview = await getOverviewTransport(args);
   const statuses = options.status ? new Set(parseCsv(options.status).map((status) => normalizeStatus(status))) : null;
   const assignee = options.assignee || null;
   const labels = parseCsv(options.labels);
@@ -772,11 +609,10 @@ function listTasksCommand(args: string[]) {
   return { tasks, overview };
 }
 
-function showTaskCommand(args: string[]) {
+async function showTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
   const taskId = getRequiredOption(options, "task");
-  const overview = getProjectOverview(project);
+  const overview = await getOverviewTransport(args);
   const task = overview.tasks.find((item) => item.id === taskId);
   if (!task) {
     throw new Error("Task not found.");
@@ -795,8 +631,8 @@ function showTaskCommand(args: string[]) {
 
 function createTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
-  const task = createTaskService(project, {
+  const projectId = getRequiredOption(options, "project");
+  return invokeTransport("tasks:create", { projectId, payload: {
     title: getRequiredOption(options, "title"),
     description: readOptionalText(options, "description", "descriptionFile") || "",
     status: normalizeStatus(options.status || "Backlog"),
@@ -812,15 +648,14 @@ function createTaskCommand(args: string[]) {
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile") || "",
     workspaceMode: parseWorkspaceModeOption(options.workspaceMode),
     blockedReason: null
-  });
-  return { task, overview: getProjectOverview(project) };
+  } });
 }
 
 function updateTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
-  const task = updateTaskService(project, taskId, {
+  return invokeTransport("tasks:update", { projectId, taskId, payload: {
     title: options.title,
     description: readOptionalText(options, "description", "descriptionFile"),
     status: options.status ? normalizeStatus(options.status) : undefined,
@@ -835,85 +670,70 @@ function updateTaskCommand(args: string[]) {
     acceptanceCriteria: readOptionalText(options, "acceptance", "acceptanceFile"),
     workspaceMode: options.workspaceMode === undefined ? undefined : parseWorkspaceModeOption(options.workspaceMode),
     blockedReason: optionPatchValue(options, "blockedReason", "clearBlockedReason")
-  });
-  const unblocked = task.status === "Done" ? unblockReadyDependents(project, task.id) : [];
-  return { task, unblocked, overview: getProjectOverview(project) };
+  } });
 }
 
 function decomposeTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
   const mode = options.mode === "sequential" ? "sequential" : "parallel";
   const items = parseDecompositionItems(readRequiredText(options, "items", "itemsFile"));
-  const tasks = decomposeTaskService(project, taskId, {
+  return invokeTransport("tasks:decompose", { projectId, taskId, payload: {
     items,
     mode,
     assigneeAgentId: options.assignee,
     modelBackend: options.modelBackend,
     labels: parseCsv(options.labels),
     reporter: "cli"
-  });
-
-  return { tasks, overview: getProjectOverview(project) };
+  } });
 }
 
 function commentTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
-  const comment = createTaskCommentService(project, taskId, {
+  return invokeTransport("tasks:comment", { projectId, taskId,
     author: options.author || "cli",
     body: readRequiredText(options, "body", "bodyFile")
   });
-  return { comment, overview: getProjectOverview(project) };
 }
 
 function moveTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
   const direction = options.direction || "down";
   if (direction !== "up" && direction !== "down") {
     throw new Error("--direction must be up or down.");
   }
-  const result = moveTaskInBoard(project.path, taskId, direction);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("tasks:move", { projectId, taskId, direction });
 }
 
 async function mergeTaskCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
-  const result = await approveMerge(project, taskId);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("tasks:merge", { projectId, taskId });
 }
 
 async function resolveTaskMergeCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
-  const result = await resolveMerge(project, taskId);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("tasks:resolve-merge", { projectId, taskId });
 }
 
 async function requestTaskChangesCommand(args: string[]) {
   const options = parseOptions(args);
-  const project = getRequiredProject(args);
+  const projectId = getRequiredOption(options, "project");
   const taskId = getRequiredOption(options, "task");
   const reason = readOptionalText(options, "reason", "reasonFile") || "Human requested changes before merge.";
-  const result = await requestMergeChanges(project, taskId, reason);
-  return { result, overview: getProjectOverview(project) };
+  return invokeTransport("tasks:request-changes", { projectId, taskId, reason });
 }
 
-function getRequiredProject(args: string[]) {
-  const options = parseOptions(args);
-  const projectId = getRequiredOption(options, "project");
-  const project = getProject(projectId);
-  if (!project) {
-    throw new Error(`Project not found: ${projectId}`);
-  }
-  return project;
+async function getOverviewTransport(args: string[]): Promise<ProjectOverview> {
+  return invokeTransport("projects:overview", { projectId: getRequiredOption(parseOptions(args), "project") }) as Promise<ProjectOverview>;
 }
 
 function parseDecompositionItems(value: string) {

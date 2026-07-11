@@ -17,14 +17,22 @@ export type HarnessCommandInputs = {
   "templates:agents": Record<string, never>;
   "templates:agent-create": { payload: object };
   "templates:workflows": Record<string, never>;
+  "templates:workflow-create": { payload: object };
   "templates:projects": Record<string, never>;
+  "templates:project-create": { payload: object };
   "settings:get": Record<string, never>;
   "settings:update": { payload: object };
+  "project-settings:get": { projectId: string };
   "project-settings:update": { projectId: string; payload: object };
   "system:select-folder": { initialPath?: string };
   "agents:save": { projectId: string; agentId?: string | null; payload: object };
+  "plans:preview": { projectId: string; payload: object };
+  "plans:create": { projectId: string; payload: object };
   "documents:create": { projectId: string; payload: object };
   "documents:update": { projectId: string; documentId: string; payload: object };
+  "documents:plan-preview": { projectId: string; documentId: string; payload: object };
+  "documents:plan": { projectId: string; documentId: string; payload: object };
+  "global-memories:list": Record<string, never>;
   "global-memories:create": { payload: object };
   "global-memories:update": { memoryId: string; payload: object };
   "memories:create": { projectId: string; payload: object };
@@ -177,14 +185,18 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "projects:create") return isText(payload.path);
   if (command === "system:select-folder") return payload.initialPath === undefined || typeof payload.initialPath === "string";
   if (command === "projects:list" || command === "providers:list" || command === "mcp:clients" || command === "mcp:diagnose" || command === "templates:agents" ||
-      command === "templates:workflows" || command === "templates:projects" || command === "settings:get") return true;
-  if (command === "templates:agent-create" || command === "settings:update" || command === "global-memories:create" || command === "mcp:client-save") return isRecord(payload.payload);
+      command === "templates:workflows" || command === "templates:projects" || command === "settings:get" || command === "global-memories:list") return true;
+  if (command === "templates:agent-create" || command === "templates:workflow-create" || command === "templates:project-create" ||
+      command === "settings:update" || command === "global-memories:create" || command === "mcp:client-save") return isRecord(payload.payload);
   if (command === "global-memories:update") return isText(payload.memoryId) && isRecord(payload.payload);
   if (command === "projects:import") return true;
   if (!isText(payload.projectId)) return false;
+  if (command === "plans:preview" || command === "plans:create") return isRecord(payload.payload);
+  if (command === "documents:plan-preview" || command === "documents:plan") return isText(payload.documentId) && isRecord(payload.payload);
   if (command === "projects:update" || command === "projects:remove" || command === "projects:overview" ||
       command === "projects:report" || command === "projects:init-git" || command === "projects:schedule") return true;
   if (command === "agents:save") return isRecord(payload.payload) && (payload.agentId === undefined || payload.agentId === null || isText(payload.agentId));
+  if (command === "project-settings:get") return isText(payload.projectId);
   if (command === "project-settings:update" || command === "documents:create" || command === "memories:create") return isRecord(payload.payload);
   if (command === "documents:update") return isText(payload.documentId) && isRecord(payload.payload);
   if (command === "memories:update") return isText(payload.memoryId) && isRecord(payload.payload);
@@ -240,8 +252,8 @@ const commandNames = new Set<HarnessCommand>([
   "projects:list", "projects:overview", "projects:create", "projects:update", "projects:remove", "projects:import",
   "projects:report", "projects:init-git", "projects:schedule", "providers:list", "templates:agents", "templates:workflows",
   "mcp:clients", "mcp:client-save", "mcp:diagnose",
-  "templates:projects", "templates:agent-create", "settings:get", "settings:update", "project-settings:update",
-  "system:select-folder", "agents:save", "documents:create", "documents:update", "global-memories:create",
+  "templates:projects", "templates:agent-create", "templates:workflow-create", "templates:project-create", "settings:get", "settings:update", "project-settings:get", "project-settings:update",
+  "system:select-folder", "agents:save", "plans:preview", "plans:create", "documents:create", "documents:update", "documents:plan-preview", "documents:plan", "global-memories:list", "global-memories:create",
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
   "interactions:list", "interactions:respond",
   "reviews:report", "reviews:diff", "reviews:file-update", "reviews:comment-create", "reviews:comment-update", "reviews:followup",

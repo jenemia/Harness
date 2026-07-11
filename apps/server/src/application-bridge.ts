@@ -119,6 +119,18 @@ export async function invokeApplicationBridge<C extends HarnessCommand>(
   }
 }
 
+export async function invokeApplicationCommandTransport<C extends HarnessCommand>(
+  command: C,
+  payload: HarnessCommandInputs[C]
+) {
+  const bridge = await invokeApplicationBridge(command, payload);
+  if (bridge.available) return bridge.result;
+  if (process.env.HARNESS_REQUIRE_DESKTOP_BRIDGE === "1") {
+    throw new Error("Harness desktop application bridge is required but unavailable.");
+  }
+  return invokeApplicationCommand(command, payload);
+}
+
 export function applicationBridgeDiagnostics() {
   const marker = readBridgeMarker();
   return {

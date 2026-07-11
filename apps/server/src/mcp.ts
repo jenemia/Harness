@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { HarnessCommand, HarnessCommandInputs } from "@harness/core";
-import { invokeApplicationCommand } from "./application.js";
-import { invokeApplicationBridge } from "./application-bridge.js";
+import { invokeApplicationCommandTransport } from "./application-bridge.js";
 import {
   getMcpClient,
   getOrCreateMcpClient,
@@ -215,9 +214,7 @@ async function dispatchTool(toolName: string, args: Record<string, unknown>, cli
 }
 
 async function invoke<C extends HarnessCommand>(command: C, payload: HarnessCommandInputs[C]) {
-  const bridge = await invokeApplicationBridge(command, payload);
-  if (bridge.available) return bridge.result;
-  return invokeApplicationCommand(command, payload);
+  return invokeApplicationCommandTransport(command, payload);
 }
 
 function previewOrInvoke<C extends HarnessCommand>(dry: boolean, command: C, payload: HarnessCommandInputs[C]) {
