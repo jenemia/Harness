@@ -56,7 +56,7 @@ pnpm cli tasks:request-changes --project <projectId> --task <taskId> --reason "N
 ```bash
 pnpm cli settings:get
 pnpm cli project-settings:get --project <projectId>
-pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --requireCommandApproval true
+pnpm cli project-settings:update --project <projectId> --maxProjectParallel 3 --requireCommandApproval true --providerEventMaxCount 10000 --providerEventRetentionDays 30 --providerToolOutputMaxChars 8000
 pnpm --filter @harness/server cli mcp:clients
 pnpm --filter @harness/server cli mcp:diagnose
 ```

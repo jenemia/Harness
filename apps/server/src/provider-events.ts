@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import type { ProviderEventEnvelope, ProviderEventType } from "@harness/core";
 import { providerEventVersion } from "@harness/core";
 import { redactCredentialMaterial } from "./credential-security.js";
-import { openProjectDb } from "./db.js";
-import type { ProjectRecord } from "./types.js";
+import { getProjectSettingsFromDb, openProjectDb } from "./db.js";
+import type { ProjectRecord, ProjectSettings } from "./types.js";
 import { withTelemetrySpan } from "./telemetry.js";
 
 const eventBus = new EventEmitter();
@@ -26,17 +26,22 @@ export function appendProviderEvent(project: ProjectRecord, input: AppendProvide
   }, () => {
   if (!Number.isSafeInteger(input.sequence) || input.sequence < 1) throw new Error("Provider event sequence must be a positive integer.");
   if (input.projectId !== project.id) throw new Error("Provider event project does not match the target project.");
-  const event: ProviderEventEnvelope = {
-    ...input,
-    version: providerEventVersion,
-    timestamp: input.timestamp || new Date().toISOString(),
-    payload: sanitizeProviderPayload(input.payload),
-    metadata: input.metadata?.originalEventType
-      ? { originalEventType: redactCredentialMaterial(input.metadata.originalEventType).slice(0, 200) }
-      : undefined
-  };
   const db = openProjectDb(project.path);
+  let event: ProviderEventEnvelope;
   try {
+    const settings = getProjectSettingsFromDb(db);
+    event = {
+      ...input,
+      version: providerEventVersion,
+      timestamp: input.timestamp || new Date().toISOString(),
+      payload: sanitizeProviderPayload(input.payload, {
+        eventType: input.type,
+        toolOutputMaxChars: settings.providerToolOutputMaxChars
+      }),
+      metadata: input.metadata?.originalEventType
+        ? { originalEventType: redactCredentialMaterial(input.metadata.originalEventType).slice(0, 200) }
+        : undefined
+    };
     const result = db.prepare(`
       INSERT OR IGNORE INTO provider_events (
         id, version, sequence, project_id, task_id, run_id, provider_id, timestamp,
@@ -48,8 +53,10 @@ export function appendProviderEvent(project: ProjectRecord, input: AppendProvide
       JSON.stringify(event.metadata || {}), new Date().toISOString()
     );
     if (result.changes === 0) {
+      pruneProviderEvents(db, project.id, settings);
       return { inserted: false, event: getProviderEvent(db, event.runId, event.sequence) || getTerminalProviderEvent(db, event.runId) };
     }
+    pruneProviderEvents(db, project.id, settings);
   } finally {
     db.close();
   }
@@ -106,8 +113,33 @@ export function nextProviderEventSequence(project: ProjectRecord, runId: string)
   }
 }
 
-export function sanitizeProviderPayload(payload: Record<string, unknown>) {
-  return sanitizeValue(payload, "") as Record<string, unknown>;
+export function enforceProviderEventRetention(project: ProjectRecord, now = new Date()) {
+  const db = openProjectDb(project.path);
+  try {
+    return pruneProviderEvents(db, project.id, getProjectSettingsFromDb(db), now);
+  } finally {
+    db.close();
+  }
+}
+
+export function sanitizeProviderPayload(
+  payload: Record<string, unknown>,
+  policy: { eventType?: ProviderEventType; toolOutputMaxChars?: number } = {}
+) {
+  const sanitized = sanitizeValue(payload, "") as Record<string, unknown>;
+  if (policy.eventType !== "tool_result") return sanitized;
+  const maxChars = Math.max(256, Number(policy.toolOutputMaxChars || 8_000));
+  const serialized = JSON.stringify(sanitized);
+  if (serialized.length <= maxChars) return sanitized;
+  const summary = redactCredentialMaterial(serialized.slice(0, maxChars));
+  return {
+    compacted: true,
+    summary: `[tool output compacted]\n${summary}`,
+    sanitizedCharacters: serialized.length,
+    retainedCharacters: summary.length,
+    sha256: createHash("sha256").update(serialized).digest("hex"),
+    retainedKeys: Object.keys(sanitized).slice(0, 50)
+  };
 }
 
 function sanitizeValue(value: unknown, key: string): unknown {
@@ -118,6 +150,42 @@ function sanitizeValue(value: unknown, key: string): unknown {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([nestedKey, nestedValue]) => [nestedKey, sanitizeValue(nestedValue, nestedKey)]));
   }
   return value;
+}
+
+function pruneProviderEvents(
+  db: ReturnType<typeof openProjectDb>,
+  projectId: string,
+  settings: Pick<ProjectSettings, "providerEventMaxCount" | "providerEventRetentionDays">,
+  now = new Date()
+) {
+  const terminalTypes = "'result', 'error'";
+  const cutoff = new Date(now.getTime() - Math.max(1, settings.providerEventRetentionDays) * 86_400_000).toISOString();
+  const expired = db.prepare(`
+    DELETE FROM provider_events
+    WHERE project_id = ? AND type NOT IN (${terminalTypes}) AND created_at < ?
+  `).run(projectId, cutoff).changes;
+  const count = Number((db.prepare("SELECT COUNT(*) AS value FROM provider_events WHERE project_id = ?").get(projectId) as { value: number }).value);
+  const excess = Math.max(0, count - Math.max(1, settings.providerEventMaxCount));
+  const overflow = excess > 0
+    ? db.prepare(`
+        DELETE FROM provider_events WHERE id IN (
+          SELECT id FROM provider_events
+          WHERE project_id = ? AND type NOT IN (${terminalTypes})
+          ORDER BY created_at ASC, run_id ASC, sequence ASC
+          LIMIT ?
+        )
+      `).run(projectId, excess).changes
+    : 0;
+  const retained = Number((db.prepare("SELECT COUNT(*) AS value FROM provider_events WHERE project_id = ?").get(projectId) as { value: number }).value);
+  const terminalRetained = Number((db.prepare(`SELECT COUNT(*) AS value FROM provider_events WHERE project_id = ? AND type IN (${terminalTypes})`).get(projectId) as { value: number }).value);
+  return {
+    deleted: Number(expired) + Number(overflow),
+    expiredDeleted: Number(expired),
+    overflowDeleted: Number(overflow),
+    retained,
+    terminalRetained,
+    terminalFloorExceeded: retained > settings.providerEventMaxCount && retained === terminalRetained
+  };
 }
 
 function getProviderEvent(db: ReturnType<typeof openProjectDb>, runId: string, sequence: number) {

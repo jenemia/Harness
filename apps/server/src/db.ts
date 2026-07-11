@@ -1018,6 +1018,8 @@ export function openProjectDb(projectPath: string) {
     );
     CREATE UNIQUE INDEX IF NOT EXISTS provider_events_terminal_once
       ON provider_events(run_id) WHERE type IN ('result', 'error');
+    CREATE INDEX IF NOT EXISTS provider_events_project_created
+      ON provider_events(project_id, created_at, sequence);
 
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
@@ -1367,6 +1369,9 @@ export function defaultProjectSettings(): ProjectSettings {
     maxReviewDiffLines: 1000,
     maxReviewBacklog: 5,
     maxUnreviewedDiffLines: 5000,
+    providerEventMaxCount: 10_000,
+    providerEventRetentionDays: 30,
+    providerToolOutputMaxChars: 8_000,
     workspaceProtectionMode: "pause",
     handoffRules: {
       programmer: "reviewer",
@@ -1424,6 +1429,9 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "maxReviewDiffLines") settings.maxReviewDiffLines = Math.max(1, Number(row.value || settings.maxReviewDiffLines));
     if (row.key === "maxReviewBacklog") settings.maxReviewBacklog = Math.max(1, Number(row.value || settings.maxReviewBacklog));
     if (row.key === "maxUnreviewedDiffLines") settings.maxUnreviewedDiffLines = Math.max(1, Number(row.value || settings.maxUnreviewedDiffLines));
+    if (row.key === "providerEventMaxCount") settings.providerEventMaxCount = Math.max(1, Number(row.value || settings.providerEventMaxCount));
+    if (row.key === "providerEventRetentionDays") settings.providerEventRetentionDays = Math.max(1, Number(row.value || settings.providerEventRetentionDays));
+    if (row.key === "providerToolOutputMaxChars") settings.providerToolOutputMaxChars = Math.max(256, Number(row.value || settings.providerToolOutputMaxChars));
     if (row.key === "workspaceProtectionMode" && ["warn", "pause", "block"].includes(row.value)) {
       settings.workspaceProtectionMode = row.value as ProjectSettings["workspaceProtectionMode"];
     }
@@ -1470,6 +1478,9 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
       maxReviewDiffLines: Math.max(1, Number(input.maxReviewDiffLines || current.maxReviewDiffLines)),
       maxReviewBacklog: Math.max(1, Number(input.maxReviewBacklog || current.maxReviewBacklog)),
       maxUnreviewedDiffLines: Math.max(1, Number(input.maxUnreviewedDiffLines || current.maxUnreviewedDiffLines)),
+      providerEventMaxCount: Math.max(1, Number(input.providerEventMaxCount || current.providerEventMaxCount)),
+      providerEventRetentionDays: Math.max(1, Number(input.providerEventRetentionDays || current.providerEventRetentionDays)),
+      providerToolOutputMaxChars: Math.max(256, Number(input.providerToolOutputMaxChars || current.providerToolOutputMaxChars)),
       workspaceProtectionMode: input.workspaceProtectionMode === "warn" || input.workspaceProtectionMode === "block" || input.workspaceProtectionMode === "pause"
         ? input.workspaceProtectionMode
         : current.workspaceProtectionMode,
@@ -1493,6 +1504,9 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
     stmt.run("maxReviewDiffLines", String(next.maxReviewDiffLines), timestamp);
     stmt.run("maxReviewBacklog", String(next.maxReviewBacklog), timestamp);
     stmt.run("maxUnreviewedDiffLines", String(next.maxUnreviewedDiffLines), timestamp);
+    stmt.run("providerEventMaxCount", String(next.providerEventMaxCount), timestamp);
+    stmt.run("providerEventRetentionDays", String(next.providerEventRetentionDays), timestamp);
+    stmt.run("providerToolOutputMaxChars", String(next.providerToolOutputMaxChars), timestamp);
     stmt.run("workspaceProtectionMode", next.workspaceProtectionMode, timestamp);
     stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
     stmt.run("providerCommands", JSON.stringify(providerCommandOverrides), timestamp);

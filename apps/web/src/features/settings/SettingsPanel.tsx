@@ -576,6 +576,31 @@ export function SettingsPanel(props: {
           onChange={(event) => updateProjectSetting("maxUnreviewedDiffLines", Math.max(1, Number(event.target.value || 1)))}
           placeholder="Unreviewed line scheduler limit"
         />
+        <input
+          min={1}
+          max={1000000}
+          type="number"
+          value={projectSettings.providerEventMaxCount}
+          onChange={(event) => updateProjectSetting("providerEventMaxCount", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Provider event retention count"
+          title="Maximum stored provider events; terminal run markers are retained for idempotency."
+        />
+        <input
+          min={1}
+          max={3650}
+          type="number"
+          value={projectSettings.providerEventRetentionDays}
+          onChange={(event) => updateProjectSetting("providerEventRetentionDays", Math.max(1, Number(event.target.value || 1)))}
+          placeholder="Provider event retention days"
+        />
+        <input
+          min={256}
+          max={100000}
+          type="number"
+          value={projectSettings.providerToolOutputMaxChars}
+          onChange={(event) => updateProjectSetting("providerToolOutputMaxChars", Math.max(256, Number(event.target.value || 256)))}
+          placeholder="Stored tool output summary characters"
+        />
         <select
           value={projectSettings.workspaceProtectionMode}
           onChange={(event) => updateProjectSetting("workspaceProtectionMode", event.target.value as ProjectSettings["workspaceProtectionMode"])}

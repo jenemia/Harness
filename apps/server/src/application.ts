@@ -67,7 +67,7 @@ import {
   updateTaskService
 } from "./services.js";
 import type { AgentRecord, TaskRecord } from "./types.js";
-import { replayProviderEvents, subscribeProviderEvents } from "./provider-events.js";
+import { enforceProviderEventRetention, replayProviderEvents, subscribeProviderEvents } from "./provider-events.js";
 import {
   claimDraftReviewRequest,
   createDraftReply,
@@ -212,7 +212,9 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "project-settings:update": {
       const value = input(payload) as HarnessCommandInputs["project-settings:update"];
       const project = requiredProject(value.projectId);
-      return { settings: updateProjectSettings(project.path, value.payload), overview: getProjectOverview(project) };
+      const settings = updateProjectSettings(project.path, value.payload);
+      const providerEventRetention = enforceProviderEventRetention(project);
+      return { settings, providerEventRetention, overview: getProjectOverview(project) };
     }
     case "system:select-folder": return selectFolder(input(payload));
     case "agents:save": {

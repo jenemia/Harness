@@ -124,6 +124,9 @@ export type ProjectSettings = {
   maxReviewDiffLines: number;
   maxReviewBacklog: number;
   maxUnreviewedDiffLines: number;
+  providerEventMaxCount: number;
+  providerEventRetentionDays: number;
+  providerToolOutputMaxChars: number;
   workspaceProtectionMode: "warn" | "pause" | "block";
   handoffRules: Record<string, string>;
   providerCommands: Record<string, string>;

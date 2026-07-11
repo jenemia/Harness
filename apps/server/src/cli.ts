@@ -218,6 +218,9 @@ function updateProjectSettingsCommand(args: string[]) {
     maxReviewDiffLines: options.maxReviewDiffLines ? Number(options.maxReviewDiffLines) : undefined,
     maxReviewBacklog: options.maxReviewBacklog ? Number(options.maxReviewBacklog) : undefined,
     maxUnreviewedDiffLines: options.maxUnreviewedDiffLines ? Number(options.maxUnreviewedDiffLines) : undefined,
+    providerEventMaxCount: options.providerEventMaxCount ? Number(options.providerEventMaxCount) : undefined,
+    providerEventRetentionDays: options.providerEventRetentionDays ? Number(options.providerEventRetentionDays) : undefined,
+    providerToolOutputMaxChars: options.providerToolOutputMaxChars ? Number(options.providerToolOutputMaxChars) : undefined,
     workspaceProtectionMode: options.workspaceProtectionMode === "warn" || options.workspaceProtectionMode === "pause" || options.workspaceProtectionMode === "block"
       ? options.workspaceProtectionMode
       : undefined,
@@ -965,7 +968,7 @@ Usage:
   pnpm --filter @harness/server cli settings:get
   pnpm --filter @harness/server cli settings:update [--defaultProjectRoot <folder>] [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--largePlanTaskThreshold 10] [--maxRunSeconds 1800] [--providerCommands <json>|--providerCommandsFile <file>]
   pnpm --filter @harness/server cli project-settings:get --project <projectId>
-  pnpm --filter @harness/server cli project-settings:update --project <projectId> [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--requireCommandApproval true|false] [--maxProjectParallel 4] [--largePlanTaskThreshold 10] [--maxRunSeconds 1800] [--maxReviewFiles 20] [--maxReviewDiffLines 1000] [--maxReviewBacklog 5] [--maxUnreviewedDiffLines 5000] [--workspaceProtectionMode warn|pause|block] [--handoffRules <json>|--handoffRulesFile <file>] [--providerCommands <json>|--providerCommandsFile <file>]
+  pnpm --filter @harness/server cli project-settings:update --project <projectId> [--defaultModelBackend <id>] [--defaultAgentMaxParallel 2] [--autoStartPlans true|false] [--requireCommandApproval true|false] [--maxProjectParallel 4] [--largePlanTaskThreshold 10] [--maxRunSeconds 1800] [--maxReviewFiles 20] [--maxReviewDiffLines 1000] [--maxReviewBacklog 5] [--maxUnreviewedDiffLines 5000] [--providerEventMaxCount 10000] [--providerEventRetentionDays 30] [--providerToolOutputMaxChars 8000] [--workspaceProtectionMode warn|pause|block] [--handoffRules <json>|--handoffRulesFile <file>] [--providerCommands <json>|--providerCommandsFile <file>]
   pnpm --filter @harness/server cli templates:agents
   pnpm --filter @harness/server cli templates:workflows
   pnpm --filter @harness/server cli templates:projects

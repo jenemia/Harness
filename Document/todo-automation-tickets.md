@@ -296,11 +296,15 @@ Status: 완료
 
 Depends on: A07, A20
 
+Status: 완료
+
 - project별 event 최대량과 보존 기간 설정을 추가한다.
 - 긴 tool output은 credential redaction 후 bounded summary로 저장한다.
 - terminal event와 audit 연결을 보존하면서 원본 event를 안전하게 정리한다.
 
 완료 조건: 대량 event가 설정 한도를 넘지 않고 replay·terminal idempotency·민감정보 보호가 유지된다.
+
+검증: project별 최대 event 수, 보존 일수와 tool output 요약 길이를 settings, CLI와 Web UI에 추가했다. append 및 설정 변경 시 만료·초과 일반 event를 자동 삭제하고 terminal marker와 correlation을 보존하며, 긴 tool result는 credential redaction 후 bounded summary·hash·크기 metadata로 저장한다. 대량 event·기간 만료·terminal 중복·민감정보 회귀 테스트, 전체 workspace typecheck·build, server 31개·desktop 2개 테스트를 통과했다. `pnpm dev` 브라우저 테스트에서 세 설정의 표시·저장·새로고침 복원을 확인했다.
 
 ### A22: Direct provider OAuth와 OS keychain 경계
 
