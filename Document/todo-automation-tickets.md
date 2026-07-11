@@ -380,11 +380,15 @@ Status: 완료
 
 Depends on: A26
 
+Status: 완료
+
 - preview 실행의 URL, 산출물 경로, PID, bounded log와 `booting`, `live`, `crashed`, `stopped` 상태를 project-local DB에 저장한다.
 - Harness 소유 process만 process group으로 시작·중지·재시작하고 readiness와 비정상 종료를 반영한다.
 - app 시작 시 이전 owner marker와 PID identity를 검증해 Harness가 소유했던 orphan preview만 정리한다.
 
 완료 조건: preview lifecycle이 재시작과 crash 뒤에도 재현 가능하고 외부 process를 종료하지 않는다.
+
+검증: approved process preview를 detached Harness host process group으로 실행하고 DB에 readiness URL, artifact path, PID, owner instance, 시작 시각, project-relative log path와 `booting`, `live`, `crashed`, `stopped` 상태를 저장한다. host는 raw shell 없이 구조화된 executable/args를 실행하며 선택된 environment key 값과 credential pattern을 file write 전에 redaction하고 64 KiB tail만 유지한다. readiness endpoint가 응답하면 live, readiness가 없으면 안정화 시간 뒤 live, exit marker나 PID 종료는 crashed로 전환한다. stop/restart는 host marker path와 실제 process command line identity를 대조한 뒤에만 process group을 종료한다. desktop과 선택적 HTTP server는 시작 전에 recovery를 기다리고, 살아 있는 Harness orphan만 종료하며 PID가 재사용됐거나 identity가 다른 외부 process는 건드리지 않고 stale record만 crashed로 바꾼다. 실제 loopback server의 booting→live, secret log redaction, bounded log, 명시적 approval 차단, restart, exit code crash, artifact 상태, 다른 PID 보호와 별도 CLI process가 남긴 orphan recovery를 통합 테스트했다. 전체 workspace typecheck·build와 server 39개·web 2개·desktop 2개 테스트를 통과했다.
 
 ### A28: Preview card UI와 open actions
 

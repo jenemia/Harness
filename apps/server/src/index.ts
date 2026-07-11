@@ -10,6 +10,7 @@ import {
 import type { PlanningMode } from "./planner.js";
 import { recoverInterruptedRuns } from "./runtime.js";
 import { recoverDraftReviewRequests, replayDraftEvents } from "./drafts.js";
+import { recoverPreviewProcesses } from "./preview-runtime.js";
 import { ensureDraftReviewAgentRuntime } from "./draft-review-agents.js";
 import { invokeApplicationCommand } from "./application.js";
 import { initializeTelemetry, shutdownTelemetry, withTelemetrySpan } from "./telemetry.js";
@@ -455,6 +456,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, await invokeApplicationCommand("previews:remove", { projectId: project.id, previewId: previewMatch[1] }));
         return;
       }
+      const previewActionMatch = childPath.match(/^previews\/([^/]+)\/(start|stop|restart)$/);
+      if (previewActionMatch && req.method === "POST") {
+        const action = previewActionMatch[2] as "start" | "stop" | "restart";
+        sendJson(res, await invokeApplicationCommand(`previews:${action}`, { projectId: project.id, previewId: previewActionMatch[1] }));
+        return;
+      }
 
       if (req.method === "POST" && childPath === "tasks") {
         sendJson(res, await invokeApplicationCommand("tasks:create", { projectId: project.id, payload: await readBody(req) }), 201);
@@ -613,7 +620,7 @@ const server = http.createServer(async (req, res) => {
 
 initializeTelemetry();
 ensureDraftReviewAgentRuntime();
-recoverRegisteredProjects();
+await recoverRegisteredProjects();
 
 server.listen(port, () => {
   console.log(`Harness server listening on http://localhost:${port}`);
@@ -627,25 +634,28 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-function recoverRegisteredProjects() {
-  return withTelemetrySpan("recovery.audit", { "harness.operation": "server.recover" }, () => {
-    const results = listProjects().map((project) => {
+async function recoverRegisteredProjects() {
+  return withTelemetrySpan("recovery.audit", { "harness.operation": "server.recover" }, async () => {
+    const results = await Promise.all(listProjects().map(async (project) => {
       try {
         const runtime = recoverInterruptedRuns(project);
         const drafts = recoverDraftReviewRequests(project);
-        return { ...runtime, drafts };
+        const previews = await recoverPreviewProcesses(project);
+        return { ...runtime, drafts, previews };
       } catch (error) {
         console.error(`Failed to recover project ${project.name}: ${error instanceof Error ? error.message : String(error)}`);
         return null;
       }
-    }).filter(Boolean);
-    const interruptedRuns = results.reduce((count, result) => count + (result?.interruptedRuns.length || 0), 0);
-    const resetTasks = results.reduce((count, result) => count + (result?.resetTasks.length || 0), 0);
-    const resetAgents = results.reduce((count, result) => count + (result?.resetAgents.length || 0), 0);
-    const recoveredDraftReviews = results.reduce((count, result) => count + (result?.drafts.recovered || 0), 0);
-    if (interruptedRuns || resetTasks || resetAgents || recoveredDraftReviews) {
+    }));
+    const completed = results.filter((result) => result !== null);
+    const interruptedRuns = completed.reduce((count, result) => count + result.interruptedRuns.length, 0);
+    const resetTasks = completed.reduce((count, result) => count + result.resetTasks.length, 0);
+    const resetAgents = completed.reduce((count, result) => count + result.resetAgents.length, 0);
+    const recoveredDraftReviews = completed.reduce((count, result) => count + result.drafts.recovered, 0);
+    const recoveredPreviews = completed.reduce((count, result) => count + result.previews.recovered.length, 0);
+    if (interruptedRuns || resetTasks || resetAgents || recoveredDraftReviews || recoveredPreviews) {
       console.log(
-        `Recovered ${interruptedRuns} interrupted run(s), ${resetTasks} task(s), ${resetAgents} agent(s), and ${recoveredDraftReviews} draft review(s).`
+        `Recovered ${interruptedRuns} interrupted run(s), ${resetTasks} task(s), ${resetAgents} agent(s), ${recoveredDraftReviews} draft review(s), and ${recoveredPreviews} preview process(es).`
       );
     }
     return results;

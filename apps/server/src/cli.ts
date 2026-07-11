@@ -50,6 +50,9 @@ const commands: Record<string, CommandHandler> = {
   "previews:list": listPreviewsCommand,
   "previews:register": registerPreviewCommand,
   "previews:remove": removePreviewCommand,
+  "previews:start": startPreviewCommand,
+  "previews:stop": stopPreviewCommand,
+  "previews:restart": restartPreviewCommand,
   "plans:preview": previewPlanCommand,
   "plans:create": createPlanCommand,
   "documents:list": listDocumentsCommand,
@@ -445,6 +448,15 @@ function registerPreviewCommand(args: string[]) {
 function removePreviewCommand(args: string[]) {
   const options = parseOptions(args);
   return invokeTransport("previews:remove", { projectId: getRequiredOption(options, "project"), previewId: getRequiredOption(options, "preview") });
+}
+
+function startPreviewCommand(args: string[]) { return previewActionCommand("previews:start", args); }
+function stopPreviewCommand(args: string[]) { return previewActionCommand("previews:stop", args); }
+function restartPreviewCommand(args: string[]) { return previewActionCommand("previews:restart", args); }
+
+function previewActionCommand(command: "previews:start" | "previews:stop" | "previews:restart", args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport(command, { projectId: getRequiredOption(options, "project"), previewId: getRequiredOption(options, "preview") });
 }
 
 async function createPlanCommand(args: string[]) {
@@ -1117,6 +1129,7 @@ Usage:
   pnpm --filter @harness/server cli previews:list --project <projectId> [--task <taskId>]
   pnpm --filter @harness/server cli previews:register --project <projectId> --task <taskId> --runtime artifact|local|docker-compose [--label <text>] [--executable <program> --args '["arg"]'] [--packageRoot <relative>] [--composeFile <relative> --service <name>] [--artifactPath <relative>] [--readinessUrl <url>] [--environmentKeys KEY1,KEY2]
   pnpm --filter @harness/server cli previews:remove --project <projectId> --preview <previewId>
+  pnpm --filter @harness/server cli previews:start|stop|restart --project <projectId> --preview <previewId>
   pnpm --filter @harness/server cli plans:preview --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>]
   pnpm --filter @harness/server cli plans:create --project <projectId> (--goal <text> | --goalFile <file>) [--mode auto|sequential|parallel] [--workflowTemplate <id>] [--allowLargePlan true] [--autoStart true]
   pnpm --filter @harness/server cli documents:list --project <projectId>

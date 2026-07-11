@@ -114,7 +114,7 @@ async function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  recoverApplicationState();
+  await recoverApplicationState();
   applicationBridge = await startApplicationBridge();
   await dogOverlay.start().catch(() => false);
   await createWindow();

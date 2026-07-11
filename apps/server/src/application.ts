@@ -100,6 +100,7 @@ import { listInteractions } from "./interactions.js";
 import { correlationAttributes, operationSpanName, withTelemetrySpan } from "./telemetry.js";
 import { subscribeAgentFileEvents } from "./agent-file-events.js";
 import { listPreviews, registerPreview, removePreview, type PreviewRegistrationInput } from "./previews.js";
+import { recoverPreviewProcesses, restartPreview, startPreview, stopPreview } from "./preview-runtime.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -131,12 +132,13 @@ export function subscribeApplicationAgentEvents(
 }
 
 export function recoverApplicationState() {
-  return withTelemetrySpan("recovery.audit", { "harness.operation": "application.recover" }, () => listProjects().map((project) => {
+  return withTelemetrySpan("recovery.audit", { "harness.operation": "application.recover" }, () => Promise.all(listProjects().map(async (project) => {
     try {
       return {
         projectId: project.id,
         runtime: recoverInterruptedRuns(project),
         drafts: recoverDraftReviewRequests(project),
+        previews: await recoverPreviewProcesses(project),
         error: null
       };
     } catch (error) {
@@ -147,7 +149,7 @@ export function recoverApplicationState() {
         error: error instanceof Error ? error.message : String(error)
       };
     }
-  }));
+  })));
 }
 
 export async function invokeApplicationCommand<C extends HarnessCommand>(
@@ -298,6 +300,18 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["previews:remove"];
       const project = requiredProject(value.projectId);
       return { result: removePreview(project, value.previewId), previews: listPreviews(project) };
+    }
+    case "previews:start": {
+      const value = input(payload) as HarnessCommandInputs["previews:start"];
+      return { preview: await startPreview(requiredProject(value.projectId), value.previewId) };
+    }
+    case "previews:stop": {
+      const value = input(payload) as HarnessCommandInputs["previews:stop"];
+      return { preview: await stopPreview(requiredProject(value.projectId), value.previewId) };
+    }
+    case "previews:restart": {
+      const value = input(payload) as HarnessCommandInputs["previews:restart"];
+      return { preview: await restartPreview(requiredProject(value.projectId), value.previewId) };
     }
     case "plans:preview": {
       const value = input(payload) as HarnessCommandInputs["plans:preview"];
