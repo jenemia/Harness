@@ -12,6 +12,7 @@ export type HarnessCommandInputs = {
   "projects:init-git": { projectId: string };
   "projects:schedule": { projectId: string };
   "chat:create": { projectId: string };
+  "chat:list": { projectId: string; cursor?: string; limit?: number };
   "chat:get": { projectId: string; sessionId: string };
   "chat:send": { projectId: string; sessionId: string; content: string };
   "providers:list": Record<string, never>;
@@ -235,6 +236,8 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "projects:update" || command === "projects:remove" || command === "projects:overview" ||
       command === "projects:report" || command === "projects:init-git" || command === "projects:schedule") return true;
   if (command === "chat:create") return true;
+  if (command === "chat:list") return (payload.cursor === undefined || isText(payload.cursor)) &&
+    (payload.limit === undefined || (isNonNegativeInteger(payload.limit) && Number(payload.limit) > 0));
   if (command === "chat:get") return isText(payload.sessionId);
   if (command === "chat:send") return isText(payload.sessionId) && isText(payload.content);
   if (command === "agents:save") return isRecord(payload.payload) && (payload.agentId === undefined || payload.agentId === null || isText(payload.agentId));
@@ -305,7 +308,7 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
 
 const commandNames = new Set<HarnessCommand>([
   "projects:list", "projects:overview", "projects:overview-sections", "projects:create", "projects:update", "projects:remove", "projects:import",
-  "projects:report", "projects:init-git", "projects:schedule", "chat:create", "chat:get", "chat:send", "providers:list", "providers:probe", "templates:agents", "templates:workflows",
+  "projects:report", "projects:init-git", "projects:schedule", "chat:create", "chat:list", "chat:get", "chat:send", "providers:list", "providers:probe", "templates:agents", "templates:workflows",
   "mcp:clients", "mcp:client-save", "mcp:diagnose",
   "templates:projects", "templates:agent-create", "templates:workflow-create", "templates:project-create", "settings:get", "settings:update", "project-settings:get", "project-settings:update",
   "system:select-folder", "agents:save", "agents:get", "agents:raw-preview", "agents:raw-save", "agents:instruction-save", "agents:instruction-rename", "agents:instruction-remove", "agents:instruction-reorder", "agents:clone", "agents:archive", "agents:open-folder",

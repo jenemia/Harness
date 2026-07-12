@@ -103,7 +103,7 @@ import { subscribeAgentFileEvents } from "./agent-file-events.js";
 import { listPreviews, registerPreview, removePreview, type PreviewRegistrationInput } from "./previews.js";
 import { recoverPreviewProcesses, restartPreview, startPreview, stopPreview } from "./preview-runtime.js";
 import { openPreviewTarget } from "./preview-opener.js";
-import { createChatSession, getChatSession, sendChatMessage } from "./chat.js";
+import { createChatSession, getChatSession, listChatSessions, sendChatMessage } from "./chat.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -210,6 +210,10 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "chat:create": {
       const value = input(payload) as HarnessCommandInputs["chat:create"];
       return { session: createChatSession(requiredProject(value.projectId)) };
+    }
+    case "chat:list": {
+      const value = input(payload) as HarnessCommandInputs["chat:list"];
+      return listChatSessions(requiredProject(value.projectId), value);
     }
     case "chat:get": {
       const value = input(payload) as HarnessCommandInputs["chat:get"];
