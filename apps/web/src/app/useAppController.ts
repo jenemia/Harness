@@ -38,6 +38,7 @@ export function useAppController() {
   const [boardLabel, setBoardLabel] = useState("");
   const [isTaskPromptOpen, setIsTaskPromptOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<AppSection>("board");
+  const [hasInitializedOverview, setHasInitializedOverview] = useState(false);
   const overviewRequest = useRef(0);
   const overviewInFlight = useRef<Promise<void> | null>(null);
 
@@ -68,6 +69,7 @@ export function useAppController() {
     setProjectTemplates(projectResponse.templates);
     setSettings(settingsResponse.settings);
     setSelectedProjectId((current) => current || data.projects[0]?.id || "");
+    if (data.projects.length === 0) setHasInitializedOverview(true);
   }, []);
 
   const refreshProviders = useCallback(async () => {
@@ -81,6 +83,7 @@ export function useAppController() {
     if (!projectId) {
       setOverview(null);
       setHealthReport(null);
+      setHasInitializedOverview(true);
       return;
     }
     if (overviewInFlight.current) await overviewInFlight.current;
@@ -95,12 +98,16 @@ export function useAppController() {
         ? { ...current, ...data }
         : data as Overview);
       if (reportResponse) setHealthReport(reportResponse.report);
+      setHasInitializedOverview(true);
     })();
     overviewInFlight.current = request;
     try {
       await request;
     } finally {
-      if (overviewInFlight.current === request) overviewInFlight.current = null;
+      if (overviewInFlight.current === request) {
+        overviewInFlight.current = null;
+        setHasInitializedOverview(true);
+      }
     }
   }, []);
 
@@ -350,6 +357,7 @@ export function useAppController() {
     setIsTaskPromptOpen,
     activeSection,
     setActiveSection,
+    hasInitializedOverview,
     boardLabels,
     visibleTasks,
     visibleTasksByStatus,
