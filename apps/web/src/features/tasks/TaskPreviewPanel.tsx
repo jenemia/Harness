@@ -2,6 +2,7 @@ import { ExternalLink, FolderOpen, Monitor, Play, Plus, RefreshCw, Square, Trash
 import { FormEvent, useState } from "react";
 import type { Approval, Preview, Task } from "../../api/contracts";
 import { previewService, type PreviewRegistration } from "../../services/previewService";
+import { useI18n } from "../../i18n";
 
 export function TaskPreviewPanel(props: {
   projectId: string;
@@ -11,6 +12,7 @@ export function TaskPreviewPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [showForm, setShowForm] = useState(false);
   const [label, setLabel] = useState("Preview");
   const [runtime, setRuntime] = useState<Preview["runtime"]>("artifact");
@@ -72,8 +74,8 @@ export function TaskPreviewPanel(props: {
   return (
     <section className="drawer-section preview-section" aria-label="Task previews">
       <div className="preview-heading">
-        <h3>Preview</h3>
-        <button className="mini-button" type="button" onClick={() => setShowForm((value) => !value)}><Plus size={14} /> Register</button>
+        <h3>{t("preview.heading")}</h3>
+        <button className="mini-button" type="button" onClick={() => setShowForm((value) => !value)}><Plus size={14} /> {t("preview.register")}</button>
       </div>
       {showForm && <form className="preview-register-form" onSubmit={(event) => void register(event)}>
         <input aria-label="Preview label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Preview label" />
@@ -87,7 +89,7 @@ export function TaskPreviewPanel(props: {
         {runtime !== "artifact" && <><input aria-label="Preview readiness URL" value={readinessUrl} onChange={(event) => setReadinessUrl(event.target.value)} placeholder="http://127.0.0.1:4173/" /><input aria-label="Preview environment keys" value={environmentKeys} onChange={(event) => setEnvironmentKeys(event.target.value)} placeholder="PORT, NODE_ENV" /></>}
         <button className="primary-button" type="submit">Register preview</button>
       </form>}
-      {props.previews.length === 0 ? <p className="drawer-copy">No explicit preview is registered.</p> : <div className="preview-list">
+      {props.previews.length === 0 ? <p className="drawer-copy">{t("preview.none")}</p> : <div className="preview-list">
         {props.previews.map((preview) => {
           const approval = preview.approvalId ? props.approvals.find((item) => item.id === preview.approvalId) : null;
           const canStart = preview.runtime === "artifact" || approval?.status === "approved";

@@ -26,6 +26,7 @@ import type {
 import { taskService } from "../../services/taskService";
 import { parseLabels, parseListText } from "../../shared/formParsing";
 import { taskStatuses } from "../../shared/taskStatus";
+import { statusMessageKey, useI18n } from "../../i18n";
 import {
   DetailItem,
   PathLine,
@@ -46,6 +47,7 @@ export function TaskDetailDrawer(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(props.task.title);
   const [editDescription, setEditDescription] = useState(
@@ -255,7 +257,7 @@ export function TaskDetailDrawer(props: {
     >
       <aside
         className="task-drawer"
-        aria-label="Task detail"
+        aria-label={t("task.detail")}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="drawer-header">
@@ -275,7 +277,7 @@ export function TaskDetailDrawer(props: {
             onClick={() => setIsEditing((current) => !current)}
           >
             <Settings size={16} />
-            <span>{isEditing ? "Close edit" : "Edit"}</span>
+            <span>{t(isEditing ? "task.closeEdit" : "task.edit")}</span>
           </button>
           <button
             className="secondary-button"
@@ -283,7 +285,7 @@ export function TaskDetailDrawer(props: {
             onClick={() => void move("up")}
           >
             <ArrowUp size={16} />
-            <span>Up</span>
+            <span>{t("task.up")}</span>
           </button>
           <button
             className="secondary-button"
@@ -291,7 +293,7 @@ export function TaskDetailDrawer(props: {
             onClick={() => void move("down")}
           >
             <ArrowDown size={16} />
-            <span>Down</span>
+            <span>{t("task.down")}</span>
           </button>
           {props.task.status === "Paused" && !hasPendingRunInteraction ? (
             <button
@@ -300,7 +302,7 @@ export function TaskDetailDrawer(props: {
               onClick={() => void resume()}
             >
               <Play size={16} />
-              <span>Resume</span>
+              <span>{t("task.resume")}</span>
             </button>
           ) : props.task.status !== "Paused" && props.task.status !== "In Progress" &&
             props.task.status !== "In Review" && props.task.status !== "Done" ? (
@@ -311,7 +313,7 @@ export function TaskDetailDrawer(props: {
                 onClick={() => void start()}
               >
                 <Play size={16} />
-                <span>Start</span>
+                <span>{t("task.start")}</span>
               </button>
               <button
                 className="secondary-button"
@@ -319,7 +321,7 @@ export function TaskDetailDrawer(props: {
                 onClick={() => void pause()}
               >
                 <Clock3 size={16} />
-                <span>Pause</span>
+                <span>{t("task.pause")}</span>
               </button>
             </>
           ) : null}
@@ -333,7 +335,7 @@ export function TaskDetailDrawer(props: {
                   onClick={() => void merge()}
                 >
                   <GitMerge size={16} />
-                  <span>Merge</span>
+                  <span>{t("task.merge")}</span>
                 </button>
               ) : (
                 <button
@@ -342,7 +344,7 @@ export function TaskDetailDrawer(props: {
                   onClick={() => void resolveMerge()}
                 >
                   <CheckCircle2 size={16} />
-                  <span>Resolve merge</span>
+                  <span>{t("task.resolveMerge")}</span>
                 </button>
               )}
               <button
@@ -351,7 +353,7 @@ export function TaskDetailDrawer(props: {
                 onClick={() => void requestChanges()}
               >
                 <RefreshCcw size={16} />
-                <span>Request changes</span>
+                <span>{t("task.requestChanges")}</span>
               </button>
             </>
           )}
@@ -372,7 +374,7 @@ export function TaskDetailDrawer(props: {
               >
                 {taskStatuses.map((column) => (
                   <option key={column} value={column}>
-                    {column}
+                    {t(statusMessageKey(column))}
                   </option>
                 ))}
               </select>
@@ -382,17 +384,17 @@ export function TaskDetailDrawer(props: {
                   setEditPriority(event.target.value as Task["priority"])
                 }
               >
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Urgent">Urgent</option>
+                <option value="Low">{t("task.priority.low")}</option>
+                <option value="Medium">{t("task.priority.medium")}</option>
+                <option value="High">{t("task.priority.high")}</option>
+                <option value="Urgent">{t("task.priority.urgent")}</option>
               </select>
             </div>
             <select
               value={editAssigneeAgentId}
               onChange={(event) => setEditAssigneeAgentId(event.target.value)}
             >
-              <option value="">Unassigned</option>
+              <option value="">{t("task.unassigned")}</option>
               {props.overview.agents.map((agent) => (
                 <option key={agent.id} value={agent.id}>
                   {agent.name}
@@ -403,7 +405,7 @@ export function TaskDetailDrawer(props: {
               value={editModelBackend}
               onChange={(event) => setEditModelBackend(event.target.value)}
             >
-              <option value="">Agent default backend</option>
+              <option value="">{t("task.agentDefaultBackend")}</option>
               {(
                 props.providerCatalog?.llmProviders || [
                   { id: "mock", label: "Mock" },
@@ -422,14 +424,14 @@ export function TaskDetailDrawer(props: {
                 )
               }
             >
-              <option value="worktree">Git worktree</option>
-              <option value="harness">Harness workspace</option>
+              <option value="worktree">{t("task.gitWorktree")}</option>
+              <option value="harness">{t("task.harnessWorkspace")}</option>
             </select>
             <select
               value={editParentTaskId}
               onChange={(event) => setEditParentTaskId(event.target.value)}
             >
-              <option value="">No parent</option>
+              <option value="">{t("task.noParent")}</option>
               {props.overview.tasks
                 .filter((task) => task.id !== props.task.id)
                 .map((task) => (
@@ -441,58 +443,58 @@ export function TaskDetailDrawer(props: {
             <input
               value={editLabelsText}
               onChange={(event) => setEditLabelsText(event.target.value)}
-              placeholder="Labels, comma separated"
+              placeholder={t("task.labelsPlaceholder")}
             />
             <textarea
               value={editLinkedFilesText}
               onChange={(event) => setEditLinkedFilesText(event.target.value)}
-              placeholder="Linked files, one per line"
+              placeholder={t("task.linkedFilesPlaceholder")}
             />
             <textarea
               value={editDescription}
               onChange={(event) => setEditDescription(event.target.value)}
-              placeholder="Description"
+              placeholder={t("task.description")}
             />
             <textarea
               value={editAcceptanceCriteria}
               onChange={(event) =>
                 setEditAcceptanceCriteria(event.target.value)
               }
-              placeholder="Acceptance criteria"
+              placeholder={t("task.acceptanceCriteria")}
             />
             <button className="primary-button" type="submit">
               <CheckCircle2 size={16} />
-              <span>Save task</span>
+              <span>{t("task.save")}</span>
             </button>
           </form>
         )}
 
         <section className="drawer-section">
-          <h3>Details</h3>
+          <h3>{t("task.details")}</h3>
           <div className="detail-grid">
-            <DetailItem label="Status" value={props.task.status} />
-            <DetailItem label="Priority" value={props.task.priority} />
+            <DetailItem label={t("task.status")} value={t(statusMessageKey(props.task.status))} />
+            <DetailItem label={t("task.priority")} value={t(`task.priority.${props.task.priority.toLowerCase()}` as "task.priority.low")} />
             <DetailItem
-              label="Assignee"
-              value={props.assignee?.name || "Unassigned"}
+              label={t("task.assignee")}
+              value={props.assignee?.name || t("task.unassigned")}
             />
             <DetailItem
-              label="Backend"
+              label={t("task.backend")}
               value={
                 props.task.modelBackend || props.assignee?.modelBackend || "-"
               }
             />
             <DetailItem
-              label="Workspace"
+              label={t("task.workspace")}
               value={
                 props.task.workspaceMode === "harness"
-                  ? "Harness workspace"
-                  : "Git worktree"
+                  ? t("task.harnessWorkspace")
+                  : t("task.gitWorktree")
               }
             />
-            <DetailItem label="Merge" value={props.task.mergeStatus} />
-            <DetailItem label="Parent" value={parentTask?.title || "-"} />
-            <DetailItem label="Reporter" value={props.task.reporter} />
+            <DetailItem label={t("task.mergeLabel")} value={t(`task.merge.${props.task.mergeStatus}` as "task.merge.none")} />
+            <DetailItem label={t("task.parent")} value={parentTask?.title || "-"} />
+            <DetailItem label={t("task.reporter")} value={props.task.reporter} />
           </div>
         </section>
 
@@ -507,7 +509,7 @@ export function TaskDetailDrawer(props: {
 
         {props.task.labels.length > 0 && (
           <section className="drawer-section">
-            <h3>Labels</h3>
+            <h3>{t("task.labels")}</h3>
             <div className="label-list">
               {props.task.labels.map((label) => (
                 <span className="label-chip" key={label}>
@@ -521,7 +523,7 @@ export function TaskDetailDrawer(props: {
 
         {props.task.linkedFiles.length > 0 && (
           <section className="drawer-section">
-            <h3>Linked Files</h3>
+            <h3>{t("task.linkedFiles")}</h3>
             <div className="path-list">
               {props.task.linkedFiles.map((file) => (
                 <PathLine
@@ -535,26 +537,26 @@ export function TaskDetailDrawer(props: {
         )}
 
         <section className="drawer-section">
-          <h3>Description</h3>
+          <h3>{t("task.description")}</h3>
           <p className="drawer-copy">
-            {props.task.description || "No description."}
+            {props.task.description || t("task.noDescription")}
           </p>
         </section>
 
         <section className="drawer-section">
-          <h3>Acceptance Criteria</h3>
+          <h3>{t("task.acceptanceCriteria")}</h3>
           <p className="drawer-copy">
-            {props.task.acceptanceCriteria || "No acceptance criteria."}
+            {props.task.acceptanceCriteria || t("task.noAcceptanceCriteria")}
           </p>
         </section>
 
         <section className="drawer-section">
-          <h3>Decompose</h3>
+          <h3>{t("task.decompose")}</h3>
           <form className="stack-form" onSubmit={decomposeTask}>
             <textarea
               value={decomposeText}
               onChange={(event) => setDecomposeText(event.target.value)}
-              placeholder="One subtask per line"
+              placeholder={t("task.oneSubtaskPerLine")}
             />
             <select
               value={decomposeMode}
@@ -564,26 +566,26 @@ export function TaskDetailDrawer(props: {
                 )
               }
             >
-              <option value="parallel">Parallel subtasks</option>
-              <option value="sequential">Sequential chain</option>
+              <option value="parallel">{t("task.parallelSubtasks")}</option>
+              <option value="sequential">{t("task.sequentialChain")}</option>
             </select>
             <button className="secondary-button" type="submit">
               <GitFork size={16} />
-              <span>Create subtasks</span>
+              <span>{t("task.createSubtasks")}</span>
             </button>
           </form>
         </section>
 
         <section className="drawer-section">
-          <h3>Workspace</h3>
+          <h3>{t("task.workspace")}</h3>
           <div className="path-list">
             <PathLine
               icon={<GitBranch size={14} />}
-              value={props.task.branchName || "No branch yet"}
+              value={props.task.branchName || t("task.noBranch")}
             />
             <PathLine
               icon={<FolderOpen size={14} />}
-              value={props.task.worktreePath || "No workspace yet"}
+              value={props.task.worktreePath || t("task.noWorkspace")}
             />
           </div>
           {props.task.blockedReason && (
@@ -602,7 +604,7 @@ export function TaskDetailDrawer(props: {
 
         {dependencies.length > 0 && (
           <section className="drawer-section">
-            <h3>Dependencies</h3>
+            <h3>{t("task.dependencies")}</h3>
             <div className="dependency-list">
               {dependencies.map((dependency) => {
                 const isWaived = props.task.waivedDependencyTaskIds.includes(
@@ -611,13 +613,13 @@ export function TaskDetailDrawer(props: {
                 return (
                   <div className="dependency-row" key={dependency.id}>
                     <span>{dependency.title}</span>
-                    <b>{isWaived ? "Waived" : dependency.status}</b>
+                    <b>{isWaived ? t("task.waived") : t(statusMessageKey(dependency.status))}</b>
                     <button
                       className="secondary-button inline"
                       type="button"
                       onClick={() => void toggleDependencyWaiver(dependency.id)}
                     >
-                      {isWaived ? "Restore" : "Waive"}
+                      {t(isWaived ? "task.restore" : "task.waive")}
                     </button>
                   </div>
                 );
@@ -628,12 +630,12 @@ export function TaskDetailDrawer(props: {
 
         {subtasks.length > 0 && (
           <section className="drawer-section">
-            <h3>Subtasks</h3>
+            <h3>{t("task.subtasks")}</h3>
             <div className="dependency-list">
               {subtasks.map((subtask) => (
                 <div className="dependency-row" key={subtask.id}>
                   <span>{subtask.title}</span>
-                  <b>{subtask.status}</b>
+                  <b>{t(statusMessageKey(subtask.status))}</b>
                 </div>
               ))}
             </div>

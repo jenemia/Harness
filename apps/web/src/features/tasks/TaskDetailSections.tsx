@@ -56,24 +56,24 @@ export function TaskComments(props: {
   onBodyChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   return (
     <section className="drawer-section">
-      <h3>Comments</h3>
+      <h3>{t("task.comments")}</h3>
       <form className="comment-form" onSubmit={props.onSubmit}>
         <textarea
           value={props.body}
           onChange={(event) => props.onBodyChange(event.target.value)}
-          placeholder="Leave a note"
+          placeholder={t("task.leaveNote")}
         />
         <button className="secondary-button" type="submit">
           <Plus size={16} />
-          <span>Comment</span>
+          <span>{t("task.comment")}</span>
         </button>
       </form>
       <div className="comment-list">
         {props.comments.length === 0 && (
-          <p className="drawer-copy">No comments yet.</p>
+          <p className="drawer-copy">{t("task.noComments")}</p>
         )}
         {props.comments.map((comment) => (
           <div className="comment-row" key={comment.id}>
