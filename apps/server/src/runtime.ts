@@ -1108,7 +1108,9 @@ async function executeTask(
 
     const settings = getProjectSettingsFromDb(db);
     assignTask(db, task.id, agent.id);
-    updateTaskStatus(db, task.id, agent.role === "reviewer" ? "In Review" : "In Progress");
+    // In Review is reserved for a pending human decision. Automated PM,
+    // implementation, and reviewer work all remain In Progress.
+    updateTaskStatus(db, task.id, "In Progress");
     setAgentBusy(db, agent.id, task.id);
 
     const workspace = await providers.workspace().ensureTaskWorkspace(project.path, task);
@@ -1652,7 +1654,7 @@ function performHandoff(
   evaluation?: ReturnType<typeof evaluateCompletion>
 ) {
   assignTask(db, task.id, toAgent.id);
-  updateTaskStatus(db, task.id, toAgent.role === "reviewer" ? "In Review" : "Selected");
+  updateTaskStatus(db, task.id, "Selected");
   recordTaskHandoff(db, task, fromAgent.id, toAgent.id, {
     reason: `${handoffDecision.reason} ${reasonSuffix}`,
     runId: evaluation?.runId || null
@@ -1678,7 +1680,7 @@ function requiresHandoffApproval(
   handoffDecision: { source: string },
   evaluation: ReturnType<typeof evaluateCompletion>
 ) {
-  if (handoffDecision.source === "configured") {
+  if (handoffDecision.source === "configured" || handoffDecision.source === "workflow") {
     return false;
   }
   return evaluation.signals.includes("risk") || evaluation.signals.includes("error-mentioned");
@@ -1699,7 +1701,7 @@ function requestHandoffApproval(
   const pending = existingRows.find((approval) => approval.status === "pending" && approval.commandPreview === nextAgent.id);
   const reason = `PM handoff to ${nextAgent.name} needs approval because signals were detected: ${evaluation.signals.join(", ")}.`;
 
-  setTaskBlocked(db, task.id, reason);
+  updateTaskStatus(db, task.id, "In Review");
   if (pending) {
     return;
   }
@@ -1741,6 +1743,19 @@ function chooseNextHandoff(
       role: configuredRole,
       source: "configured",
       reason: `PM auto-handoff rule: ${completedBy.role} -> ${configuredRole}.`
+    };
+  }
+
+  if (completedBy.role === "project-manager") {
+    const workerRole = findAgentForHandoff(db, "programmer", completedBy.id)
+      ? "programmer"
+      : findAgentForHandoff(db, "worker", completedBy.id)
+        ? "worker"
+        : "programmer";
+    return {
+      role: workerRole,
+      source: "workflow",
+      reason: `PM workflow handoff: project-manager -> ${workerRole}.`
     };
   }
 
@@ -2124,7 +2139,7 @@ function ensureCommandApproval(
     return null;
   }
 
-  setTaskBlocked(db, task.id, evaluation.reason);
+  updateTaskStatus(db, task.id, "In Review");
 
   if (evaluation.action === "block") {
     return evaluation.reason;

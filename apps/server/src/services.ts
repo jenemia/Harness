@@ -428,6 +428,7 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
   try {
     const timestamp = now();
     const status = input.status || "Backlog";
+    const autoAssign = input.autoAssign !== false;
     const dependencyTaskIds = normalizeStringList(input.dependencyTaskIds);
     const labels = normalizeStringList(input.labels);
     const assigneeRow = input.assigneeAgentId
@@ -445,6 +446,10 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       labels,
       agent: assigneeRow ? mapAgent(assigneeRow) : null
     });
+    const projectManagerRow = autoAssign && status === "Backlog"
+      ? db.prepare("SELECT * FROM agents WHERE role = ? AND archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC LIMIT 1").get("project-manager")
+      : null;
+    const initialAssigneeId = projectManagerRow ? mapAgent(projectManagerRow).id : input.assigneeAgentId || null;
     const task: TaskRecord = {
       id: randomUUID(),
       title: input.title.trim(),
@@ -452,8 +457,8 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       status,
       priority: input.priority || "Medium",
       modelBackend: input.modelBackend?.trim() || null,
-      assigneeAgentId: input.assigneeAgentId || null,
-      autoAssign: input.autoAssign !== false,
+      assigneeAgentId: initialAssigneeId,
+      autoAssign,
       reporter: input.reporter?.trim() || "human",
       parentTaskId: input.parentTaskId || null,
       dependencyTaskIds,
