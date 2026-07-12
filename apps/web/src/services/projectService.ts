@@ -9,6 +9,7 @@ import type {
   ProjectListItem,
   ProjectTemplate,
   ProviderCatalog,
+  ProviderProbeResult,
   ScheduleResult,
   WorkflowTemplate,
 } from "../api/contracts";
@@ -17,6 +18,11 @@ import { desktopOrHttp } from "../api/desktop";
 export const projectService = {
   list: () => desktopOrHttp("projects:list", {}, () => api<{ projects: ProjectListItem[] }>("/api/projects")),
   providers: () => desktopOrHttp("providers:list", {}, () => api<ProviderCatalog>("/api/providers")),
+  probeProvider: (modelBackend: string, projectId?: string) => desktopOrHttp(
+    "providers:probe",
+    { modelBackend, projectId },
+    () => api<ProviderProbeResult>("/api/providers/probe", { method: "POST", body: JSON.stringify({ modelBackend, projectId }) }),
+  ),
   agentTemplates: () =>
     desktopOrHttp("templates:agents", {}, () => api<{ templates: AgentTemplate[] }>("/api/agent-templates")),
   workflowTemplates: () =>

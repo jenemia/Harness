@@ -12,6 +12,7 @@ import { settingsService } from "../../services/settingsService";
 import { mcpService, type McpDiagnostics } from "../../services/mcpService";
 import { systemService } from "../../services/systemService";
 import { FolderPickerField } from "../../shared/FolderPickerField";
+import { NumberSettingField } from "./NumberSettingField";
 import { parseStringMapText } from "../../shared/formParsing";
 import {
   formatProviderCommandPlaceholder,
@@ -19,6 +20,7 @@ import {
   mergeProviderCommandText,
 } from "../../shared/providerCommands";
 export function SettingsPanel(props: {
+  mode: "project" | "defaults";
   overview: Overview;
   providerCatalog: ProviderCatalog | null;
   settings: GlobalSettings | null;
@@ -208,12 +210,12 @@ export function SettingsPanel(props: {
   }
 
   return (
-    <section className="rail-panel">
+    <section className={`rail-panel settings-panel settings-panel-${props.mode}`}>
       <div className="panel-header">
         <Settings size={17} />
         <h2>{t("panel.settings")}</h2>
       </div>
-      <label className="language-setting">
+      <label className="language-setting settings-defaults-section">
         <span>{t("settings.interfaceLanguage")}</span>
         <select
           aria-label={t("settings.interfaceLanguage")}
@@ -229,7 +231,7 @@ export function SettingsPanel(props: {
         <small>{t("settings.languageHelp")}</small>
       </label>
       {props.providerCatalog && (
-        <div className="provider-summary">
+        <div className="provider-summary settings-connections-section">
           <div className="form-group-title">
             {t("settings.runtimeProvider")}
           </div>
@@ -276,7 +278,7 @@ export function SettingsPanel(props: {
         </div>
       )}
       {props.providerCatalog && (
-        <div className="provider-help">
+        <div className="provider-help settings-connections-section">
           {props.providerCatalog.llmProviders
             .filter((provider) => provider.authenticationStatus)
             .map((provider) => (
@@ -289,7 +291,7 @@ export function SettingsPanel(props: {
           <span>{t("settings.cursorHelp")}</span>
         </div>
       )}
-      <form className="stack-form" onSubmit={submitGlobal}>
+      <form className="stack-form settings-defaults-section" onSubmit={submitGlobal}>
         <div className="form-group-title">{t("settings.globalDefaults")}</div>
         <FolderPickerField
           value={defaultProjectRoot}
@@ -310,17 +312,7 @@ export function SettingsPanel(props: {
             </option>
           ))}
         </select>
-        <input
-          min={1}
-          max={8}
-          type="number"
-          value={defaultAgentMaxParallel}
-          onChange={(event) =>
-            setDefaultAgentMaxParallel(
-              Math.max(1, Number(event.target.value || 1)),
-            )
-          }
-        />
+        <NumberSettingField label={locale === "ko" ? "기본 에이전트 병렬 수" : "Default agent parallelism"} description={locale === "ko" ? "에이전트 한 명이 동시에 처리할 수 있는 기본 일감 수" : "Default number of tasks one agent can process concurrently"} unit={locale === "ko" ? "개" : "tasks"} min={1} max={8} value={defaultAgentMaxParallel} onChange={setDefaultAgentMaxParallel} />
         <label className="check-row">
           <input
             type="checkbox"
@@ -329,29 +321,10 @@ export function SettingsPanel(props: {
           />
           <span>{t("settings.autoStartGlobal")}</span>
         </label>
-        <input
-          min={5}
-          max={86400}
-          type="number"
-          value={maxRunSeconds}
-          onChange={(event) =>
-            setMaxRunSeconds(Math.max(5, Number(event.target.value || 5)))
-          }
-          placeholder={t("settings.runTimeout")}
-        />
-        <input
-          min={1}
-          max={100}
-          type="number"
-          value={largePlanTaskThreshold}
-          onChange={(event) =>
-            setLargePlanTaskThreshold(
-              Math.max(1, Number(event.target.value || 1)),
-            )
-          }
-          placeholder={t("settings.largePlanThreshold")}
-        />
+        <NumberSettingField label={t("settings.runTimeout")} description={locale === "ko" ? "한 번의 LLM 실행을 중단하기 전 대기 시간" : "Time to wait before stopping one LLM run"} unit={locale === "ko" ? "초" : "seconds"} min={5} max={86400} value={maxRunSeconds} onChange={setMaxRunSeconds} />
+        <NumberSettingField label={t("settings.largePlanThreshold")} description={locale === "ko" ? "대규모 계획 경고를 표시할 일감 수" : "Task count that triggers a large-plan warning"} unit={locale === "ko" ? "개" : "tasks"} min={1} max={100} value={largePlanTaskThreshold} onChange={setLargePlanTaskThreshold} />
         <textarea
+          className="settings-connections-section"
           value={globalProviderCommandsText}
           onChange={(event) =>
             setGlobalProviderCommandsText(event.target.value)
@@ -359,7 +332,7 @@ export function SettingsPanel(props: {
           placeholder={globalProviderCommandPlaceholder}
         />
         {globalProviderCommandExample && (
-          <div className="provider-command-actions">
+          <div className="provider-command-actions settings-connections-section">
             <button
               className="secondary-button compact"
               type="button"
@@ -389,7 +362,7 @@ export function SettingsPanel(props: {
           <span>{t("settings.saveGlobal")}</span>
         </button>
       </form>
-      <form className="stack-form split-form" onSubmit={submitProject}>
+      <form className="stack-form split-form settings-project-section" onSubmit={submitProject}>
         <div className="form-group-title">{t("settings.projectDefaults")}</div>
         <select
           value={projectSettings.defaultModelBackend}
@@ -407,115 +380,17 @@ export function SettingsPanel(props: {
             </option>
           ))}
         </select>
-        <input
-          min={1}
-          max={8}
-          type="number"
-          value={projectSettings.defaultAgentMaxParallel}
-          onChange={(event) =>
-            updateProjectSetting(
-              "defaultAgentMaxParallel",
-              Math.max(1, Number(event.target.value || 1)),
-            )
-          }
-          placeholder={t("settings.defaultAgentParallelism")}
-        />
-        <input
-          min={1}
-          max={24}
-          type="number"
-          value={projectSettings.maxProjectParallel}
-          onChange={(event) =>
-            updateProjectSetting(
-              "maxProjectParallel",
-              Math.max(1, Number(event.target.value || 1)),
-            )
-          }
-          placeholder={t("settings.projectParallelLimit")}
-        />
-        <input
-          min={5}
-          max={86400}
-          type="number"
-          value={projectSettings.maxRunSeconds}
-          onChange={(event) =>
-            updateProjectSetting(
-              "maxRunSeconds",
-              Math.max(5, Number(event.target.value || 5)),
-            )
-          }
-          placeholder={t("settings.runTimeout")}
-        />
-        <input
-          min={1}
-          max={100}
-          type="number"
-          value={projectSettings.largePlanTaskThreshold}
-          onChange={(event) =>
-            updateProjectSetting(
-              "largePlanTaskThreshold",
-              Math.max(1, Number(event.target.value || 1)),
-            )
-          }
-          placeholder={t("settings.largePlanThreshold")}
-        />
-        <input
-          min={1}
-          max={1000}
-          type="number"
-          value={projectSettings.maxReviewFiles}
-          onChange={(event) => updateProjectSetting("maxReviewFiles", Math.max(1, Number(event.target.value || 1)))}
-          placeholder={t("settings.reviewFileLimit")}
-        />
-        <input
-          min={1}
-          max={1000000}
-          type="number"
-          value={projectSettings.maxReviewDiffLines}
-          onChange={(event) => updateProjectSetting("maxReviewDiffLines", Math.max(1, Number(event.target.value || 1)))}
-          placeholder={t("settings.diffLineLimit")}
-        />
-        <input
-          min={1}
-          max={1000}
-          type="number"
-          value={projectSettings.maxReviewBacklog}
-          onChange={(event) => updateProjectSetting("maxReviewBacklog", Math.max(1, Number(event.target.value || 1)))}
-          placeholder={t("settings.reviewBacklogLimit")}
-        />
-        <input
-          min={1}
-          max={10000000}
-          type="number"
-          value={projectSettings.maxUnreviewedDiffLines}
-          onChange={(event) => updateProjectSetting("maxUnreviewedDiffLines", Math.max(1, Number(event.target.value || 1)))}
-          placeholder={t("settings.unreviewedLineLimit")}
-        />
-        <input
-          min={1}
-          max={1000000}
-          type="number"
-          value={projectSettings.providerEventMaxCount}
-          onChange={(event) => updateProjectSetting("providerEventMaxCount", Math.max(1, Number(event.target.value || 1)))}
-          placeholder={t("settings.providerEventCount")}
-          title={t("settings.providerEventCountHelp")}
-        />
-        <input
-          min={1}
-          max={3650}
-          type="number"
-          value={projectSettings.providerEventRetentionDays}
-          onChange={(event) => updateProjectSetting("providerEventRetentionDays", Math.max(1, Number(event.target.value || 1)))}
-          placeholder={t("settings.providerEventDays")}
-        />
-        <input
-          min={256}
-          max={100000}
-          type="number"
-          value={projectSettings.providerToolOutputMaxChars}
-          onChange={(event) => updateProjectSetting("providerToolOutputMaxChars", Math.max(256, Number(event.target.value || 256)))}
-          placeholder={t("settings.toolOutputChars")}
-        />
+        <NumberSettingField label={t("settings.defaultAgentParallelism")} description={locale === "ko" ? "이 프로젝트에서 에이전트 한 명이 동시에 처리할 일감 수" : "Concurrent tasks per agent in this project"} unit={locale === "ko" ? "개" : "tasks"} min={1} max={8} value={projectSettings.defaultAgentMaxParallel} onChange={(value) => updateProjectSetting("defaultAgentMaxParallel", value)} />
+        <NumberSettingField label={t("settings.projectParallelLimit")} description={locale === "ko" ? "프로젝트 전체에서 동시에 실행할 수 있는 최대 일감 수" : "Maximum concurrent tasks across the project"} unit={locale === "ko" ? "개" : "tasks"} min={1} max={24} value={projectSettings.maxProjectParallel} onChange={(value) => updateProjectSetting("maxProjectParallel", value)} />
+        <NumberSettingField label={t("settings.runTimeout")} description={locale === "ko" ? "한 번의 LLM 실행을 중단하기 전 대기 시간" : "Time to wait before stopping one LLM run"} unit={locale === "ko" ? "초" : "seconds"} min={5} max={86400} value={projectSettings.maxRunSeconds} onChange={(value) => updateProjectSetting("maxRunSeconds", value)} />
+        <NumberSettingField label={t("settings.largePlanThreshold")} description={locale === "ko" ? "대규모 계획 경고를 표시할 일감 수" : "Task count that triggers a large-plan warning"} unit={locale === "ko" ? "개" : "tasks"} min={1} max={100} value={projectSettings.largePlanTaskThreshold} onChange={(value) => updateProjectSetting("largePlanTaskThreshold", value)} />
+        <NumberSettingField label={t("settings.reviewFileLimit")} description={locale === "ko" ? "한 번의 완료 검토에서 권장하는 최대 파일 수" : "Recommended maximum files in one completion review"} unit={locale === "ko" ? "개" : "files"} min={1} max={1000} value={projectSettings.maxReviewFiles} onChange={(value) => updateProjectSetting("maxReviewFiles", value)} />
+        <NumberSettingField label={t("settings.diffLineLimit")} description={locale === "ko" ? "한 번에 검토할 권장 diff 줄 수" : "Recommended diff lines to review at once"} unit={locale === "ko" ? "줄" : "lines"} min={1} max={1000000} value={projectSettings.maxReviewDiffLines} onChange={(value) => updateProjectSetting("maxReviewDiffLines", value)} />
+        <NumberSettingField label={t("settings.reviewBacklogLimit")} description={locale === "ko" ? "스케줄러가 허용하는 미검토 완료 항목 수" : "Unreviewed completion items allowed by the scheduler"} unit={locale === "ko" ? "개" : "items"} min={1} max={1000} value={projectSettings.maxReviewBacklog} onChange={(value) => updateProjectSetting("maxReviewBacklog", value)} />
+        <NumberSettingField label={t("settings.unreviewedLineLimit")} description={locale === "ko" ? "스케줄러가 허용하는 미검토 변경 줄 수" : "Unreviewed changed lines allowed by the scheduler"} unit={locale === "ko" ? "줄" : "lines"} min={1} max={10000000} value={projectSettings.maxUnreviewedDiffLines} onChange={(value) => updateProjectSetting("maxUnreviewedDiffLines", value)} />
+        <NumberSettingField label={t("settings.providerEventCount")} description={t("settings.providerEventCountHelp")} unit={locale === "ko" ? "개" : "events"} min={1} max={1000000} value={projectSettings.providerEventMaxCount} onChange={(value) => updateProjectSetting("providerEventMaxCount", value)} />
+        <NumberSettingField label={t("settings.providerEventDays")} description={locale === "ko" ? "provider 이벤트를 보관할 기간" : "How long provider events are retained"} unit={locale === "ko" ? "일" : "days"} min={1} max={3650} value={projectSettings.providerEventRetentionDays} onChange={(value) => updateProjectSetting("providerEventRetentionDays", value)} />
+        <NumberSettingField label={t("settings.toolOutputChars")} description={locale === "ko" ? "저장할 도구 출력 요약의 최대 길이" : "Maximum stored tool-output summary length"} unit={locale === "ko" ? "문자" : "characters"} min={256} max={100000} value={projectSettings.providerToolOutputMaxChars} onChange={(value) => updateProjectSetting("providerToolOutputMaxChars", value)} />
         <select
           value={projectSettings.workspaceProtectionMode}
           onChange={(event) => updateProjectSetting("workspaceProtectionMode", event.target.value as ProjectSettings["workspaceProtectionMode"])}
@@ -553,6 +428,7 @@ export function SettingsPanel(props: {
           placeholder='{"programmer":"reviewer","worker":"reviewer"}'
         />
         <textarea
+          className="settings-connections-section"
           value={projectProviderCommandsText}
           onChange={(event) =>
             setProjectProviderCommandsText(event.target.value)
@@ -560,7 +436,7 @@ export function SettingsPanel(props: {
           placeholder={projectProviderCommandPlaceholder}
         />
         {projectProviderCommandExample && (
-          <div className="provider-command-actions">
+          <div className="provider-command-actions settings-connections-section">
             <button
               className="secondary-button compact"
               type="button"
@@ -590,7 +466,7 @@ export function SettingsPanel(props: {
           <span>{t("settings.saveProject")}</span>
         </button>
       </form>
-      <div className="stack-form split-form mcp-settings">
+      <div className="stack-form split-form mcp-settings settings-connections-section">
         <div className="form-group-title">Harness MCP</div>
         <p className="provider-help">
           {mcpDiagnostics?.bridge.active

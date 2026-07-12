@@ -56,6 +56,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (route === "POST /api/providers/probe") {
+      const body = await readBody<{ projectId?: string; modelBackend: string }>(req);
+      sendJson(res, await invokeApplicationCommand("providers:probe", body));
+      return;
+    }
+
     if (route === "GET /api/global-memories") {
       sendJson(res, await invokeApplicationCommand("global-memories:list", {}));
       return;

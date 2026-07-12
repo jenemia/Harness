@@ -629,6 +629,13 @@ export type CliAuthenticationStatus = {
   message: string;
 };
 
+export type ProviderProbeResult = {
+  modelBackend: string;
+  ok: boolean;
+  checkedAt: string;
+  error: string | null;
+};
+
 export type PlanningMode = "auto" | "sequential" | "parallel";
 export type EffectivePlanningMode = Exclude<PlanningMode, "auto">;
 

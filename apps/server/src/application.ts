@@ -38,6 +38,7 @@ import {
   decideApproval,
   initializeProjectWorkspace,
   listRuntimeProviders,
+  probeRuntimeProvider,
   pauseTask,
   recoverInterruptedRuns,
   requestMergeChanges,
@@ -202,6 +203,10 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       return { schedule: await startReadyTasks(project), overview: getProjectOverview(project) };
     }
     case "providers:list": return listRuntimeProviders();
+    case "providers:probe": {
+      const value = input(payload) as HarnessCommandInputs["providers:probe"];
+      return probeRuntimeProvider(value.projectId ? requiredProject(value.projectId) : null, value.modelBackend);
+    }
     case "chat:create": {
       const value = input(payload) as HarnessCommandInputs["chat:create"];
       return { session: createChatSession(requiredProject(value.projectId)) };

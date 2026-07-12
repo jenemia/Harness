@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -53,6 +53,20 @@ test("typed application commands reuse project, agent, and task services", async
       payload: { maxProjectParallel: 2 }
     }) as { settings: { maxProjectParallel: number } };
     assert.equal(settings.settings.maxProjectParallel, 2);
+    await invokeApplicationCommand("project-settings:update", {
+      projectId,
+      payload: { providerCommands: { shell: 'node -e "process.stdout.write(\'OK\')"' } }
+    });
+    const probe = await invokeApplicationCommand("providers:probe", { projectId, modelBackend: "shell" }) as {
+      ok: boolean; error: string | null; checkedAt: string;
+    };
+    assert.equal(probe.ok, true);
+    assert.equal(probe.error, null);
+    assert.ok(Date.parse(probe.checkedAt));
+    const missingProbe = await invokeApplicationCommand("providers:probe", { projectId, modelBackend: "gemini" }) as { ok: boolean; error: string };
+    assert.equal(missingProbe.ok, false);
+    assert.match(missingProbe.error, /No CLI command/);
+    assert.equal(existsSync(path.join(root, "project", ".harness", "agent-prompt.md")), false);
     const plan = await invokeApplicationCommand("tasks:create-from-prompt", { projectId, prompt: "Write release notes" }) as {
       plan: { tasks: unknown[] };
     };

@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import {
   insertEvent,
+  defaultProjectSettings,
+  getProjectSettings,
   getProjectSettingsFromDb,
   listGlobalMemories,
   mapAgent,
@@ -95,6 +100,50 @@ export function listRuntimeProviders() {
       authenticationStatus: provider.authentication ? diagnoseCliAuthentication(provider.authentication) : null
     }))
   };
+}
+
+export async function probeRuntimeProvider(project: ProjectRecord | null, modelBackend: string) {
+  const definition = providers.llmDefinitions().find((item) => item.id === modelBackend);
+  const checkedAt = new Date().toISOString();
+  if (!definition || definition.kind === "mock") {
+    return { modelBackend, ok: false, checkedAt, error: "Select a real LLM provider to test." };
+  }
+  if (definition.authentication) {
+    const authentication = diagnoseCliAuthentication(definition.authentication);
+    if (!authentication.installed || !authentication.authenticated) {
+      return { modelBackend, ok: false, checkedAt, error: authentication.message };
+    }
+  }
+  const settings = project ? getProjectSettings(project.path) : defaultProjectSettings();
+  const resolution = resolveProviderCommand(providers.platform(), { cliCommand: null }, modelBackend, settings, definition.defaultCommand);
+  if (!resolution.command) {
+    return { modelBackend, ok: false, checkedAt, error: `No CLI command is configured for ${definition.label}.` };
+  }
+  const workspacePath = mkdtempSync(path.join(tmpdir(), "harness-provider-probe-"));
+  const timestamp = new Date().toISOString();
+  const agent: AgentRecord = {
+    id: "provider-probe", name: "Connection Probe", role: "diagnostic", persona: "Return only a short confirmation.",
+    modelBackend, cliCommand: resolution.command, capabilities: [], allowedTools: [], boundaries: "Do not use tools or modify files.",
+    maxParallel: 1, enabled: true, status: "idle", currentTaskId: null, definitionPath: null, definitionHash: null,
+    definitionSchemaVersion: null, parseStatus: "legacy", parseError: null, archivedAt: null, archivePath: null,
+    createdAt: timestamp, updatedAt: timestamp
+  };
+  const task: TaskRecord = {
+    id: "provider-probe", title: "Reply with OK", description: "Reply exactly OK. Do not use tools or modify files.",
+    status: "In Progress", priority: "Low", modelBackend, assigneeAgentId: agent.id, reporter: "Harness",
+    parentTaskId: null, dependencyTaskIds: [], waivedDependencyTaskIds: [], labels: ["diagnostic"], linkedFiles: [],
+    acceptanceCriteria: "A short response is returned.", workspaceMode: "harness", taskOrder: 0, branchName: null,
+    worktreePath: workspacePath, blockedReason: null, mergeStatus: "none", mergeError: null, createdAt: timestamp, updatedAt: timestamp
+  };
+  try {
+    const result = await providers.llm(modelBackend).run(agent, task, { kind: "harness", branchName: null, worktreePath: workspacePath }, {
+      globalMemory: [], projectMemory: [], timeoutMs: 30_000,
+      workspaceProtection: { canonicalWorkspacePath: workspacePath }
+    });
+    return { modelBackend, ok: result.ok, checkedAt, error: result.ok ? null : redactCredentialMaterial(result.error || "Provider did not return a successful response.") };
+  } finally {
+    rmSync(workspacePath, { recursive: true, force: true });
+  }
 }
 
 export type RecoveryResult = {

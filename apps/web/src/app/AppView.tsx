@@ -14,6 +14,7 @@ import { MemoryPanel } from "../features/memory/MemoryPanel";
 import { ProjectPanel } from "../features/projects/ProjectPanel";
 import { ProjectSwitcher } from "../features/projects/ProjectSwitcher";
 import { statusMessageKey, useI18n } from "../i18n";
+import { SettingsNavigation, type SettingsTab } from "../features/settings/SettingsNavigation";
 import { taskStatuses } from "../shared/taskStatus";
 import { AppNavigation } from "./AppNavigation";
 import type { AppController } from "./useAppController";
@@ -27,8 +28,9 @@ const TaskPromptModal = lazy(() => import("../features/tasks/TaskPromptModal").t
 const ProjectChatModal = lazy(() => import("../features/chat/ProjectChatModal").then((module) => ({ default: module.ProjectChatModal })));
 
 export function AppView({ controller }: { controller: AppController }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("project");
   const {
     projects,
     selectedProjectId,
@@ -79,7 +81,6 @@ export function AppView({ controller }: { controller: AppController }) {
     board: t("nav.board"),
     agents: t("nav.agents"),
     runs: t("nav.runs"),
-    llm: t("nav.llm"),
     settings: t("nav.settings"),
   }[activeSection];
 
@@ -99,14 +100,12 @@ export function AppView({ controller }: { controller: AppController }) {
             <span>{t("app.subtitle")}</span>
           </div>
         </div>
-        <ProjectSwitcher
-          projects={projects}
-          selectedProjectId={selectedProjectId}
-          onSelect={setSelectedProjectId}
-        />
-        {overview && (
-          <AgentSidebarList agents={overview.agents} tasks={overview.tasks} />
-        )}
+        {activeSection === "settings" ? (
+          <SettingsNavigation active={settingsTab} onChange={setSettingsTab} korean={locale === "ko"} />
+        ) : <>
+          <ProjectSwitcher projects={projects} selectedProjectId={selectedProjectId} onSelect={setSelectedProjectId} />
+          {overview && <AgentSidebarList agents={overview.agents} tasks={overview.tasks} />}
+        </>}
       </aside>
 
       <main className="workspace">
@@ -181,17 +180,9 @@ export function AppView({ controller }: { controller: AppController }) {
             />
           )}
 
-          {activeSection === "llm" ? (
-            <LlmManagementPanel
-              overview={overview}
-              providerCatalog={providerCatalog}
-              settings={settings}
-              runAction={runAction}
-              onChanged={setSettings}
-              onRefreshProviders={refreshProviders}
-            />
-          ) : activeSection === "settings" ? (
-            <div className="settings-page">
+          {activeSection === "settings" ? (
+            <div className="settings-detail-page">
+              {settingsTab === "project" && <div className="settings-page">
               <ProjectPanel
                 projects={projects}
                 selectedProjectId={selectedProjectId}
@@ -207,6 +198,7 @@ export function AppView({ controller }: { controller: AppController }) {
               />
               {overview && (
                 <SettingsPanel
+                  mode="project"
                   overview={overview}
                   providerCatalog={providerCatalog}
                   settings={settings}
@@ -215,6 +207,15 @@ export function AppView({ controller }: { controller: AppController }) {
                   onProjectChanged={refreshOverview}
                 />
               )}
+              </div>}
+              {settingsTab === "defaults" && overview && <SettingsPanel
+                mode="defaults" overview={overview} providerCatalog={providerCatalog} settings={settings}
+                runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview}
+              />}
+              {settingsTab === "connections" && <LlmManagementPanel
+                overview={overview} providerCatalog={providerCatalog} settings={settings} runAction={runAction}
+                onChanged={setSettings} onRefreshProviders={refreshProviders}
+              />}
             </div>
           ) : overview ? (
             <>
