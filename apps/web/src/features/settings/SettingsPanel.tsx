@@ -84,7 +84,7 @@ export function SettingsPanel(props: {
     await props.runAction(async () => {
       const providerCommands = parseStringMapText(
         globalProviderCommandsText,
-        "Provider commands",
+        t("settings.providerCommands"),
       );
       const response = await settingsService.updateGlobal({
         defaultProjectRoot,
@@ -107,11 +107,11 @@ export function SettingsPanel(props: {
     await props.runAction(async () => {
       const handoffRules = parseStringMapText(
         handoffRulesText,
-        "Handoff rules",
+        t("settings.handoffRules"),
       );
       const providerCommands = parseStringMapText(
         projectProviderCommandsText,
-        "Provider commands",
+        t("settings.providerCommands"),
       );
       const response = await settingsService.updateProject(
         props.overview.project.id,
@@ -202,7 +202,7 @@ export function SettingsPanel(props: {
       window.alert(
         error instanceof Error
           ? error.message
-          : "Provider commands must be valid JSON.",
+          : t("settings.invalidProviderCommands"),
       );
     }
   }
@@ -234,122 +234,37 @@ export function SettingsPanel(props: {
             {t("settings.runtimeProvider")}
           </div>
           <strong>{props.providerCatalog.platform.label}</strong>
-          <span>
-            {props.providerCatalog.platform.id} on{" "}
-            {props.providerCatalog.platform.platform}
-          </span>
-          <span>
-            shell {props.providerCatalog.platform.capabilities.shell} | process
-            groups{" "}
-            {props.providerCatalog.platform.capabilities.processGroups
-              ? "on"
-              : "off"}
-          </span>
+          <span>{t("settings.platformOn", { id: props.providerCatalog.platform.id, platform: props.providerCatalog.platform.platform })}</span>
+          <span>{t("settings.shellCapabilities", { shell: props.providerCatalog.platform.capabilities.shell, processGroups: t(props.providerCatalog.platform.capabilities.processGroups ? "settings.on" : "settings.off") })}</span>
           <strong>{props.providerCatalog.workspace.label}</strong>
           <span>
             {props.providerCatalog.workspace.id} |{" "}
             {props.providerCatalog.workspace.description}
           </span>
-          <span>
-            isolated workspace{" "}
-            {props.providerCatalog.workspace.capabilities.isolatedTaskWorkspace
-              ? "on"
-              : "off"}{" "}
-            | git worktrees{" "}
-            {props.providerCatalog.workspace.capabilities.gitWorktrees
-              ? "on"
-              : "off"}{" "}
-            | branch per task{" "}
-            {props.providerCatalog.workspace.capabilities.branchPerTask
-              ? "on"
-              : "off"}{" "}
-            | harness workspace{" "}
-            {props.providerCatalog.workspace.capabilities.harnessWorkspaces
-              ? "on"
-              : "off"}
-          </span>
+          <span>{t("settings.workspaceCapabilities", { isolated: t(props.providerCatalog.workspace.capabilities.isolatedTaskWorkspace ? "settings.on" : "settings.off"), worktrees: t(props.providerCatalog.workspace.capabilities.gitWorktrees ? "settings.on" : "settings.off"), branches: t(props.providerCatalog.workspace.capabilities.branchPerTask ? "settings.on" : "settings.off"), harness: t(props.providerCatalog.workspace.capabilities.harnessWorkspaces ? "settings.on" : "settings.off") })}</span>
           <strong>{props.providerCatalog.planning.label}</strong>
           <span>
             {props.providerCatalog.planning.id} |{" "}
             {props.providerCatalog.planning.description}
           </span>
-          <span>
-            workflow templates{" "}
-            {props.providerCatalog.planning.capabilities.workflowTemplates
-              ? "on"
-              : "off"}{" "}
-            | explicit lists{" "}
-            {props.providerCatalog.planning.capabilities.explicitItems
-              ? "on"
-              : "off"}{" "}
-            | structured tickets{" "}
-            {props.providerCatalog.planning.capabilities.structuredTicketBlocks
-              ? "on"
-              : "off"}{" "}
-            | load-aware assignment{" "}
-            {props.providerCatalog.planning.capabilities.loadAwareAssignment
-              ? "on"
-              : "off"}{" "}
-            | large plan warnings{" "}
-            {props.providerCatalog.planning.capabilities.largePlanWarnings
-              ? "on"
-              : "off"}
-          </span>
+          <span>{t("settings.planningCapabilities", { templates: t(props.providerCatalog.planning.capabilities.workflowTemplates ? "settings.on" : "settings.off"), lists: t(props.providerCatalog.planning.capabilities.explicitItems ? "settings.on" : "settings.off"), tickets: t(props.providerCatalog.planning.capabilities.structuredTicketBlocks ? "settings.on" : "settings.off"), assignment: t(props.providerCatalog.planning.capabilities.loadAwareAssignment ? "settings.on" : "settings.off"), warnings: t(props.providerCatalog.planning.capabilities.largePlanWarnings ? "settings.on" : "settings.off") })}</span>
           <strong>{props.providerCatalog.approval.label}</strong>
           <span>
             {props.providerCatalog.approval.id} |{" "}
             {props.providerCatalog.approval.description}
           </span>
-          <span>
-            command approvals{" "}
-            {props.providerCatalog.approval.capabilities.commandExecution
-              ? "on"
-              : "off"}{" "}
-            | merge approvals{" "}
-            {props.providerCatalog.approval.capabilities.mergeApproval
-              ? "on"
-              : "off"}{" "}
-            | resumes tasks{" "}
-            {props.providerCatalog.approval.capabilities.resumesApprovedTasks
-              ? "on"
-              : "off"}{" "}
-            | handoff approvals{" "}
-            {props.providerCatalog.approval.capabilities.handoffApproval
-              ? "on"
-              : "off"}
-          </span>
+          <span>{t("settings.approvalCapabilities", { commands: t(props.providerCatalog.approval.capabilities.commandExecution ? "settings.on" : "settings.off"), merges: t(props.providerCatalog.approval.capabilities.mergeApproval ? "settings.on" : "settings.off"), resumes: t(props.providerCatalog.approval.capabilities.resumesApprovedTasks ? "settings.on" : "settings.off"), handoffs: t(props.providerCatalog.approval.capabilities.handoffApproval ? "settings.on" : "settings.off") })}</span>
           <strong>{props.providerCatalog.policy.label}</strong>
           <span>
             {props.providerCatalog.policy.id} |{" "}
             {props.providerCatalog.policy.description}
           </span>
-          <span>
-            command policy{" "}
-            {props.providerCatalog.policy.capabilities.llmCommandPermission
-              ? "on"
-              : "off"}{" "}
-            | provider tools{" "}
-            {props.providerCatalog.policy.capabilities.providerSpecificTools
-              ? "on"
-              : "off"}{" "}
-            | prompt boundaries{" "}
-            {props.providerCatalog.policy.capabilities.boundaryPromptInjection
-              ? "on"
-              : "off"}{" "}
-            | risky commands{" "}
-            {props.providerCatalog.policy.capabilities.riskyCommandApproval
-              ? "approval"
-              : "off"}{" "}
-            | workspace boundary {props.providerCatalog.policy.capabilities.workspaceBoundary ? "on" : "off"}{" "}
-            | pre-push guard {props.providerCatalog.policy.capabilities.prePushGuard ? "on" : "off"}
-          </span>
+          <span>{t("settings.policyCapabilities", { commands: t(props.providerCatalog.policy.capabilities.llmCommandPermission ? "settings.on" : "settings.off"), tools: t(props.providerCatalog.policy.capabilities.providerSpecificTools ? "settings.on" : "settings.off"), boundaries: t(props.providerCatalog.policy.capabilities.boundaryPromptInjection ? "settings.on" : "settings.off"), risky: t(props.providerCatalog.policy.capabilities.riskyCommandApproval ? "settings.approval" : "settings.off"), workspace: t(props.providerCatalog.policy.capabilities.workspaceBoundary ? "settings.on" : "settings.off"), push: t(props.providerCatalog.policy.capabilities.prePushGuard ? "settings.on" : "settings.off") })}</span>
           {providerCommandKeyGuide && (
             <>
               <strong>{t("settings.providerCommandKeys")}</strong>
               <span>
-                {providerCommandKeyGuide.platformProviderId} on{" "}
-                {providerCommandKeyGuide.nodePlatform} |{" "}
-                {providerCommandKeyGuide.precedence.join(" > ")}
+                {t("settings.providerKeyPlatform", { provider: providerCommandKeyGuide.platformProviderId, platform: providerCommandKeyGuide.nodePlatform, precedence: providerCommandKeyGuide.precedence.join(" > ") })}
               </span>
               {providerCommandKeyGuide.examples.slice(0, 4).map((example) => (
                 <span key={example.modelBackend}>
@@ -370,8 +285,8 @@ export function SettingsPanel(props: {
                 {provider.authenticationStatus?.version ? ` (${provider.authenticationStatus.version})` : ""}
               </span>
             ))}
-          <span>Harness reuses each CLI login session and does not store provider tokens.</span>
-          <span>Cursor CLI provider runs Cursor inside a task workspace. Cursor MCP connection instead lets Cursor call Harness board tools and is configured separately.</span>
+          <span>{t("settings.cliLoginHelp")}</span>
+          <span>{t("settings.cursorHelp")}</span>
         </div>
       )}
       <form className="stack-form" onSubmit={submitGlobal}>
@@ -422,7 +337,7 @@ export function SettingsPanel(props: {
           onChange={(event) =>
             setMaxRunSeconds(Math.max(5, Number(event.target.value || 5)))
           }
-          placeholder="Run timeout seconds"
+          placeholder={t("settings.runTimeout")}
         />
         <input
           min={1}
@@ -434,7 +349,7 @@ export function SettingsPanel(props: {
               Math.max(1, Number(event.target.value || 1)),
             )
           }
-          placeholder="Large plan task threshold"
+          placeholder={t("settings.largePlanThreshold")}
         />
         <textarea
           value={globalProviderCommandsText}
@@ -503,7 +418,7 @@ export function SettingsPanel(props: {
               Math.max(1, Number(event.target.value || 1)),
             )
           }
-          placeholder="Default agent parallelism"
+          placeholder={t("settings.defaultAgentParallelism")}
         />
         <input
           min={1}
@@ -516,7 +431,7 @@ export function SettingsPanel(props: {
               Math.max(1, Number(event.target.value || 1)),
             )
           }
-          placeholder="Project parallel limit"
+          placeholder={t("settings.projectParallelLimit")}
         />
         <input
           min={5}
@@ -529,7 +444,7 @@ export function SettingsPanel(props: {
               Math.max(5, Number(event.target.value || 5)),
             )
           }
-          placeholder="Run timeout seconds"
+          placeholder={t("settings.runTimeout")}
         />
         <input
           min={1}
@@ -542,7 +457,7 @@ export function SettingsPanel(props: {
               Math.max(1, Number(event.target.value || 1)),
             )
           }
-          placeholder="Large plan task threshold"
+          placeholder={t("settings.largePlanThreshold")}
         />
         <input
           min={1}
@@ -550,7 +465,7 @@ export function SettingsPanel(props: {
           type="number"
           value={projectSettings.maxReviewFiles}
           onChange={(event) => updateProjectSetting("maxReviewFiles", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Recommended review file limit"
+          placeholder={t("settings.reviewFileLimit")}
         />
         <input
           min={1}
@@ -558,7 +473,7 @@ export function SettingsPanel(props: {
           type="number"
           value={projectSettings.maxReviewDiffLines}
           onChange={(event) => updateProjectSetting("maxReviewDiffLines", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Recommended diff line limit"
+          placeholder={t("settings.diffLineLimit")}
         />
         <input
           min={1}
@@ -566,7 +481,7 @@ export function SettingsPanel(props: {
           type="number"
           value={projectSettings.maxReviewBacklog}
           onChange={(event) => updateProjectSetting("maxReviewBacklog", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Review backlog scheduler limit"
+          placeholder={t("settings.reviewBacklogLimit")}
         />
         <input
           min={1}
@@ -574,7 +489,7 @@ export function SettingsPanel(props: {
           type="number"
           value={projectSettings.maxUnreviewedDiffLines}
           onChange={(event) => updateProjectSetting("maxUnreviewedDiffLines", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Unreviewed line scheduler limit"
+          placeholder={t("settings.unreviewedLineLimit")}
         />
         <input
           min={1}
@@ -582,8 +497,8 @@ export function SettingsPanel(props: {
           type="number"
           value={projectSettings.providerEventMaxCount}
           onChange={(event) => updateProjectSetting("providerEventMaxCount", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Provider event retention count"
-          title="Maximum stored provider events; terminal run markers are retained for idempotency."
+          placeholder={t("settings.providerEventCount")}
+          title={t("settings.providerEventCountHelp")}
         />
         <input
           min={1}
@@ -591,7 +506,7 @@ export function SettingsPanel(props: {
           type="number"
           value={projectSettings.providerEventRetentionDays}
           onChange={(event) => updateProjectSetting("providerEventRetentionDays", Math.max(1, Number(event.target.value || 1)))}
-          placeholder="Provider event retention days"
+          placeholder={t("settings.providerEventDays")}
         />
         <input
           min={256}
@@ -599,15 +514,15 @@ export function SettingsPanel(props: {
           type="number"
           value={projectSettings.providerToolOutputMaxChars}
           onChange={(event) => updateProjectSetting("providerToolOutputMaxChars", Math.max(256, Number(event.target.value || 256)))}
-          placeholder="Stored tool output summary characters"
+          placeholder={t("settings.toolOutputChars")}
         />
         <select
           value={projectSettings.workspaceProtectionMode}
           onChange={(event) => updateProjectSetting("workspaceProtectionMode", event.target.value as ProjectSettings["workspaceProtectionMode"])}
         >
-          <option value="pause">Pause on workspace violation</option>
-          <option value="block">Block on workspace violation</option>
-          <option value="warn">Warn on workspace violation</option>
+          <option value="pause">{t("settings.workspaceViolationPause")}</option>
+          <option value="block">{t("settings.workspaceViolationBlock")}</option>
+          <option value="warn">{t("settings.workspaceViolationWarn")}</option>
         </select>
         <label className="check-row">
           <input
@@ -679,35 +594,35 @@ export function SettingsPanel(props: {
         <div className="form-group-title">Harness MCP</div>
         <p className="provider-help">
           {mcpDiagnostics?.bridge.active
-            ? `Desktop bridge active · PID ${mcpDiagnostics.bridge.pid}`
-            : "Desktop bridge offline · MCP writes use the project writer-lock fallback"}
+            ? t("settings.mcpBridgeActive", { pid: mcpDiagnostics.bridge.pid || "" })
+            : t("settings.mcpBridgeOffline")}
         </p>
         <div className="provider-command-actions">
-          <input value={newMcpClientId} onChange={(event) => setNewMcpClientId(event.target.value)} placeholder="MCP client id" />
+          <input value={newMcpClientId} onChange={(event) => setNewMcpClientId(event.target.value)} placeholder={t("settings.mcpClientId")} />
           <button
             className="secondary-button compact"
             type="button"
             disabled={!newMcpClientId.trim()}
             onClick={() => void saveMcpClient({ id: newMcpClientId.trim(), label: newMcpClientId.trim(), readScope: true, writeScope: false, enabled: true, allowedProjectIds: [] })}
           >
-            Add read-only client
+            {t("settings.addReadOnlyClient")}
           </button>
         </div>
         {mcpClients.map((client) => (
           <div className="mcp-client-row" key={client.id}>
             <strong>{client.label}</strong>
             <code>{client.id}</code>
-            <label className="check-row"><input type="checkbox" checked={client.enabled} onChange={(event) => void saveMcpClient({ ...client, enabled: event.target.checked })} /><span>enabled</span></label>
-            <label className="check-row"><input type="checkbox" checked={client.readScope} onChange={(event) => void saveMcpClient({ ...client, readScope: event.target.checked })} /><span>read</span></label>
-            <label className="check-row"><input type="checkbox" checked={client.writeScope} onChange={(event) => void saveMcpClient({ ...client, writeScope: event.target.checked })} /><span>write</span></label>
+            <label className="check-row"><input type="checkbox" checked={client.enabled} onChange={(event) => void saveMcpClient({ ...client, enabled: event.target.checked })} /><span>{t("settings.enabled")}</span></label>
+            <label className="check-row"><input type="checkbox" checked={client.readScope} onChange={(event) => void saveMcpClient({ ...client, readScope: event.target.checked })} /><span>{t("settings.read")}</span></label>
+            <label className="check-row"><input type="checkbox" checked={client.writeScope} onChange={(event) => void saveMcpClient({ ...client, writeScope: event.target.checked })} /><span>{t("settings.write")}</span></label>
             <button
               className="secondary-button compact"
               type="button"
               onClick={() => void saveMcpClient({ ...client, allowedProjectIds: client.allowedProjectIds.includes(props.overview.project.id) ? client.allowedProjectIds.filter((id) => id !== props.overview.project.id) : [...client.allowedProjectIds, props.overview.project.id] })}
             >
-              {client.allowedProjectIds.includes(props.overview.project.id) ? "Remove current project" : "Allow current project"}
+              {t(client.allowedProjectIds.includes(props.overview.project.id) ? "settings.removeCurrentProject" : "settings.allowCurrentProject")}
             </button>
-            <small>{client.allowedProjectIds.length ? `${client.allowedProjectIds.length} allowed project(s)` : "all projects"}</small>
+            <small>{client.allowedProjectIds.length ? t("settings.allowedProjects", { count: client.allowedProjectIds.length }) : t("settings.allProjects")}</small>
             <pre>{JSON.stringify({
               mcpServers: {
                 harness: {
@@ -718,7 +633,7 @@ export function SettingsPanel(props: {
             }, null, 2)}</pre>
           </div>
         ))}
-        <p className="provider-help">Development command: {mcpDiagnostics?.command || "pnpm --filter @harness/server mcp -- --client <client-id>"}</p>
+        <p className="provider-help">{t("settings.developmentCommand")}: {mcpDiagnostics?.command || "pnpm --filter @harness/server mcp -- --client <client-id>"}</p>
       </div>
     </section>
   );
