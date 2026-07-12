@@ -127,12 +127,14 @@ export function ModelSelectionPanel(props: {
         {selectedProvider.directAuthentication && <button className="secondary-button compact" type="button"><PlugZap size={14} /> {ko ? "OAuth 연결" : "Connect OAuth"}</button>}
       </details>
 
-      <div className="llm-connection-step model-mcp-settings">
-        <strong>MCP</strong>
-        <span className={mcp?.bridge.active ? "llm-status connected" : "llm-status failed"}>
-          {mcp?.bridge.active ? <CheckCircle2 size={14} /> : <CircleAlert size={14} />}
-          {mcp?.bridge.active ? (ko ? `데스크톱 브리지 연결됨 · PID ${mcp.bridge.pid}` : `Desktop bridge connected · PID ${mcp.bridge.pid}`) : (ko ? "데스크톱 브리지 오프라인" : "Desktop bridge offline")}
-        </span>
+      <details className="llm-connection-step model-mcp-settings">
+        <summary>
+          <strong>MCP</strong>
+          <span className={mcp?.bridge.active ? "llm-status connected" : "llm-status failed"}>
+            {mcp?.bridge.active ? <CheckCircle2 size={14} /> : <CircleAlert size={14} />}
+            {mcp?.bridge.active ? (ko ? `데스크톱 브리지 연결됨 · PID ${mcp.bridge.pid}` : `Desktop bridge connected · PID ${mcp.bridge.pid}`) : (ko ? "데스크톱 브리지 오프라인" : "Desktop bridge offline")}
+          </span>
+        </summary>
         <div className="provider-command-actions">
           <input value={clientId} onChange={(event) => setClientId(event.target.value)} placeholder="MCP client id" />
           <button className="secondary-button compact" type="button" disabled={!clientId.trim()} onClick={() => void saveMcpClient({ id: clientId.trim(), label: clientId.trim(), readScope: true, writeScope: false, enabled: true, allowedProjectIds: props.overview ? [props.overview.project.id] : [] })}>
@@ -140,7 +142,7 @@ export function ModelSelectionPanel(props: {
           </button>
         </div>
         {mcp?.clients.map((client) => <div className="mcp-client-row" key={client.id}><strong>{client.label}</strong><code>{client.id}</code><span>{client.enabled ? (ko ? "활성" : "enabled") : (ko ? "비활성" : "disabled")}</span></div>)}
-      </div>
+      </details>
 
       <div className="model-selection-actions">
         <button className="secondary-button" type="button" disabled={probing} onClick={() => void props.runAction(probe)}><PlugZap size={14} />{probing ? (ko ? "확인 중…" : "Testing…") : (ko ? "연결 확인" : "Test connection")}</button>

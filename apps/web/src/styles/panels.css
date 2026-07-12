@@ -950,6 +950,9 @@ textarea {
 .oauth-fold summary { cursor: pointer; font-weight: 700; }
 .oauth-fold[open] summary { margin-bottom: 10px; }
 .model-mcp-settings .mcp-client-row { background: white; }
+.model-mcp-settings summary { align-items: center; cursor: pointer; display: flex; justify-content: space-between; }
+.model-mcp-settings summary .llm-status { margin-top: 0; }
+.model-mcp-settings[open] summary { margin-bottom: 10px; }
 .model-selection-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 .agents-page .agent-list {

@@ -26,6 +26,7 @@ test("model selection exposes one global default and synchronizes the current pr
   assert.match(source, /defaultModelBackend: globalModel/);
   assert.match(source, /selectedProvider/);
   assert.match(source, /MCP/);
+  assert.match(source, /<details className="llm-connection-step model-mcp-settings">/);
   assert.match(source, /disabled={!props.settings \|\| !verified\?\.ok}/);
   assert.match(source, /open={oauthOpen}/);
 });
