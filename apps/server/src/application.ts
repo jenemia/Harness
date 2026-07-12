@@ -513,6 +513,7 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
         mode: "auto",
         allowLargePlan: true,
         largePlanTaskThreshold: settings.largePlanTaskThreshold
+        ,autoAssign: value.autoAssign
       });
       return { plan, overview: getProjectOverview(project) };
     }

@@ -3,10 +3,10 @@ import type { CommentRecord, PlanResult, Task } from "../api/contracts";
 import { desktopOrHttp } from "../api/desktop";
 
 export const taskService = {
-  createFromPrompt: (projectId: string, prompt: string) => desktopOrHttp("tasks:create-from-prompt", { projectId, prompt }, () =>
+  createFromPrompt: (projectId: string, prompt: string, autoAssign = true) => desktopOrHttp("tasks:create-from-prompt", { projectId, prompt, autoAssign }, () =>
     api<{ plan: PlanResult }>(`/api/projects/${projectId}/tasks/from-prompt`, {
       method: "POST",
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, autoAssign }),
     })),
   create: (projectId: string, payload: Partial<Task>) => desktopOrHttp("tasks:create", { projectId, payload }, () =>
     api(`/api/projects/${projectId}/tasks`, {

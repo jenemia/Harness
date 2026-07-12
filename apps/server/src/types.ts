@@ -5,6 +5,7 @@ export type TaskStatus =
   | "Selected"
   | "In Progress"
   | "In Review"
+  | "Development Complete"
   | "Paused"
   | "Blocked"
   | "Done";
@@ -239,6 +240,7 @@ export type TaskRecord = {
   priority: "Low" | "Medium" | "High" | "Urgent";
   modelBackend: string | null;
   assigneeAgentId: string | null;
+  autoAssign: boolean;
   reporter: string;
   parentTaskId: string | null;
   dependencyTaskIds: string[];

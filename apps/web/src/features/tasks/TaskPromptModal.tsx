@@ -15,6 +15,7 @@ export function TaskPromptModal(props: {
 }) {
   const { locale, t } = useI18n();
   const [prompt, setPrompt] = useState("");
+  const [autoAssign, setAutoAssign] = useState(true);
   const [snapshot, setSnapshot] = useState<DraftSnapshot | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -159,7 +160,7 @@ export function TaskPromptModal(props: {
     setIsSubmitting(true);
     await props.runAction(async () => {
       await persistDraft(promptRef.current);
-      await taskService.createFromPrompt(props.projectId, promptRef.current);
+      await taskService.createFromPrompt(props.projectId, promptRef.current, autoAssign);
       await props.onChanged();
       completed = true;
     });
@@ -359,6 +360,10 @@ export function TaskPromptModal(props: {
               }}
             />
             <div className="markdown-hint"><FileText size={15} /><span>{t("modal.markdownHint")}</span></div>
+            <label className="checkbox-row">
+              <input type="checkbox" checked={autoAssign} onChange={(event) => setAutoAssign(event.target.checked)} />
+              <span>{t("task.autoAssign")}</span>
+            </label>
             <div className="task-prompt-actions">
               <button className="secondary-button" disabled={isSubmitting} type="button" onClick={() => void close()}>{t("modal.cancel")}</button>
               <button className="primary-button" disabled={!prompt.trim() || isSubmitting || !snapshot} type="submit">

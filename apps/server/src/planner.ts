@@ -11,6 +11,7 @@ export type PlanRequest = {
   goal?: string;
   mode?: PlanningMode;
   autoStart?: boolean;
+  autoAssign?: boolean;
   sourceDocumentId?: string;
   workflowTemplateId?: string;
   allowLargePlan?: boolean;
@@ -186,6 +187,7 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       priority: "Medium",
       modelBackend: null,
       assigneeAgentId: inputTask.assigneeAgentId,
+      autoAssign: input.autoAssign !== false,
       reporter: "pm-agent",
       parentTaskId: null,
       dependencyTaskIds: inputTask.dependencyTaskIds,
@@ -314,10 +316,7 @@ function createDeterministicPlanningProvider(): PlanningProvider {
           description: item.description,
           acceptanceCriteria: item.acceptanceCriteria,
           dependencyIndexes: item.dependencyIndexes ?? (effectiveMode === "sequential" && index > 0 ? [index - 1] : []),
-          status:
-            (item.dependencyIndexes?.length || (effectiveMode === "sequential" && index > 0))
-              ? "Blocked"
-              : "Selected"
+          status: "Backlog"
         })),
         warnings
       };
@@ -327,6 +326,7 @@ function createDeterministicPlanningProvider(): PlanningProvider {
 
 function previewPlanWithAssignments(db: ReturnType<typeof openProjectDb>, input: PlanRequest) {
   const preview = previewPlan(input);
+  if (input.autoAssign === false) return preview;
   const agents = db.prepare("SELECT * FROM agents WHERE archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC").all().map(mapAgent);
   const agentLoads = createAgentPlanningLoads(db);
   return {

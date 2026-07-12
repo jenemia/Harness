@@ -503,12 +503,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (req.method === "POST" && childPath === "tasks/from-prompt") {
-        const body = await readBody<{ prompt?: string }>(req);
+        const body = await readBody<{ prompt?: string; autoAssign?: boolean }>(req);
         if (!body.prompt?.trim()) {
           sendError(res, 400, "Work prompt is required.");
           return;
         }
-        sendJson(res, await invokeApplicationCommand("tasks:create-from-prompt", { projectId: project.id, prompt: body.prompt }), 201);
+        sendJson(res, await invokeApplicationCommand("tasks:create-from-prompt", { projectId: project.id, prompt: body.prompt, autoAssign: body.autoAssign }), 201);
         return;
       }
 

@@ -12,6 +12,7 @@ import type {
 import { projectService } from "../services/projectService";
 import type { RunAction } from "./types";
 import type { AppSection } from "./AppNavigation";
+import { boardTaskStatus } from "../shared/taskStatus";
 
 export function useAppController() {
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -298,9 +299,10 @@ export function useAppController() {
   const visibleTasksByStatus = useMemo(() => {
     const grouped = new Map<string, typeof visibleTasks>();
     for (const task of visibleTasks) {
-      const tasks = grouped.get(task.status) || [];
+      const status = boardTaskStatus(task.status);
+      const tasks = grouped.get(status) || [];
       tasks.push(task);
-      grouped.set(task.status, tasks);
+      grouped.set(status, tasks);
     }
     return grouped;
   }, [visibleTasks]);

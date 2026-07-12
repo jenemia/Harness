@@ -130,7 +130,7 @@ export async function probeRuntimeProvider(project: ProjectRecord | null, modelB
   };
   const task: TaskRecord = {
     id: "provider-probe", title: "Reply with OK", description: "Reply exactly OK. Do not use tools or modify files.",
-    status: "In Progress", priority: "Low", modelBackend, assigneeAgentId: agent.id, reporter: "Harness",
+    status: "In Progress", priority: "Low", modelBackend, assigneeAgentId: agent.id, autoAssign: true, reporter: "Harness",
     parentTaskId: null, dependencyTaskIds: [], waivedDependencyTaskIds: [], labels: ["diagnostic"], linkedFiles: [],
     acceptanceCriteria: "A short response is returned.", workspaceMode: "harness", taskOrder: 0, branchName: null,
     worktreePath: workspacePath, blockedReason: null, mergeStatus: "none", mergeError: null, createdAt: timestamp, updatedAt: timestamp
@@ -427,12 +427,12 @@ function resumeTaskMutation(project: ProjectRecord, taskId: string) {
       return { ok: false, reason: "Task not found." };
     }
 
-    if (task.status !== "Paused") {
+    if (task.status !== "Paused" && task.status !== "In Review") {
       return { ok: false, reason: `Task status is ${task.status}.` };
     }
 
-    db.prepare("UPDATE tasks SET status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
-      "Selected",
+    db.prepare("UPDATE tasks SET status = ?, assignee_agent_id = NULL, auto_assign = 1, blocked_reason = ?, updated_at = ? WHERE id = ?").run(
+      "Backlog",
       null,
       now(),
       task.id
@@ -444,10 +444,10 @@ function resumeTaskMutation(project: ProjectRecord, taskId: string) {
       taskId: task.id,
       agentId: task.assigneeAgentId,
       type: "task.resumed",
-      message: "Task was resumed and returned to the selected queue.",
+      message: "Task was returned to the backlog for PM reassignment.",
       metadata: { previousStatus: task.status }
     });
-    return { ok: true, taskId: task.id, status: "Selected" };
+    return { ok: true, taskId: task.id, status: "Backlog" };
   } finally {
     db.close();
   }
@@ -457,8 +457,8 @@ async function startReadyTasksMutation(project: ProjectRecord) {
   const db = openProjectDb(project.path);
   try {
     const tasks = db
-      .prepare("SELECT * FROM tasks WHERE status = ? ORDER BY task_order ASC, created_at ASC")
-      .all("Selected")
+      .prepare("SELECT * FROM tasks WHERE status IN (?, ?) AND auto_assign = 1 ORDER BY task_order ASC, created_at ASC")
+      .all("Backlog", "Selected")
       .map(mapTask);
     const settings = getProjectSettingsFromDb(db);
     const started: string[] = [];
@@ -1414,6 +1414,7 @@ async function executeTask(
         if (resumeContext) {
           db.prepare("UPDATE interactions SET resume_state = 'completed' WHERE id = ?").run(resumeContext.interactionId);
         }
+        updateTaskStatus(db, task.id, "In Review");
         db.exec("COMMIT");
       } catch (error) {
         db.exec("ROLLBACK");
@@ -1610,7 +1611,7 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
     return;
   }
 
-  updateTaskStatus(db, task.id, "Done");
+  updateTaskStatus(db, task.id, "Development Complete");
   const mergeStatus = task.branchName ? "pending" : "none";
   db.prepare("UPDATE tasks SET merge_status = ?, merge_error = ?, updated_at = ? WHERE id = ?").run(
     mergeStatus,
@@ -1621,8 +1622,8 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
   insertEvent(db, {
     taskId: task.id,
     agentId: completedBy.id,
-    type: "task.done",
-    message: "PM Agent marked the task Done after automatic evaluation.",
+    type: "task.development-complete",
+    message: "PM Agent marked development complete; human confirmation is required.",
     metadata: { mergeStatus, evaluation }
   });
 

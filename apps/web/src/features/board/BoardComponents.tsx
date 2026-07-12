@@ -257,7 +257,7 @@ export function TaskCard(props: {
         >
           <ArrowDown size={16} />
         </button>
-        {props.task.status === "Paused" && !props.hasPendingInteraction ? (
+        {(props.task.status === "Paused" || props.task.status === "In Review") && !props.hasPendingInteraction ? (
           <button
             className="icon-button"
             title="Resume task"
@@ -265,6 +265,10 @@ export function TaskCard(props: {
             onClick={() => void resume()}
           >
             <Play size={16} />
+          </button>
+        ) : props.task.status === "Development Complete" ? (
+          <button className="merge-button" type="button" onClick={() => void patchTask({ status: "Done" })}>
+            <CheckCircle2 size={16} /><span>Confirm</span>
           </button>
         ) : props.task.status !== "Paused" && props.task.status !== "In Progress" &&
           props.task.status !== "In Review" && props.task.status !== "Done" ? (

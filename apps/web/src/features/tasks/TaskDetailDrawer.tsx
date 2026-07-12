@@ -69,6 +69,7 @@ export function TaskDetailDrawer(props: {
   const [editAssigneeAgentId, setEditAssigneeAgentId] = useState(
     props.task.assigneeAgentId || "",
   );
+  const [editAutoAssign, setEditAutoAssign] = useState(props.task.autoAssign);
   const [editParentTaskId, setEditParentTaskId] = useState(
     props.task.parentTaskId || "",
   );
@@ -123,6 +124,7 @@ export function TaskDetailDrawer(props: {
     setEditModelBackend(props.task.modelBackend || "");
     setEditWorkspaceMode(props.task.workspaceMode);
     setEditAssigneeAgentId(props.task.assigneeAgentId || "");
+    setEditAutoAssign(props.task.autoAssign);
     setEditParentTaskId(props.task.parentTaskId || "");
     setEditLabelsText(props.task.labels.join(", "));
     setEditLinkedFilesText(props.task.linkedFiles.join("\n"));
@@ -216,6 +218,7 @@ export function TaskDetailDrawer(props: {
         modelBackend: editModelBackend || null,
         workspaceMode: editWorkspaceMode,
         assigneeAgentId: editAssigneeAgentId || null,
+        autoAssign: editAutoAssign,
         parentTaskId: editParentTaskId || null,
         labels: parseLabels(editLabelsText),
         linkedFiles: parseListText(editLinkedFilesText),
@@ -295,7 +298,7 @@ export function TaskDetailDrawer(props: {
             <ArrowDown size={16} />
             <span>{t("task.down")}</span>
           </button>
-          {props.task.status === "Paused" && !hasPendingRunInteraction ? (
+          {(props.task.status === "Paused" || props.task.status === "In Review") && !hasPendingRunInteraction ? (
             <button
               className="secondary-button"
               type="button"
@@ -303,6 +306,13 @@ export function TaskDetailDrawer(props: {
             >
               <Play size={16} />
               <span>{t("task.resume")}</span>
+            </button>
+          ) : props.task.status === "Development Complete" ? (
+            <button className="merge-button inline" type="button" onClick={() => void props.runAction(async () => {
+              await taskService.update(props.overview.project.id, props.task.id, { status: "Done" });
+              await props.onChanged();
+            })}>
+              <CheckCircle2 size={16} /><span>{t("task.confirmComplete")}</span>
             </button>
           ) : props.task.status !== "Paused" && props.task.status !== "In Progress" &&
             props.task.status !== "In Review" && props.task.status !== "Done" ? (
@@ -401,6 +411,10 @@ export function TaskDetailDrawer(props: {
                 </option>
               ))}
             </select>
+            <label className="checkbox-row">
+              <input type="checkbox" checked={editAutoAssign} onChange={(event) => setEditAutoAssign(event.target.checked)} />
+              <span>{t("task.autoAssign")}</span>
+            </label>
             <select
               value={editModelBackend}
               onChange={(event) => setEditModelBackend(event.target.value)}

@@ -1417,6 +1417,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
+  ensureColumn(db, "tasks", "auto_assign", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "runs", "snapshot_ref", "TEXT");
   ensureColumn(db, "runs", "model_backend", "TEXT");
   ensureColumn(db, "runs", "provider_id", "TEXT");
@@ -2489,6 +2490,7 @@ export function mapTask(row: unknown): TaskRecord {
     priority: String(r.priority) as TaskRecord["priority"],
     modelBackend: r.model_backend ? String(r.model_backend) : null,
     assigneeAgentId: r.assignee_agent_id ? String(r.assignee_agent_id) : null,
+    autoAssign: Number(r.auto_assign ?? 1) !== 0,
     reporter: String(r.reporter),
     parentTaskId: r.parent_task_id ? String(r.parent_task_id) : null,
     dependencyTaskIds: JSON.parse(String(r.dependency_task_ids || "[]")) as string[],

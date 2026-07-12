@@ -48,7 +48,7 @@ test("interactions persist all kinds, suspend structured provider runs, recover,
     assert.equal(question.agentId, agent.id);
     assert.equal(question.correlationId, suspended.providerEvents.find((event) => event.runId === run.id)?.correlationId);
     assert.equal(question.checkpoint?.providerId, "mock");
-    assert.equal(suspended.tasks.find((item) => item.id === task.id)?.status, "Paused");
+    assert.equal(suspended.tasks.find((item) => item.id === task.id)?.status, "In Review");
     assert.equal(suspended.agents.find((item) => item.id === agent.id)?.status, "idle");
     const terminal = suspended.providerEvents.find((event) => event.runId === run.id && event.type === "result");
     assert.equal(terminal?.payload.status, "suspended");

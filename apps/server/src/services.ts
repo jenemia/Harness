@@ -453,6 +453,7 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       priority: input.priority || "Medium",
       modelBackend: input.modelBackend?.trim() || null,
       assigneeAgentId: input.assigneeAgentId || null,
+      autoAssign: input.autoAssign !== false,
       reporter: input.reporter?.trim() || "human",
       parentTaskId: input.parentTaskId || null,
       dependencyTaskIds,
@@ -472,14 +473,14 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
     };
     db.prepare(`
       INSERT INTO tasks (
-        id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
+        id, title, description, status, priority, model_backend, assignee_agent_id, auto_assign, reporter,
         parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths,
         acceptance_criteria, workspace_mode, task_order, branch_name, worktree_path, blocked_reason,
         merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id, task.title, task.description, task.status, task.priority, task.modelBackend,
-      task.assigneeAgentId, task.reporter, task.parentTaskId, JSON.stringify(task.dependencyTaskIds),
+      task.assigneeAgentId, task.autoAssign ? 1 : 0, task.reporter, task.parentTaskId, JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.waivedDependencyTaskIds), JSON.stringify(task.labels), JSON.stringify(task.linkedFiles),
       task.acceptanceCriteria, task.workspaceMode, task.taskOrder, task.branchName, task.worktreePath,
       task.blockedReason, task.mergeStatus, task.mergeError, task.createdAt, task.updatedAt
@@ -523,7 +524,7 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
     db.prepare(`
       UPDATE tasks
       SET title = COALESCE(?, title), description = COALESCE(?, description), status = COALESCE(?, status),
-          priority = COALESCE(?, priority), model_backend = ?, assignee_agent_id = ?, parent_task_id = ?,
+          priority = COALESCE(?, priority), model_backend = ?, assignee_agent_id = ?, auto_assign = COALESCE(?, auto_assign), parent_task_id = ?,
           dependency_task_ids = COALESCE(?, dependency_task_ids),
           waived_dependency_task_ids = COALESCE(?, waived_dependency_task_ids), labels = COALESCE(?, labels),
           linked_file_paths = COALESCE(?, linked_file_paths), acceptance_criteria = COALESCE(?, acceptance_criteria),
@@ -536,6 +537,7 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
       input.priority || null,
       input.modelBackend === undefined ? existing.model_backend : input.modelBackend?.trim() || null,
       input.assigneeAgentId === undefined ? existing.assignee_agent_id : input.assigneeAgentId,
+      input.autoAssign === undefined ? null : input.autoAssign ? 1 : 0,
       input.parentTaskId === undefined ? existing.parent_task_id : input.parentTaskId,
       Array.isArray(input.dependencyTaskIds) ? JSON.stringify(normalizeStringList(input.dependencyTaskIds)) : null,
       Array.isArray(input.waivedDependencyTaskIds) ? JSON.stringify(normalizeStringList(input.waivedDependencyTaskIds)) : null,

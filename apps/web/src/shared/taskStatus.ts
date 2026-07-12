@@ -2,10 +2,14 @@ import type { TaskStatus } from "../api/contracts";
 
 export const taskStatuses: TaskStatus[] = [
   "Backlog",
-  "Selected",
   "In Progress",
   "In Review",
-  "Paused",
-  "Blocked",
+  "Development Complete",
   "Done",
 ];
+
+export function boardTaskStatus(status: TaskStatus): TaskStatus {
+  return status === "Selected" || status === "Paused" || status === "Blocked"
+    ? "Backlog"
+    : status;
+}

@@ -50,19 +50,19 @@ Acceptance criteria:
         title: "Define the product",
         role: "project-manager",
         dependencyIndexes: [],
-        status: "Selected"
+        status: "Backlog"
       },
       {
         title: "Build the feature",
         role: "programmer",
         dependencyIndexes: [0],
-        status: "Blocked"
+        status: "Backlog"
       },
       {
         title: "Review the feature",
         role: "reviewer",
         dependencyIndexes: [0, 1],
-        status: "Blocked"
+        status: "Backlog"
       }
     ]
   );
@@ -90,7 +90,7 @@ Acceptance criteria:
   });
 
   assert.deepEqual(preview.tasks[0].dependencyIndexes, []);
-  assert.equal(preview.tasks[0].status, "Selected");
+  assert.equal(preview.tasks[0].status, "Backlog");
 });
 
 test("Markdown task lists create simple parallel work items", () => {
@@ -109,9 +109,9 @@ test("Markdown task lists create simple parallel work items", () => {
   assert.deepEqual(
     preview.tasks.map((task) => ({ title: task.title, status: task.status })),
     [
-      { title: "Build the release candidate", status: "Selected" },
-      { title: "Run the regression suite", status: "Selected" },
-      { title: "Update the release notes", status: "Selected" }
+      { title: "Build the release candidate", status: "Backlog" },
+      { title: "Run the regression suite", status: "Backlog" },
+      { title: "Update the release notes", status: "Backlog" }
     ]
   );
 });

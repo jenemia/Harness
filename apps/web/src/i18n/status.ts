@@ -6,6 +6,7 @@ export function statusMessageKey(status: string): MessageKey {
     Selected: "status.selected",
     "In Progress": "status.inProgress",
     "In Review": "status.inReview",
+    "Development Complete": "status.developmentComplete",
     Paused: "status.paused",
     Blocked: "status.blocked",
     Done: "status.done",

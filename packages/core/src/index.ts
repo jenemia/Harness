@@ -116,7 +116,7 @@ export type HarnessCommandInputs = {
   "drafts:restore-revision": { projectId: string; draftId: string; expectedRevision: number; revision: number };
   "drafts:events": { projectId: string; draftId: string; afterSequence?: number };
   "drafts:recover": { projectId: string };
-  "tasks:create-from-prompt": { projectId: string; prompt: string };
+  "tasks:create-from-prompt": { projectId: string; prompt: string; autoAssign?: boolean };
   "tasks:create": { projectId: string; payload: Record<string, unknown> };
   "tasks:update": { projectId: string; taskId: string; payload: Record<string, unknown> };
   "tasks:start": { projectId: string; taskId: string };
@@ -294,7 +294,8 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
     isNonNegativeInteger(payload.expectedRevision) && isNonNegativeInteger(payload.revision);
   if (command === "drafts:events") return isText(payload.draftId) && (payload.afterSequence === undefined || isNonNegativeInteger(payload.afterSequence));
   if (command === "drafts:recover") return true;
-  if (command === "tasks:create-from-prompt") return isText(payload.prompt);
+  if (command === "tasks:create-from-prompt") return isText(payload.prompt) &&
+    (payload.autoAssign === undefined || typeof payload.autoAssign === "boolean");
   if (command === "tasks:create") return isRecord(payload.payload);
   if (!isText(payload.taskId)) return false;
   if (command === "tasks:update" || command === "tasks:decompose") return isRecord(payload.payload);
