@@ -811,6 +811,62 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.llm-management-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.llm-management-intro,
+.llm-provider-card > header,
+.llm-mcp-card {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.llm-provider-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.llm-provider-card,
+.llm-connection-step {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.llm-provider-card > header h3,
+.llm-mcp-card h3,
+.llm-management-intro h2 {
+  margin: 0;
+}
+
+.llm-status {
+  align-items: center;
+  color: #ae2a19;
+  display: inline-flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.llm-status.connected { color: #216e4e; }
+
+.llm-connection-step {
+  background: #fafafb;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.llm-mcp-card { flex-wrap: wrap; }
+.llm-mcp-card > div:first-child { flex: 1 1 360px; }
+.llm-mcp-row { flex: 1 1 100%; }
+.llm-save-button { align-self: flex-end; }
+
 .agents-page .agent-list {
   display: grid;
   gap: 8px;

@@ -69,6 +69,10 @@ export function useAppController() {
     setSelectedProjectId((current) => current || data.projects[0]?.id || "");
   }, []);
 
+  const refreshProviders = useCallback(async () => {
+    setProviderCatalog(await projectService.providers());
+  }, []);
+
   const loadOverview = useCallback(async (
     projectId: string,
     sections?: Array<"board" | "activity" | "collaboration" | "reviews">,
@@ -355,6 +359,7 @@ export function useAppController() {
     loadProjects,
     loadOverview,
     refreshOverview,
+    refreshProviders,
     scheduleReady,
     createProject,
     removeProject,

@@ -1,7 +1,7 @@
-import { Activity, Bot, Columns3, Settings } from "lucide-react";
+import { Activity, Bot, BrainCircuit, Columns3, Settings } from "lucide-react";
 import { useI18n } from "../i18n";
 
-export type AppSection = "board" | "agents" | "runs" | "settings";
+export type AppSection = "board" | "agents" | "runs" | "llm" | "settings";
 
 export function AppNavigation(props: {
   activeSection: AppSection;
@@ -13,6 +13,7 @@ export function AppNavigation(props: {
       { id: "board", label: t("nav.board"), icon: Columns3 },
       { id: "agents", label: t("nav.agents"), icon: Bot },
       { id: "runs", label: t("nav.runs"), icon: Activity },
+      { id: "llm", label: t("nav.llm"), icon: BrainCircuit },
       { id: "settings", label: t("nav.settings"), icon: Settings },
     ];
 

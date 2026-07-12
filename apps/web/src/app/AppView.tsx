@@ -21,6 +21,7 @@ import type { AppController } from "./useAppController";
 const ActivityPanels = lazy(() => import("../features/activity/ActivityPanels").then((module) => ({ default: module.ActivityPanels })));
 const AgentPanel = lazy(() => import("../features/agents/AgentPanel").then((module) => ({ default: module.AgentPanel })));
 const SettingsPanel = lazy(() => import("../features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
+const LlmManagementPanel = lazy(() => import("../features/settings/LlmManagementPanel").then((module) => ({ default: module.LlmManagementPanel })));
 const TaskDetailDrawer = lazy(() => import("../features/tasks/TaskDetailDrawer").then((module) => ({ default: module.TaskDetailDrawer })));
 const TaskPromptModal = lazy(() => import("../features/tasks/TaskPromptModal").then((module) => ({ default: module.TaskPromptModal })));
 
@@ -61,6 +62,7 @@ export function AppView({ controller }: { controller: AppController }) {
     agentsById,
     runAction,
     refreshOverview,
+    refreshProviders,
     scheduleReady,
     createProject,
     removeProject,
@@ -75,6 +77,7 @@ export function AppView({ controller }: { controller: AppController }) {
     board: t("nav.board"),
     agents: t("nav.agents"),
     runs: t("nav.runs"),
+    llm: t("nav.llm"),
     settings: t("nav.settings"),
   }[activeSection];
 
@@ -171,7 +174,16 @@ export function AppView({ controller }: { controller: AppController }) {
             />
           )}
 
-          {activeSection === "settings" ? (
+          {activeSection === "llm" ? (
+            <LlmManagementPanel
+              overview={overview}
+              providerCatalog={providerCatalog}
+              settings={settings}
+              runAction={runAction}
+              onChanged={setSettings}
+              onRefreshProviders={refreshProviders}
+            />
+          ) : activeSection === "settings" ? (
             <div className="settings-page">
               <ProjectPanel
                 projects={projects}
