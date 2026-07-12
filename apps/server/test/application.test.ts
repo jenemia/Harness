@@ -31,6 +31,18 @@ test("typed application commands reuse project, agent, and task services", async
     };
     assert.ok(overview.tasks.some((task) => task.id === taskResult.task.id));
     assert.ok(overview.agents.some((agent) => agent.id === agentResult.agent.id));
+    const chat = await invokeApplicationCommand("chat:create", { projectId }) as {
+      session: { id: string; projectPath: string; messages: unknown[] };
+    };
+    assert.equal(chat.session.projectPath, path.join(root, "project"));
+    assert.deepEqual(chat.session.messages, []);
+    const chatReply = await invokeApplicationCommand("chat:send", {
+      projectId,
+      sessionId: chat.session.id,
+      content: "현재 프로젝트를 설명해 줘"
+    }) as { session: { messages: Array<{ role: string; content: string }> } };
+    assert.deepEqual(chatReply.session.messages.map((message) => message.role), ["user", "assistant"]);
+    assert.match(chatReply.session.messages[1].content, /현재 프로젝트를 설명해 줘/);
     const document = await invokeApplicationCommand("documents:create", {
       projectId,
       payload: { title: "IPC document", content: "body" }

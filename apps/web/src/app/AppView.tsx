@@ -1,5 +1,5 @@
-import { FolderOpen, Play, Plus, RefreshCcw, Wifi } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { FolderOpen, MessageCircle, Play, Plus, RefreshCcw, Wifi } from "lucide-react";
+import { lazy, Suspense, useState } from "react";
 import { ScheduleResultLine } from "../features/activity/ScheduleResultLine";
 import { AgentSidebarList } from "../features/agents/AgentSidebarList";
 import { ApprovalsPanel } from "../features/approvals/ApprovalsPanel";
@@ -24,9 +24,11 @@ const SettingsPanel = lazy(() => import("../features/settings/SettingsPanel").th
 const LlmManagementPanel = lazy(() => import("../features/settings/LlmManagementPanel").then((module) => ({ default: module.LlmManagementPanel })));
 const TaskDetailDrawer = lazy(() => import("../features/tasks/TaskDetailDrawer").then((module) => ({ default: module.TaskDetailDrawer })));
 const TaskPromptModal = lazy(() => import("../features/tasks/TaskPromptModal").then((module) => ({ default: module.TaskPromptModal })));
+const ProjectChatModal = lazy(() => import("../features/chat/ProjectChatModal").then((module) => ({ default: module.ProjectChatModal })));
 
 export function AppView({ controller }: { controller: AppController }) {
   const { t } = useI18n();
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const {
     projects,
     selectedProjectId,
@@ -134,6 +136,10 @@ export function AppView({ controller }: { controller: AppController }) {
             <div className="page-actions">
               {activeSection === "board" && overview && (
                 <>
+                  <button className="secondary-button" type="button" onClick={() => setIsChatOpen(true)}>
+                    <MessageCircle size={16} />
+                    <span>{t("top.chat")}</span>
+                  </button>
                   <button
                     className="primary-button"
                     type="button"
@@ -166,6 +172,7 @@ export function AppView({ controller }: { controller: AppController }) {
           </header>
 
           {error && <div className="error-line">{error}</div>}
+          {isChatOpen && overview && <ProjectChatModal projectId={overview.project.id} projectPath={overview.project.path} onClose={() => setIsChatOpen(false)} />}
           {activeSection === "board" && overview && lastScheduleResult && (
             <ScheduleResultLine
               result={lastScheduleResult}

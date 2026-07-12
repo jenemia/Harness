@@ -207,6 +207,22 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "POST" && childPath === "chat") {
+        sendJson(res, await invokeApplicationCommand("chat:create", { projectId: project.id }), 201);
+        return;
+      }
+
+      const chatMatch = childPath.match(/^chat\/([^/]+)$/);
+      if (chatMatch && req.method === "GET") {
+        sendJson(res, await invokeApplicationCommand("chat:get", { projectId: project.id, sessionId: chatMatch[1] }));
+        return;
+      }
+      if (chatMatch && req.method === "POST") {
+        const body = await readBody<{ content?: string }>(req);
+        sendJson(res, await invokeApplicationCommand("chat:send", { projectId: project.id, sessionId: chatMatch[1], content: body.content || "" }));
+        return;
+      }
+
       if (req.method === "POST" && childPath === "init-git") {
         sendJson(res, await invokeApplicationCommand("projects:init-git", { projectId: project.id }), 201);
         return;

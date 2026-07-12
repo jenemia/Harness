@@ -102,6 +102,7 @@ import { subscribeAgentFileEvents } from "./agent-file-events.js";
 import { listPreviews, registerPreview, removePreview, type PreviewRegistrationInput } from "./previews.js";
 import { recoverPreviewProcesses, restartPreview, startPreview, stopPreview } from "./preview-runtime.js";
 import { openPreviewTarget } from "./preview-opener.js";
+import { createChatSession, getChatSession, sendChatMessage } from "./chat.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -201,6 +202,18 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       return { schedule: await startReadyTasks(project), overview: getProjectOverview(project) };
     }
     case "providers:list": return listRuntimeProviders();
+    case "chat:create": {
+      const value = input(payload) as HarnessCommandInputs["chat:create"];
+      return { session: createChatSession(requiredProject(value.projectId)) };
+    }
+    case "chat:get": {
+      const value = input(payload) as HarnessCommandInputs["chat:get"];
+      return { session: getChatSession(requiredProject(value.projectId), value.sessionId) };
+    }
+    case "chat:send": {
+      const value = input(payload) as HarnessCommandInputs["chat:send"];
+      return sendChatMessage(requiredProject(value.projectId), value.sessionId, value.content);
+    }
     case "mcp:clients": return { clients: listMcpClients() };
     case "mcp:client-save": {
       const value = input(payload) as HarnessCommandInputs["mcp:client-save"];
