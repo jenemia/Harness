@@ -21,14 +21,12 @@ import type { AppController } from "./useAppController";
 
 const loadActivityPanels = () => import("../features/activity/ActivityPanels");
 const loadAgentPanel = () => import("../features/agents/AgentPanel");
-const loadLlmManagementPanel = () => import("../features/settings/LlmManagementPanel");
 const loadTaskDetailDrawer = () => import("../features/tasks/TaskDetailDrawer");
 const loadTaskPromptModal = () => import("../features/tasks/TaskPromptModal");
 const loadProjectChatModal = () => import("../features/chat/ProjectChatModal");
 
 const ActivityPanels = lazy(() => loadActivityPanels().then((module) => ({ default: module.ActivityPanels })));
 const AgentPanel = lazy(() => loadAgentPanel().then((module) => ({ default: module.AgentPanel })));
-const LlmManagementPanel = lazy(() => loadLlmManagementPanel().then((module) => ({ default: module.LlmManagementPanel })));
 const TaskDetailDrawer = lazy(() => loadTaskDetailDrawer().then((module) => ({ default: module.TaskDetailDrawer })));
 const TaskPromptModal = lazy(() => loadTaskPromptModal().then((module) => ({ default: module.TaskPromptModal })));
 const ProjectChatModal = lazy(() => loadProjectChatModal().then((module) => ({ default: module.ProjectChatModal })));
@@ -89,7 +87,6 @@ export function AppView({ controller }: { controller: AppController }) {
       void Promise.all([
         loadActivityPanels(),
         loadAgentPanel(),
-        loadLlmManagementPanel(),
         loadTaskDetailDrawer(),
         loadTaskPromptModal(),
         loadProjectChatModal(),
@@ -213,11 +210,7 @@ export function AppView({ controller }: { controller: AppController }) {
           ) : activeSection === "settings" ? (
             <div className="settings-detail-page">
               {settingsTab === "models" && <ModelSelectionPanel overview={overview} providerCatalog={providerCatalog} settings={settings}
-                runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview} />}
-              {settingsTab === "connections" && <Suspense fallback={null}><LlmManagementPanel
-                overview={overview} providerCatalog={providerCatalog} settings={settings} runAction={runAction}
-                onChanged={setSettings} onRefreshProviders={refreshProviders}
-              /></Suspense>}
+                runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview} onRefreshProviders={refreshProviders} />}
             </div>
           ) : overview ? (
             <>

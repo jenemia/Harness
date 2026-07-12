@@ -941,10 +941,16 @@ textarea {
 .number-setting-control > span, .number-setting-field small { color: var(--muted); font-size: 11px; }
 .llm-runtime-summary { display: grid; gap: 5px; }
 
-.model-selection-panel { display: grid; gap: 16px; max-width: 720px; }
+.model-selection-panel { display: grid; gap: 16px; max-width: 820px; }
 .model-select-field { display: grid; gap: 7px; }
 .model-select-field strong { color: #44546f; font-size: 12px; }
-.model-selection-panel > .primary-button { justify-self: end; }
+.selected-model-settings { display: grid; gap: 14px; }
+.selected-model-settings h3 { margin: 0; }
+.selected-model-settings .probe-result { display: block; margin-top: 7px; }
+.oauth-fold summary { cursor: pointer; font-weight: 700; }
+.oauth-fold[open] summary { margin-bottom: 10px; }
+.model-mcp-settings .mcp-client-row { background: white; }
+.model-selection-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 .agents-page .agent-list {
   display: grid;
