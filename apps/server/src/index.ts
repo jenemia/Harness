@@ -217,6 +217,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, await invokeApplicationCommand("chat:create", { projectId: project.id }), 201);
         return;
       }
+      if (req.method === "GET" && childPath === "chat") {
+        const limit = Number(requestUrl.searchParams.get("limit") || 10);
+        const cursor = requestUrl.searchParams.get("cursor") || undefined;
+        sendJson(res, await invokeApplicationCommand("chat:list", { projectId: project.id, cursor, limit }));
+        return;
+      }
 
       const chatMatch = childPath.match(/^chat\/([^/]+)$/);
       if (chatMatch && req.method === "GET") {

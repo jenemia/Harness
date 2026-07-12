@@ -1377,6 +1377,28 @@ export function openProjectDb(projectPath: string) {
       display_name TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS chat_sessions_updated
+      ON chat_sessions(updated_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS chat_messages_session_created
+      ON chat_messages(session_id, created_at, id);
   `);
   migrateDraftReviewRequestsForConversationTurns(db);
   ensureColumn(db, "approvals", "interaction_id", "TEXT");

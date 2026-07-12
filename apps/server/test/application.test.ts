@@ -36,13 +36,39 @@ test("typed application commands reuse project, agent, and task services", async
     };
     assert.equal(chat.session.projectPath, path.join(root, "project"));
     assert.deepEqual(chat.session.messages, []);
+    const emptyHistory = await invokeApplicationCommand("chat:list", { projectId, limit: 10 }) as { sessions: unknown[] };
+    assert.deepEqual(emptyHistory.sessions, []);
     const chatReply = await invokeApplicationCommand("chat:send", {
       projectId,
       sessionId: chat.session.id,
       content: "현재 프로젝트를 설명해 줘"
-    }) as { session: { messages: Array<{ role: string; content: string }> } };
+    }) as { session: { title: string; updatedAt: string; messages: Array<{ role: string; content: string }> } };
     assert.deepEqual(chatReply.session.messages.map((message) => message.role), ["user", "assistant"]);
     assert.match(chatReply.session.messages[1].content, /현재 프로젝트를 설명해 줘/);
+    assert.equal(chatReply.session.title, "현재 프로젝트를 설명해 줘");
+    const restoredChat = await invokeApplicationCommand("chat:get", { projectId, sessionId: chat.session.id }) as typeof chatReply;
+    assert.deepEqual(restoredChat.session, chatReply.session);
+    for (let index = 0; index < 11; index += 1) {
+      const createdChat = await invokeApplicationCommand("chat:create", { projectId }) as typeof chat;
+      await invokeApplicationCommand("chat:send", { projectId, sessionId: createdChat.session.id, content: `페이지 테스트 ${index}` });
+    }
+    const firstChatPage = await invokeApplicationCommand("chat:list", { projectId, limit: 10 }) as {
+      sessions: Array<{ id: string; messageCount: number }>;
+      nextCursor: string;
+      hasMore: boolean;
+    };
+    assert.equal(firstChatPage.sessions.length, 10);
+    assert.equal(firstChatPage.hasMore, true);
+    assert.ok(firstChatPage.sessions.every((session) => session.messageCount === 2));
+    const secondChatPage = await invokeApplicationCommand("chat:list", { projectId, limit: 10, cursor: firstChatPage.nextCursor }) as {
+      sessions: Array<{ id: string }>;
+      nextCursor: null;
+      hasMore: boolean;
+    };
+    assert.equal(secondChatPage.sessions.length, 2);
+    assert.equal(secondChatPage.hasMore, false);
+    assert.equal(secondChatPage.nextCursor, null);
+    assert.equal(new Set([...firstChatPage.sessions, ...secondChatPage.sessions].map((session) => session.id)).size, 12);
     const document = await invokeApplicationCommand("documents:create", {
       projectId,
       payload: { title: "IPC document", content: "body" }
