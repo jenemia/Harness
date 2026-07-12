@@ -15,11 +15,9 @@ export function ModelSelectionPanel(props: {
   const { locale } = useI18n();
   const ko = locale === "ko";
   const [globalModel, setGlobalModel] = useState("mock");
-  const [projectModel, setProjectModel] = useState("mock");
   const providers = props.providerCatalog?.llmProviders || [];
 
   useEffect(() => setGlobalModel(props.settings?.defaultModelBackend || "mock"), [props.settings]);
-  useEffect(() => setProjectModel(props.overview?.settings.defaultModelBackend || "mock"), [props.overview?.settings.defaultModelBackend]);
 
   async function save() {
     const settings = props.settings;
@@ -37,7 +35,10 @@ export function ModelSelectionPanel(props: {
         props.onChanged(response.settings);
       }
       if (props.overview) {
-        await settingsService.updateProject(props.overview.project.id, { ...props.overview.settings, defaultModelBackend: projectModel });
+        await settingsService.updateProject(props.overview.project.id, {
+          ...props.overview.settings,
+          defaultModelBackend: globalModel,
+        });
         await props.onProjectChanged();
       }
     });
@@ -52,12 +53,6 @@ export function ModelSelectionPanel(props: {
         {providers.map((provider) => <option value={provider.id} key={provider.id}>{provider.label}</option>)}
       </select>
     </label>
-    {props.overview && <label className="model-select-field">
-      <strong>{ko ? "현재 프로젝트 모델" : "Current project model"}</strong>
-      <select value={projectModel} onChange={(event) => setProjectModel(event.target.value)}>
-        {providers.map((provider) => <option value={provider.id} key={provider.id}>{provider.label}</option>)}
-      </select>
-    </label>}
-    <button className="primary-button" type="button" onClick={() => void save()}><Save size={16} />{ko ? "모델 저장" : "Save models"}</button>
+    <button className="primary-button" type="button" onClick={() => void save()}><Save size={16} />{ko ? "모델 저장" : "Save model"}</button>
   </section>;
 }

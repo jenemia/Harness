@@ -18,3 +18,11 @@ test("settings workspace hides numeric and project management panels", () => {
   assert.doesNotMatch(source, /<SettingsPanel/);
   assert.doesNotMatch(source, /<ProjectPanel/);
 });
+
+test("model selection exposes one global default and synchronizes the current project", () => {
+  const source = readFileSync(new URL("../src/features/settings/ModelSelectionPanel.tsx", import.meta.url), "utf8");
+  assert.match(source, /전역 기본 모델/);
+  assert.doesNotMatch(source, /현재 프로젝트 모델/);
+  assert.doesNotMatch(source, /projectModel/);
+  assert.match(source, /defaultModelBackend: globalModel/);
+});
