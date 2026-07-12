@@ -248,6 +248,8 @@ export type TaskGoal = {
   status: "queued" | "active" | "completed";
   goalOrder: number;
   completedRunId: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

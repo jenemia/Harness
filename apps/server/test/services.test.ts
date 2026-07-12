@@ -79,9 +79,14 @@ test("application services apply the same validation and mutations for every tra
     const goalDb = openProjectDb(project.path);
     try {
       assert.equal(activateNextTaskGoal(goalDb, task.id, null).next?.title, "First step");
-      assert.equal(activateNextTaskGoal(goalDb, task.id, "run-1").next?.title, "Second step");
+      const secondTransition = activateNextTaskGoal(goalDb, task.id, "run-1");
+      assert.equal(secondTransition.next?.title, "Second step");
+      assert.ok(secondTransition.completed?.startedAt);
+      assert.ok(secondTransition.completed?.completedAt);
       const finalTransition = activateNextTaskGoal(goalDb, task.id, "run-2");
       assert.equal(finalTransition.completed?.title, "Second step");
+      assert.ok(finalTransition.completed?.startedAt);
+      assert.ok(finalTransition.completed?.completedAt);
       assert.equal(finalTransition.next, null);
     } finally {
       goalDb.close();

@@ -1133,6 +1133,8 @@ export function openProjectDb(projectPath: string) {
       status TEXT NOT NULL,
       goal_order INTEGER NOT NULL,
       completed_run_id TEXT,
+      started_at TEXT,
+      completed_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -1462,6 +1464,14 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
   ensureColumn(db, "tasks", "auto_assign", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "task_goals", "started_at", "TEXT");
+  ensureColumn(db, "task_goals", "completed_at", "TEXT");
+  db.exec(`
+    UPDATE task_goals SET started_at = created_at
+    WHERE started_at IS NULL AND status IN ('active', 'completed');
+    UPDATE task_goals SET completed_at = updated_at
+    WHERE completed_at IS NULL AND status = 'completed';
+  `);
   ensureColumn(db, "runs", "snapshot_ref", "TEXT");
   ensureColumn(db, "runs", "model_backend", "TEXT");
   ensureColumn(db, "runs", "provider_id", "TEXT");
@@ -2707,6 +2717,8 @@ export function mapTaskGoal(row: unknown): import("./types.js").TaskGoalRecord {
     status: String(r.status) as import("./types.js").TaskGoalRecord["status"],
     goalOrder: Number(r.goal_order),
     completedRunId: r.completed_run_id ? String(r.completed_run_id) : null,
+    startedAt: r.started_at ? String(r.started_at) : null,
+    completedAt: r.completed_at ? String(r.completed_at) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };

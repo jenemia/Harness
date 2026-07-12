@@ -26,6 +26,7 @@ import type {
 import { TaskCompletionModal } from "./TaskCompletionModal";
 import { taskService } from "../../services/taskService";
 import { parseLabels, parseListText } from "../../shared/formParsing";
+import { formatDate, formatDuration } from "../../shared/format";
 import { taskStatuses } from "../../shared/taskStatus";
 import { statusMessageKey, useI18n } from "../../i18n";
 import {
@@ -49,7 +50,7 @@ export function TaskDetailDrawer(props: {
   onChanged: () => Promise<void>;
 }) {
   const [completionOpen, setCompletionOpen] = useState(false);
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(props.task.title);
   const [editDescription, setEditDescription] = useState(
@@ -574,7 +575,11 @@ export function TaskDetailDrawer(props: {
                 <PathLine
                   key={goal.id}
                   icon={goal.status === "completed" ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
-                  value={`${goal.goalOrder + 1}. ${goal.title} · ${goal.status}`}
+                  value={`${goal.goalOrder + 1}. ${goal.title} · ${goal.status}${
+                    goal.status === "completed" && goal.startedAt && goal.completedAt
+                      ? ` · ${locale === "ko" ? "소요" : "Duration"} ${formatDuration(goal.startedAt, goal.completedAt, locale)} · ${locale === "ko" ? "완료" : "Finished"} ${formatDate(goal.completedAt, locale)}`
+                      : ""
+                  }`}
                 />
               ))}
             </div>

@@ -52,14 +52,18 @@ export function activateNextTaskGoal(db: DatabaseSync, taskId: string, completed
   const timestamp = now();
   const active = activeTaskGoal(db, taskId);
   if (active) {
-    db.prepare("UPDATE task_goals SET status = 'completed', completed_run_id = ?, updated_at = ? WHERE id = ?")
-      .run(completedRunId, timestamp, active.id);
+    db.prepare("UPDATE task_goals SET status = 'completed', completed_run_id = ?, completed_at = ?, updated_at = ? WHERE id = ?")
+      .run(completedRunId, timestamp, timestamp, active.id);
   }
+  const completed = active ? { ...active, completedRunId, completedAt: timestamp, updatedAt: timestamp } : null;
   const nextRow = db.prepare("SELECT * FROM task_goals WHERE task_id = ? AND status = 'queued' ORDER BY goal_order LIMIT 1").get(taskId);
-  if (!nextRow) return { completed: active, next: null };
+  if (!nextRow) return { completed, next: null };
   const next = mapTaskGoal(nextRow);
-  db.prepare("UPDATE task_goals SET status = 'active', updated_at = ? WHERE id = ?").run(timestamp, next.id);
-  return { completed: active, next: { ...next, status: "active" as const, updatedAt: timestamp } };
+  db.prepare("UPDATE task_goals SET status = 'active', started_at = ?, updated_at = ? WHERE id = ?").run(timestamp, timestamp, next.id);
+  return {
+    completed,
+    next: { ...next, status: "active" as const, startedAt: timestamp, updatedAt: timestamp }
+  };
 }
 
 function agentName(db: DatabaseSync, agentId: string | null) {
