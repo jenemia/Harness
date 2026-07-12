@@ -126,10 +126,6 @@ export function LlmManagementPanel(props: Props) {
                     {state === "connected" ? (ko ? "연결 확인됨" : "Verified") : state === "configured" ? (ko ? "확인 필요" : "Not tested") : (ko ? "연결 실패" : "Connection failed")}
                   </span>
                 </div>
-                <label className="check-row">
-                  <input type="radio" name="default-llm" checked={defaultBackend === provider.id} onChange={() => setDefaultBackend(provider.id)} />
-                  <span>{ko ? "기본 LLM" : "Default LLM"}</span>
-                </label>
               </header>
               <p className="provider-help">{provider.description}</p>
               {probeResult && <small className={probeResult.ok ? "probe-result success" : "probe-result failed"}>
@@ -189,7 +185,7 @@ export function LlmManagementPanel(props: Props) {
       </div>
 
       <button className="primary-button llm-save-button" type="button" disabled={!props.settings} onClick={() => void save()}>
-        <Save size={16} /> {ko ? "LLM 설정 저장" : "Save LLM settings"}
+        <Save size={16} /> {ko ? "연결 명령 저장" : "Save connection commands"}
       </button>
     </section>
   );

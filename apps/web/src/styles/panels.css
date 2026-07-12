@@ -925,6 +925,11 @@ textarea {
 .number-setting-control > span, .number-setting-field small { color: var(--muted); font-size: 11px; }
 .llm-runtime-summary { display: grid; gap: 5px; }
 
+.model-selection-panel { display: grid; gap: 16px; max-width: 720px; }
+.model-select-field { display: grid; gap: 7px; }
+.model-select-field strong { color: #44546f; font-size: 12px; }
+.model-selection-panel > .primary-button { justify-self: end; }
+
 .agents-page .agent-list {
   display: grid;
   gap: 8px;

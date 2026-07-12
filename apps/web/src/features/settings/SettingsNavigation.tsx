@@ -1,12 +1,11 @@
-import { FolderKanban, PlugZap, SlidersHorizontal } from "lucide-react";
+import { BrainCircuit, PlugZap } from "lucide-react";
 
-export type SettingsTab = "project" | "defaults" | "connections";
+export type SettingsTab = "models" | "connections";
 
 export function SettingsNavigation(props: { active: SettingsTab; onChange: (tab: SettingsTab) => void; korean: boolean }) {
   const items = [
-    { id: "project" as const, label: props.korean ? "프로젝트" : "Project", icon: FolderKanban },
-    { id: "defaults" as const, label: props.korean ? "기본" : "Defaults", icon: SlidersHorizontal },
-    { id: "connections" as const, label: props.korean ? "연결관리" : "Connections", icon: PlugZap },
+    { id: "models" as const, label: props.korean ? "모델 선택" : "Model selection", icon: BrainCircuit },
+    { id: "connections" as const, label: props.korean ? "연결 확인" : "Connection check", icon: PlugZap },
   ];
   return <div className="settings-navigation">
     <p className="eyebrow">{props.korean ? "설정" : "Settings"}</p>

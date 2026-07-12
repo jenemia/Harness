@@ -11,17 +11,16 @@ import {
 } from "../features/dashboard/DashboardPanels";
 import { DocumentsPanel } from "../features/documents/DocumentsPanel";
 import { MemoryPanel } from "../features/memory/MemoryPanel";
-import { ProjectPanel } from "../features/projects/ProjectPanel";
 import { ProjectSwitcher } from "../features/projects/ProjectSwitcher";
 import { statusMessageKey, useI18n } from "../i18n";
 import { SettingsNavigation, type SettingsTab } from "../features/settings/SettingsNavigation";
+import { ModelSelectionPanel } from "../features/settings/ModelSelectionPanel";
 import { taskStatuses } from "../shared/taskStatus";
 import { AppNavigation } from "./AppNavigation";
 import type { AppController } from "./useAppController";
 
 const ActivityPanels = lazy(() => import("../features/activity/ActivityPanels").then((module) => ({ default: module.ActivityPanels })));
 const AgentPanel = lazy(() => import("../features/agents/AgentPanel").then((module) => ({ default: module.AgentPanel })));
-const SettingsPanel = lazy(() => import("../features/settings/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
 const LlmManagementPanel = lazy(() => import("../features/settings/LlmManagementPanel").then((module) => ({ default: module.LlmManagementPanel })));
 const TaskDetailDrawer = lazy(() => import("../features/tasks/TaskDetailDrawer").then((module) => ({ default: module.TaskDetailDrawer })));
 const TaskPromptModal = lazy(() => import("../features/tasks/TaskPromptModal").then((module) => ({ default: module.TaskPromptModal })));
@@ -30,7 +29,7 @@ const ProjectChatModal = lazy(() => import("../features/chat/ProjectChatModal").
 export function AppView({ controller }: { controller: AppController }) {
   const { t, locale } = useI18n();
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("project");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("models");
   const {
     projects,
     selectedProjectId,
@@ -182,36 +181,8 @@ export function AppView({ controller }: { controller: AppController }) {
 
           {activeSection === "settings" ? (
             <div className="settings-detail-page">
-              {settingsTab === "project" && <div className="settings-page">
-              <ProjectPanel
-                projects={projects}
-                selectedProjectId={selectedProjectId}
-                settings={settings}
-                projectTemplates={projectTemplates}
-                onSelect={setSelectedProjectId}
-                onCreate={createProject}
-                onRemoved={removeProject}
-                onUpdated={updateProject}
-                onImportedRoot={importProjects}
-                onInitializedGit={initializeProjectGit}
-                runAction={runAction}
-              />
-              {overview && (
-                <SettingsPanel
-                  mode="project"
-                  overview={overview}
-                  providerCatalog={providerCatalog}
-                  settings={settings}
-                  runAction={runAction}
-                  onChanged={setSettings}
-                  onProjectChanged={refreshOverview}
-                />
-              )}
-              </div>}
-              {settingsTab === "defaults" && overview && <SettingsPanel
-                mode="defaults" overview={overview} providerCatalog={providerCatalog} settings={settings}
-                runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview}
-              />}
+              {settingsTab === "models" && <ModelSelectionPanel overview={overview} providerCatalog={providerCatalog} settings={settings}
+                runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview} />}
               {settingsTab === "connections" && <LlmManagementPanel
                 overview={overview} providerCatalog={providerCatalog} settings={settings} runAction={runAction}
                 onChanged={setSettings} onRefreshProviders={refreshProviders}
