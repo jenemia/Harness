@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "harness": {
+      "command": "/opt/homebrew/opt/node@24/bin/pnpm",
+      "args": [
+        "--dir",
+        "/Users/sean/Documents/harness",
+        "--filter",
+        "@harness/server",
+        "mcp",
+        "--",
+        "--client",
+        "cursor"
+      ]
+    }
+  }
+}
