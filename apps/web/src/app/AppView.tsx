@@ -334,6 +334,7 @@ export function AppView({ controller }: { controller: AppController }) {
                     runAction={runAction}
                     onTemplatesChanged={setAgentTemplates}
                     onChanged={refreshOverview}
+                    onOpenTask={setSelectedTaskId}
                   /></Suspense>
                 </div>
               )}

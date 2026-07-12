@@ -12,6 +12,7 @@ export type ParsedAgentMarkdownDraft = {
   maxParallel: number;
   enabled: boolean;
   persona: string;
+  instructions: string;
   boundaries: string;
 };
 
@@ -34,6 +35,7 @@ export function parseAgentMarkdownDraft(raw: string): ParsedAgentMarkdownDraft {
     maxParallel: Math.max(1, Number(value.maxParallel || 1)),
     enabled: value.enabled !== false,
     persona: sectionValue(sections, "Persona"),
+    instructions: sectionValue(sections, "Instructions"),
     boundaries: sectionValue(sections, "Boundaries"),
   };
 }
@@ -53,9 +55,16 @@ export function updateAgentMarkdownDraft(raw: string, patch: Partial<ParsedAgent
   };
   const sections = parsed.sections.map((section) => {
     if (section.name === "Persona" && patch.persona !== undefined) return { ...section, content: patch.persona };
+    if (section.name === "Instructions" && patch.instructions !== undefined) return { ...section, content: patch.instructions };
     if (section.name === "Boundaries" && patch.boundaries !== undefined) return { ...section, content: patch.boundaries };
     return section;
   });
+  if (patch.persona !== undefined && !sections.some((section) => section.name === "Persona")) {
+    sections.push({ name: "Persona", content: patch.persona });
+  }
+  if (patch.instructions !== undefined && !sections.some((section) => section.name === "Instructions")) {
+    sections.push({ name: "Instructions", content: patch.instructions });
+  }
   const yaml = stringify(frontmatter, { lineWidth: 0 }).trim();
   const body = sections.map((section) => `# ${section.name}\n\n${section.content.trim()}`).join("\n\n");
   return `---\n${yaml}\n---\n\n${body}\n`;

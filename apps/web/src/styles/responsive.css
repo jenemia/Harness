@@ -73,6 +73,18 @@
 }
 
 @media (max-width: 820px) {
+  .agent-management-layout { display: block; min-height: auto; }
+  .agent-management-layout.show-list .agent-management-detail, .agent-management-layout.show-detail .agent-management-list { display: none; }
+  .agent-management-list { border-right: 0; min-height: calc(100vh - 150px); }
+  .agent-management-detail { padding: 14px; }
+  .agent-mobile-back { display: inline-flex; }
+  .agent-primary-editor { grid-template-columns: 1fr; }
+  .agent-main-textarea { min-height: 150px; }
+  .agent-detail-header { align-items: flex-start; gap: 10px; }
+  .agent-detail-badges { align-items: flex-end; flex-direction: column; }
+  .agent-task-list > button { grid-template-columns: minmax(0, 1fr) auto; }
+  .agent-task-list .priority-pill { display: none; }
+  .agent-form-grid { grid-template-columns: 1fr; }
   body {
     min-width: 680px;
   }
