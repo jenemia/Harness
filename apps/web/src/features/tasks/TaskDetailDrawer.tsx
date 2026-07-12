@@ -23,6 +23,7 @@ import type {
   Task,
   TaskStatus,
 } from "../../api/contracts";
+import { TaskCompletionModal } from "./TaskCompletionModal";
 import { taskService } from "../../services/taskService";
 import { parseLabels, parseListText } from "../../shared/formParsing";
 import { taskStatuses } from "../../shared/taskStatus";
@@ -47,6 +48,7 @@ export function TaskDetailDrawer(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const [completionOpen, setCompletionOpen] = useState(false);
   const { t } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(props.task.title);
@@ -253,6 +255,7 @@ export function TaskDetailDrawer(props: {
   }
 
   return (
+    <>{completionOpen && <TaskCompletionModal projectId={props.overview.project.id} task={props.task} runAction={props.runAction} onCompleted={props.onChanged} onClose={() => setCompletionOpen(false)} />}
     <div
       className="drawer-backdrop"
       role="presentation"
@@ -308,9 +311,8 @@ export function TaskDetailDrawer(props: {
               <span>{t("task.resume")}</span>
             </button>
           ) : props.task.status === "Development Complete" ? (
-            <button className="merge-button inline" type="button" onClick={() => void props.runAction(async () => {
-              await taskService.update(props.overview.project.id, props.task.id, { status: "Done" });
-              await props.onChanged();
+            <button className="merge-button inline" type="button" onClick={() => props.task.useNewWorktree ? setCompletionOpen(true) : void props.runAction(async () => {
+              await taskService.update(props.overview.project.id, props.task.id, { status: "Done" }); await props.onChanged();
             })}>
               <CheckCircle2 size={16} /><span>{t("task.confirmComplete")}</span>
             </button>
@@ -685,6 +687,6 @@ export function TaskDetailDrawer(props: {
         />
         <TaskTimeline events={events} providerEvents={providerEvents} runs={runs} />
       </aside>
-    </div>
+    </div></>
   );
 }

@@ -19,6 +19,8 @@ import {
 import type { Agent, Preview, Task } from "../../api/contracts";
 import { taskService } from "../../services/taskService";
 import { useI18n } from "../../i18n";
+import { useState } from "react";
+import { TaskCompletionModal } from "../tasks/TaskCompletionModal";
 
 export function BoardFilters(props: {
   agents: Agent[];
@@ -95,6 +97,7 @@ export function TaskCard(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const [completionOpen, setCompletionOpen] = useState(false);
   async function patchTask(patch: Partial<Task>) {
     await props.runAction(async () => {
       await taskService.update(props.projectId, props.task.id, patch);
@@ -159,7 +162,8 @@ export function TaskCard(props: {
     });
   }
 
-  return (
+  return (<>
+    {completionOpen && <TaskCompletionModal projectId={props.projectId} task={props.task} runAction={props.runAction} onCompleted={props.onChanged} onClose={() => setCompletionOpen(false)} />}
     <article
       className={`task-card priority-${props.task.priority.toLowerCase()}`}
     >
@@ -176,6 +180,10 @@ export function TaskCard(props: {
       </button>
       {props.task.description && <p>{props.task.description}</p>}
       <div className="task-meta">
+        <label className="checkbox-row task-worktree-toggle" onClick={(event) => event.stopPropagation()}>
+          <input type="checkbox" checked={props.task.useNewWorktree} disabled={Boolean(props.task.worktreePath) || !["Backlog", "Selected"].includes(props.task.status)} onChange={(event) => void patchTask({ useNewWorktree: event.target.checked })} />
+          <span>새 워크트리에서 작업</span>
+        </label>
         <span className={`agent-chip ${props.assignee?.status || "idle"}`}>
           <UserRoundCog size={14} />
           {props.assignee?.name || "Unassigned"}
@@ -267,7 +275,7 @@ export function TaskCard(props: {
             <Play size={16} />
           </button>
         ) : props.task.status === "Development Complete" ? (
-          <button className="merge-button" type="button" onClick={() => void patchTask({ status: "Done" })}>
+          <button className="merge-button" type="button" onClick={() => props.task.useNewWorktree ? setCompletionOpen(true) : void patchTask({ status: "Done" })}>
             <CheckCircle2 size={16} /><span>Confirm</span>
           </button>
         ) : props.task.status !== "Paused" && props.task.status !== "In Progress" &&
@@ -324,7 +332,7 @@ export function TaskCard(props: {
           </>
         )}
       </div>
-    </article>
+    </article></>
   );
 }
 

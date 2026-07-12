@@ -194,6 +194,17 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       maxParallel: 1
     },
     {
+      name: "Planning Agent",
+      role: "planner",
+      persona: "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+      modelBackend: "mock",
+      cliCommand: null,
+      capabilities: ["planning", "requirements", "discussion"],
+      allowedTools: ["documents", "memory"],
+      boundaries: "Do not run implementation commands or edit project files; only analyze and plan the requested work.",
+      maxParallel: 1
+    },
+    {
       name: "Programmer Agent",
       role: "programmer",
       persona: "Implement scoped engineering tasks inside the task worktree and report the result clearly.",
@@ -341,6 +352,14 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           allowedTools: ["kanban", "documents", "memory"],
           boundaries: "Do not run shell commands or edit project files directly; delegate implementation to worker agents.",
           maxParallel: 1
+        },
+        {
+          name: "Planning Agent",
+          role: "planner",
+          persona: "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+          modelBackend: "mock", cliCommand: null,
+          capabilities: ["planning", "requirements", "discussion"], allowedTools: ["documents", "memory"],
+          boundaries: "Do not run implementation commands or edit project files; only analyze and plan the requested work.", maxParallel: 1
         },
         {
           name: "Programmer Agent",
@@ -1003,6 +1022,7 @@ export function openProjectDb(projectPath: string) {
       linked_file_paths TEXT NOT NULL DEFAULT '[]',
       acceptance_criteria TEXT NOT NULL,
       workspace_mode TEXT NOT NULL DEFAULT 'worktree',
+      use_new_worktree INTEGER NOT NULL DEFAULT 1,
       task_order INTEGER NOT NULL DEFAULT 0,
       branch_name TEXT,
       worktree_path TEXT,
@@ -1435,6 +1455,8 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "tasks", "linked_file_paths", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "model_backend", "TEXT");
   ensureColumn(db, "tasks", "workspace_mode", "TEXT NOT NULL DEFAULT 'worktree'");
+  ensureColumn(db, "tasks", "use_new_worktree", "INTEGER NOT NULL DEFAULT 1");
+  db.exec("UPDATE tasks SET use_new_worktree = CASE WHEN workspace_mode = 'worktree' THEN 1 ELSE 0 END");
   ensureColumn(db, "tasks", "task_order", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
@@ -1464,6 +1486,20 @@ export function openProjectDb(projectPath: string) {
     CREATE INDEX IF NOT EXISTS approvals_status_created ON approvals(status, created_at DESC);
   `);
   purgeCredentialProviderCommands(db, "project_settings");
+  const activeAgentCount = (db.prepare("SELECT COUNT(*) AS count FROM agents WHERE archived_at IS NULL").get() as { count: number }).count;
+  const plannerExists = db.prepare("SELECT id FROM agents WHERE role = 'planner' AND archived_at IS NULL LIMIT 1").get();
+  if (activeAgentCount > 0 && !plannerExists) {
+    const timestamp = now();
+    db.prepare(`INSERT INTO agents (
+      id, name, role, persona, model_backend, cli_command, capabilities, allowed_tools, boundaries,
+      max_parallel, status, current_task_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), "Planning Agent", "planner",
+        "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+        "mock", null, JSON.stringify(["planning", "requirements", "discussion"]), JSON.stringify(["documents", "memory"]),
+        "Do not run implementation commands or edit project files; only analyze and plan the requested work.",
+        1, "idle", null, timestamp, timestamp);
+  }
   syncProjectAgentDefinitions(db, projectPath);
   initializedProjectDatabases.add(databaseKey);
   return db;
@@ -1472,6 +1508,7 @@ export function openProjectDb(projectPath: string) {
 export function defaultProjectSettings(): ProjectSettings {
   const globalSettings = getGlobalSettings();
   return {
+    defaultUseNewWorktree: true,
     defaultModelBackend: globalSettings.defaultModelBackend,
     defaultAgentMaxParallel: globalSettings.defaultAgentMaxParallel,
     autoStartPlans: globalSettings.autoStartPlans,
@@ -1521,6 +1558,7 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "defaultModelBackend") {
       settings.defaultModelBackend = row.value;
     }
+    if (row.key === "defaultUseNewWorktree") settings.defaultUseNewWorktree = row.value === "true";
     if (row.key === "defaultAgentMaxParallel") {
       settings.defaultAgentMaxParallel = Math.max(1, Number(row.value || 1));
     }
@@ -1581,6 +1619,7 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
         : getProjectProviderCommandOverridesFromDb(db);
     const timestamp = now();
     const next: ProjectSettings = {
+      defaultUseNewWorktree: input.defaultUseNewWorktree ?? current.defaultUseNewWorktree,
       defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
       defaultAgentMaxParallel: Math.max(1, Number(input.defaultAgentMaxParallel || current.defaultAgentMaxParallel)),
       autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
@@ -1607,6 +1646,7 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
     };
 
     const stmt = db.prepare("INSERT OR REPLACE INTO project_settings VALUES (?, ?, ?)");
+    stmt.run("defaultUseNewWorktree", String(next.defaultUseNewWorktree), timestamp);
     stmt.run("defaultModelBackend", next.defaultModelBackend, timestamp);
     stmt.run("defaultAgentMaxParallel", String(next.defaultAgentMaxParallel), timestamp);
     stmt.run("autoStartPlans", String(next.autoStartPlans), timestamp);
@@ -2287,13 +2327,17 @@ function mapProjectOAuthAccountLink(row: unknown): ProjectOAuthAccountLink {
 function seedDefaultAgentsMutation(projectPath: string) {
   const db = openProjectDb(projectPath);
   try {
-    const count = db.prepare("SELECT COUNT(*) AS count FROM agents").get() as { count: number };
-    if (count.count > 0) {
-      return;
-    }
-
     const timestamp = now();
     const agents = [
+      {
+        id: randomUUID(),
+        name: "Planning Agent",
+        role: "planner",
+        persona: "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+        modelBackend: "mock", cliCommand: null,
+        capabilities: ["planning", "requirements", "discussion"], allowedTools: ["documents", "memory"],
+        boundaries: "Do not run implementation commands or edit project files; only analyze and plan the requested work.", maxParallel: 1
+      },
       {
         id: randomUUID(),
         name: "PM Agent",
@@ -2339,7 +2383,8 @@ function seedDefaultAgentsMutation(projectPath: string) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    for (const agent of agents) {
+    const existingRoles = new Set((db.prepare("SELECT role FROM agents WHERE archived_at IS NULL").all() as Array<{ role: string }>).map((row) => row.role));
+    for (const agent of agents.filter((agent) => !existingRoles.has(agent.role))) {
       stmt.run(
         agent.id,
         agent.name,
@@ -2521,6 +2566,9 @@ export function mapTask(row: unknown): TaskRecord {
     linkedFiles: parseJsonStringArray(r.linked_file_paths),
     acceptanceCriteria: String(r.acceptance_criteria),
     workspaceMode: r.workspace_mode === "harness" ? "harness" : "worktree",
+    useNewWorktree: r.use_new_worktree === undefined || r.use_new_worktree === null
+      ? r.workspace_mode !== "harness"
+      : Number(r.use_new_worktree) === 1,
     taskOrder: Number(r.task_order || 0),
     branchName: r.branch_name ? String(r.branch_name) : null,
     worktreePath: r.worktree_path ? String(r.worktree_path) : null,

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { getProject, openProjectDb } from "../src/db.js";
+import { getProject, openProjectDb, updateProjectSettings } from "../src/db.js";
 import { getProjectOverview } from "../src/overview-repository.js";
 import {
   createAgentService,
@@ -43,6 +43,13 @@ test("application services apply the same validation and mutations for every tra
     assert.equal(updatedAgent.boundaries, "project only");
 
     assert.throws(() => createTaskService(project, { title: "Unknown", assigneeAgentId: "missing" }), /Assignee agent not found/);
+    assert.equal(createTaskService(project, { title: "Default isolated task" }).useNewWorktree, true);
+    const completionGuardTask = createTaskService(project, { title: "Completion guard", status: "Development Complete", useNewWorktree: true });
+    assert.throws(() => updateTaskService(project, completionGuardTask.id, { status: "Done" }), /완료 확인 절차/);
+    updateProjectSettings(project.path, { defaultUseNewWorktree: false });
+    const sharedWorkspaceTask = createTaskService(project, { title: "Project default task" });
+    assert.equal(sharedWorkspaceTask.useNewWorktree, false);
+    assert.equal(sharedWorkspaceTask.workspaceMode, "harness");
     const task = createTaskService(project, {
       title: "  Shared task  ",
       status: "Blocked",
@@ -56,6 +63,7 @@ test("application services apply the same validation and mutations for every tra
     assert.deepEqual(task.linkedFiles, ["src/a.ts"]);
     assert.match(task.blockedReason || "", /Waiting on dependencies/);
     assert.throws(() => updateTaskService(project, task.id, { parentTaskId: task.id }), /own parent/);
+    updateTaskService(project, task.id, { useNewWorktree: false });
 
     const comment = createTaskCommentService(project, task.id, { author: " cli ", body: "  verified  " });
     assert.equal(comment.author, "cli");
@@ -90,7 +98,7 @@ test("application services apply the same validation and mutations for every tra
     const renamed = updateProjectService(project.id, { name: "Renamed" });
     assert.equal(renamed.name, "Renamed");
     const overview = getProjectOverview(renamed);
-    assert.equal(overview.tasks.length, 1);
+    assert.equal(overview.tasks.length, 4);
     assert.equal(overview.taskGoals.length, 2);
     assert.equal(overview.comments.length, 2);
     assert.match(overview.comments[0].body, /담당자 변경: Worker → Replacement/);

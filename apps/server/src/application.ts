@@ -35,6 +35,8 @@ import {
 } from "./completion-reviews.js";
 import {
   approveMerge,
+  completeTask,
+  listTaskCompletionBranches,
   decideApproval,
   initializeProjectWorkspace,
   listRuntimeProviders,
@@ -567,6 +569,15 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["tasks:merge"];
       const project = requiredProject(value.projectId);
       return { result: await approveMerge(project, value.taskId), overview: getProjectOverview(project) };
+    }
+    case "tasks:completion-branches": {
+      const value = input(payload) as HarnessCommandInputs["tasks:completion-branches"];
+      return { branches: await listTaskCompletionBranches(requiredProject(value.projectId)) };
+    }
+    case "tasks:complete": {
+      const value = input(payload) as HarnessCommandInputs["tasks:complete"];
+      const project = requiredProject(value.projectId);
+      return { result: await completeTask(project, value.taskId, value), overview: getProjectOverview(project) };
     }
     case "tasks:resolve-merge": {
       const value = input(payload) as HarnessCommandInputs["tasks:resolve-merge"];

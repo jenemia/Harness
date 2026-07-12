@@ -8,6 +8,7 @@ test("settings navigation exposes connection settings under model selection", ()
   assert.match(source, /모델 선택/);
   assert.doesNotMatch(source, /"connections"/);
   assert.doesNotMatch(source, /기본/);
+  assert.match(source, /일감 카드 설정/);
 });
 
 test("settings workspace hides numeric and project management panels", () => {

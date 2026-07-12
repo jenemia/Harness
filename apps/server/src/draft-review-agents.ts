@@ -86,7 +86,7 @@ function reviewDraft(
     .reverse()
     .find((comment) => comment.kind === "reply" && comment.revision === reviewer.lastRequestedRevision);
 
-  if (reviewer.role === "planning-reviewer") {
+  if (reviewer.role === "planning-reviewer" || reviewer.role === "planner") {
     const result: Array<{ kind: "suggestion" | "question" | "risk"; body: string }> = [];
     if (!/(완료|검증|acceptance|done|complete|test)/i.test(content)) {
       result.push({ kind: "question", body: "완료 여부를 판단할 수 있도록 검증 방법과 명시적인 완료 조건을 추가해 주세요." });
@@ -97,7 +97,7 @@ function reviewDraft(
     if (latestReply) {
       result.push({ kind: "suggestion", body: `사용자 답변을 다음 revision의 요구사항에 반영해 주세요: ${latestReply.body.slice(0, 240)}` });
     }
-    return result.length ? result : [{ kind: "suggestion", body: "목표와 완료 조건이 연결되어 있습니다. 주요 의존성만 최종 확인해 주세요." }];
+    return result.length ? result : [{ kind: "suggestion", body: `최신 계획안\n\n${content.trim()}\n\n완료 조건과 주요 의존성을 최종 확인했습니다.` }];
   }
 
   const result: Array<{ kind: "suggestion" | "question" | "risk"; body: string }> = [];

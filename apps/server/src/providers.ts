@@ -116,6 +116,9 @@ export type WorkspaceProvider = {
   workingTreeStatus(projectPath: string): Promise<string>;
   snapshotRef(cwd: string): Promise<string>;
   changedFiles(cwd: string): Promise<string[]>;
+  localBranches(projectPath: string): Promise<{ current: string; branches: string[] }>;
+  checkoutBranch(projectPath: string, branchName: string): Promise<CommandResult>;
+  removeWorktree(projectPath: string, worktreePath: string): Promise<CommandResult>;
 };
 
 export type LlmProvider = {
@@ -841,6 +844,20 @@ function createGitWorktreeWorkspaceProvider(
 
     async workingTreeStatus(projectPath) {
       return (await platformProvider.run("git", ["status", "--porcelain"], projectPath)).stdout;
+    },
+
+    async localBranches(projectPath) {
+      const current = await platformProvider.run("git", ["branch", "--show-current"], projectPath, true);
+      const list = await platformProvider.run("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads"], projectPath, true);
+      return { current: current.stdout.trim(), branches: list.stdout.split("\n").map((value) => value.trim()).filter(Boolean) };
+    },
+
+    checkoutBranch(projectPath, branchName) {
+      return platformProvider.run("git", ["checkout", branchName], projectPath, true);
+    },
+
+    removeWorktree(projectPath, worktreePath) {
+      return platformProvider.run("git", ["worktree", "remove", worktreePath], projectPath, true);
     },
 
     async snapshotRef(cwd) {

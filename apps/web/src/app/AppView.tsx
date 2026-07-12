@@ -15,6 +15,7 @@ import { ProjectSwitcher } from "../features/projects/ProjectSwitcher";
 import { statusMessageKey, useI18n } from "../i18n";
 import { SettingsNavigation, type SettingsTab } from "../features/settings/SettingsNavigation";
 import { ModelSelectionPanel } from "../features/settings/ModelSelectionPanel";
+import { TaskCardSettingsPanel } from "../features/settings/TaskCardSettingsPanel";
 import { taskStatuses } from "../shared/taskStatus";
 import { AppNavigation } from "./AppNavigation";
 import type { AppController } from "./useAppController";
@@ -211,6 +212,7 @@ export function AppView({ controller }: { controller: AppController }) {
             <div className="settings-detail-page">
               {settingsTab === "models" && <ModelSelectionPanel overview={overview} providerCatalog={providerCatalog} settings={settings}
                 runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview} onRefreshProviders={refreshProviders} />}
+              {settingsTab === "task-cards" && overview && <TaskCardSettingsPanel overview={overview} korean={locale === "ko"} runAction={runAction} onChanged={refreshOverview} />}
             </div>
           ) : overview ? (
             <>

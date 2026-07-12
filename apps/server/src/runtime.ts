@@ -132,7 +132,7 @@ export async function probeRuntimeProvider(project: ProjectRecord | null, modelB
     id: "provider-probe", title: "Reply with OK", description: "Reply exactly OK. Do not use tools or modify files.",
     status: "In Progress", priority: "Low", modelBackend, assigneeAgentId: agent.id, autoAssign: true, reporter: "Harness",
     parentTaskId: null, dependencyTaskIds: [], waivedDependencyTaskIds: [], labels: ["diagnostic"], linkedFiles: [],
-    acceptanceCriteria: "A short response is returned.", workspaceMode: "harness", taskOrder: 0, branchName: null,
+    acceptanceCriteria: "A short response is returned.", workspaceMode: "harness", useNewWorktree: false, taskOrder: 0, branchName: null,
     worktreePath: workspacePath, blockedReason: null, mergeStatus: "none", mergeError: null, createdAt: timestamp, updatedAt: timestamp
   };
   try {
@@ -617,6 +617,53 @@ async function approveMergeMutation(project: ProjectRecord, taskId: string) {
   }
 }
 
+async function listTaskCompletionBranchesMutation(project: ProjectRecord) {
+  return providers.workspace().localBranches(project.path);
+}
+
+async function completeTaskMutation(project: ProjectRecord, taskId: string, input: { targetBranch: string; merge: boolean; removeWorktree: boolean }) {
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    if (!task) return { ok: false, reason: "Task not found." };
+    if (task.status !== "Development Complete") return { ok: false, reason: "Only development-complete tasks can be confirmed." };
+    if (!task.useNewWorktree || (!input.merge && !input.removeWorktree)) {
+      updateTaskStatus(db, task.id, "Done");
+      return { ok: true, merged: false, worktreeRemoved: false };
+    }
+    if (!task.branchName || !task.worktreePath) return { ok: false, reason: "Task worktree information is missing." };
+    const worktreeDirty = await providers.workspace().workingTreeStatus(task.worktreePath);
+    if (worktreeDirty.trim()) return { ok: false, reason: "Task worktree has uncommitted changes." };
+    const branchInfo = await providers.workspace().localBranches(project.path);
+    if (!branchInfo.branches.includes(input.targetBranch)) return { ok: false, reason: "Target branch does not exist." };
+    if (input.removeWorktree && !input.merge) {
+      const state = await providers.workspace().mergeState(project.path, task.branchName);
+      if (!state.branchMerged) return { ok: false, reason: "Unmerged worktree cannot be removed without merging." };
+    }
+    if (input.merge) {
+      const dirty = await providers.workspace().workingTreeStatus(project.path);
+      if (dirty.trim()) return { ok: false, reason: "Main checkout has uncommitted changes." };
+      if (branchInfo.current !== input.targetBranch) {
+        const checkout = await providers.workspace().checkoutBranch(project.path, input.targetBranch);
+        if (!checkout.ok) return { ok: false, reason: checkout.stderr || checkout.stdout || "Could not checkout target branch." };
+      }
+      const merge = await providers.workspace().mergeBranch(project.path, task.branchName, `Merge Harness task ${task.id.slice(0, 8)}`);
+      if (!merge.ok) {
+        db.prepare("UPDATE tasks SET merge_status = 'conflict', merge_error = ?, updated_at = ? WHERE id = ?").run(merge.stderr || merge.stdout || "Merge failed.", now(), task.id);
+        return { ok: false, reason: "Merge conflict needs manual resolution." };
+      }
+    }
+    if (input.removeWorktree) {
+      const removed = await providers.workspace().removeWorktree(project.path, task.worktreePath);
+      if (!removed.ok) return { ok: false, reason: removed.stderr || removed.stdout || "Could not remove task worktree." };
+    }
+    db.prepare("UPDATE tasks SET status = 'Done', merge_status = ?, merge_error = NULL, worktree_path = ?, updated_at = ? WHERE id = ?")
+      .run(input.merge ? "merged" : task.mergeStatus, input.removeWorktree ? null : task.worktreePath, now(), task.id);
+    insertEvent(db, { taskId: task.id, agentId: task.assigneeAgentId, type: "task.completed", message: "Task completion was confirmed.", metadata: input });
+    return { ok: true, merged: input.merge, worktreeRemoved: input.removeWorktree };
+  } finally { db.close(); }
+}
+
 async function resolveMergeMutation(project: ProjectRecord, taskId: string) {
   const db = openProjectDb(project.path);
   try {
@@ -1057,6 +1104,8 @@ export const pauseTask = runtimeMutation(pauseTaskMutation);
 export const resumeTask = runtimeMutation(resumeTaskMutation);
 export const startReadyTasks = asyncRuntimeMutation(startReadyTasksMutation);
 export const approveMerge = asyncRuntimeMutation(approveMergeMutation);
+export const listTaskCompletionBranches = asyncRuntimeMutation(listTaskCompletionBranchesMutation);
+export const completeTask = asyncRuntimeMutation(completeTaskMutation);
 export const resolveMerge = asyncRuntimeMutation(resolveMergeMutation);
 export const requestMergeChanges = asyncRuntimeMutation(requestMergeChangesMutation);
 export const unblockReadyDependents = runtimeMutation(unblockReadyDependentsMutation);

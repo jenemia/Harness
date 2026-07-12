@@ -135,6 +135,7 @@ export type ProjectOAuthAccountLink = {
 };
 
 export type ProjectSettings = {
+  defaultUseNewWorktree: boolean;
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;
   autoStartPlans: boolean;
@@ -249,6 +250,7 @@ export type TaskRecord = {
   linkedFiles: string[];
   acceptanceCriteria: string;
   workspaceMode: TaskWorkspaceMode;
+  useNewWorktree: boolean;
   taskOrder: number;
   branchName: string | null;
   worktreePath: string | null;

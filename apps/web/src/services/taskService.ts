@@ -36,6 +36,10 @@ export const taskService = {
     })),
   merge: (projectId: string, taskId: string) => desktopOrHttp("tasks:merge", { projectId, taskId }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/merge`, { method: "POST" })),
+  completionBranches: (projectId: string) => desktopOrHttp("tasks:completion-branches", { projectId }, () =>
+    api<{ branches: { current: string; branches: string[] } }>(`/api/projects/${projectId}/tasks/completion-branches`)),
+  complete: (projectId: string, taskId: string, payload: { targetBranch: string; merge: boolean; removeWorktree: boolean }) => desktopOrHttp("tasks:complete", { projectId, taskId, ...payload }, () =>
+    api<{ result: { ok: boolean; reason?: string } }>(`/api/projects/${projectId}/tasks/${taskId}/complete`, { method: "POST", body: JSON.stringify(payload) })),
   resolveMerge: (projectId: string, taskId: string) => desktopOrHttp("tasks:resolve-merge", { projectId, taskId }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/resolve-merge`, {
       method: "POST",

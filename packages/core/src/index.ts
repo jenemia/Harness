@@ -127,6 +127,8 @@ export type HarnessCommandInputs = {
   "tasks:comment": { projectId: string; taskId: string; author?: string; body?: string };
   "tasks:decompose": { projectId: string; taskId: string; payload: Record<string, unknown> };
   "tasks:merge": { projectId: string; taskId: string };
+  "tasks:completion-branches": { projectId: string };
+  "tasks:complete": { projectId: string; taskId: string; targetBranch: string; merge: boolean; removeWorktree: boolean };
   "tasks:resolve-merge": { projectId: string; taskId: string };
   "tasks:request-changes": { projectId: string; taskId: string; reason?: string };
 };
@@ -300,7 +302,9 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "tasks:create-from-prompt") return isText(payload.prompt) &&
     (payload.autoAssign === undefined || typeof payload.autoAssign === "boolean");
   if (command === "tasks:create") return isRecord(payload.payload);
+  if (command === "tasks:completion-branches") return true;
   if (!isText(payload.taskId)) return false;
+  if (command === "tasks:complete") return isText(payload.targetBranch) && typeof payload.merge === "boolean" && typeof payload.removeWorktree === "boolean";
   if (command === "tasks:update" || command === "tasks:decompose") return isRecord(payload.payload);
   if (command === "tasks:move") return payload.direction === "up" || payload.direction === "down";
   return true;
@@ -322,7 +326,7 @@ const commandNames = new Set<HarnessCommand>([
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",
   "drafts:events", "drafts:recover",
   "tasks:create-from-prompt", "tasks:create", "tasks:update", "tasks:start", "tasks:pause", "tasks:resume", "tasks:move",
-  "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:resolve-merge", "tasks:request-changes"
+  "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:completion-branches", "tasks:complete", "tasks:resolve-merge", "tasks:request-changes"
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

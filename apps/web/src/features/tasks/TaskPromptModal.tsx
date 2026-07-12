@@ -312,6 +312,15 @@ export function TaskPromptModal(props: {
     return [...snapshot.applyHistory].reverse().find((apply) => apply.status === "pending") ||
       [...snapshot.applyHistory].reverse().find((apply) => apply.status === "applied") || null;
   }, [snapshot]);
+  const latestPlannerComment = useMemo(() => [...(snapshot?.comments || [])].reverse().find((comment) =>
+    !comment.parentCommentId && !comment.stale && comment.kind === "suggestion"), [snapshot]);
+
+  function applyLatestPlan() {
+    if (!latestPlannerComment) return;
+    const content = latestPlannerComment.body.replace(/^최신 계획안\s*/i, "").trim();
+    promptRef.current = content;
+    setPrompt(content);
+  }
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={() => void close()}>
@@ -341,7 +350,7 @@ export function TaskPromptModal(props: {
             <FileText size={15} /> Draft
           </button>
           <button className={mobilePane === "comments" ? "active" : ""} type="button" onClick={() => setMobilePane("comments")}>
-            <MessageSquare size={15} /> Review ({threads.length})
+            <MessageSquare size={15} /> {locale === "ko" ? "일감 논의" : "Task discussion"} ({threads.length})
           </button>
         </div>
 
@@ -374,10 +383,10 @@ export function TaskPromptModal(props: {
 
           <aside className={`draft-review-pane ${mobilePane === "comments" ? "mobile-active" : ""}`}>
             <div className="draft-review-heading">
-              <div><span className="modal-kicker">Live review</span><h3>Agent comments</h3></div>
+              <div><span className="modal-kicker">{locale === "ko" ? "일감 논의" : "Task discussion"}</span><h3>{locale === "ko" ? "기획 에이전트와 대화" : "Discuss with the planning agent"}</h3></div>
               <div className="draft-review-heading-actions">
-                <button className="secondary-button compact" type="button" disabled={!selectedCommentIds.size || isApplying || activeApply?.status === "pending"} onClick={() => void requestApply()}>
-                  <GitCompare size={14} /> 내용 반영 ({selectedCommentIds.size})
+                <button className="secondary-button compact" type="button" disabled={!latestPlannerComment} onClick={applyLatestPlan}>
+                  <GitCompare size={14} /> {locale === "ko" ? "내용 반영" : "Apply plan"}
                 </button>
                 <button aria-label="Refresh draft" className="icon-button" type="button" onClick={() => void refreshDraft()}><RefreshCcw size={15} /></button>
               </div>
@@ -445,7 +454,7 @@ export function TaskPromptModal(props: {
                   </div>
                 </section>
               )}
-              {threads.length === 0 && <p className="drawer-copy">Keep typing. Review starts after a short pause.</p>}
+              {threads.length === 0 && <p className="drawer-copy">{locale === "ko" ? "일감 내용을 작성하면 기획 에이전트가 질문과 계획안을 제안합니다." : "Write the task and the planning agent will propose questions and a plan."}</p>}
               {threads.map(({ comment, replies }) => {
                 const reviewer = snapshot?.reviewers.find((item) => item.id === comment.reviewerId);
                 const selectable = !comment.stale && comment.status !== "applied" && comment.revision === snapshot?.session.currentRevision;

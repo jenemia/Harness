@@ -141,7 +141,8 @@ test("agent Markdown is the validated source of truth and run snapshot", async (
     }
 
     const seeded = registerProjectService({ path: path.join(root, "seeded"), seedDefaults: true });
-    assert.equal(seeded.overview.agents.length, 3);
+    assert.equal(seeded.overview.agents.length, 4);
+    assert.ok(seeded.overview.agents.some((value) => value.role === "planner"));
     assert.ok(seeded.overview.agents.every((value) => value.parseStatus === "valid" && value.definitionPath));
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;

@@ -114,6 +114,7 @@ export type McpClient = {
 };
 
 export type ProjectSettings = {
+  defaultUseNewWorktree: boolean;
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;
   autoStartPlans: boolean;
@@ -226,6 +227,7 @@ export type Task = {
   linkedFiles: string[];
   acceptanceCriteria: string;
   workspaceMode: TaskWorkspaceMode;
+  useNewWorktree: boolean;
   taskOrder: number;
   branchName: string | null;
   worktreePath: string | null;
