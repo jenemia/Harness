@@ -80,8 +80,8 @@ export function TaskDetailDrawer(props: {
   );
   const [commentBody, setCommentBody] = useState("");
   const [decomposeText, setDecomposeText] = useState("");
-  const [decomposeMode, setDecomposeMode] = useState<"parallel" | "sequential">(
-    "parallel",
+  const taskGoals = props.overview.taskGoals.filter(
+    (goal) => goal.taskId === props.task.id,
   );
   const runs = props.overview.runs.filter(
     (run) => run.taskId === props.task.id,
@@ -242,7 +242,7 @@ export function TaskDetailDrawer(props: {
     await props.runAction(async () => {
       await taskService.decompose(props.overview.project.id, props.task.id, {
         text: decomposeText,
-        mode: decomposeMode,
+        mode: "sequential",
       });
       setDecomposeText("");
       await props.onChanged();
@@ -552,23 +552,23 @@ export function TaskDetailDrawer(props: {
 
         <section className="drawer-section">
           <h3>{t("task.decompose")}</h3>
+          {taskGoals.length > 0 && (
+            <div className="path-list">
+              {taskGoals.map((goal) => (
+                <PathLine
+                  key={goal.id}
+                  icon={goal.status === "completed" ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
+                  value={`${goal.goalOrder + 1}. ${goal.title} · ${goal.status}`}
+                />
+              ))}
+            </div>
+          )}
           <form className="stack-form" onSubmit={decomposeTask}>
             <textarea
               value={decomposeText}
               onChange={(event) => setDecomposeText(event.target.value)}
               placeholder={t("task.oneSubtaskPerLine")}
             />
-            <select
-              value={decomposeMode}
-              onChange={(event) =>
-                setDecomposeMode(
-                  event.target.value as "parallel" | "sequential",
-                )
-              }
-            >
-              <option value="parallel">{t("task.parallelSubtasks")}</option>
-              <option value="sequential">{t("task.sequentialChain")}</option>
-            </select>
             <button className="secondary-button" type="submit">
               <GitFork size={16} />
               <span>{t("task.createSubtasks")}</span>

@@ -1103,6 +1103,20 @@ export function openProjectDb(projectPath: string) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS task_goals (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      acceptance_criteria TEXT NOT NULL,
+      assignee_agent_id TEXT,
+      status TEXT NOT NULL,
+      goal_order INTEGER NOT NULL,
+      completed_run_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS draft_sessions (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -1422,6 +1436,7 @@ export function openProjectDb(projectPath: string) {
     CREATE INDEX IF NOT EXISTS handoffs_created ON handoffs(created_at DESC);
     CREATE INDEX IF NOT EXISTS comments_created ON comments(created_at DESC);
     CREATE INDEX IF NOT EXISTS comments_task_created ON comments(task_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS task_goals_task_order ON task_goals(task_id, goal_order);
     CREATE INDEX IF NOT EXISTS approvals_created ON approvals(created_at DESC);
     CREATE INDEX IF NOT EXISTS approvals_status_created ON approvals(status, created_at DESC);
   `);
@@ -2605,6 +2620,23 @@ export function mapComment(row: unknown): CommentRecord {
     author: r.author,
     body: r.body,
     createdAt: r.created_at
+  };
+}
+
+export function mapTaskGoal(row: unknown): import("./types.js").TaskGoalRecord {
+  const r = row as Record<string, string | number | null>;
+  return {
+    id: String(r.id),
+    taskId: String(r.task_id),
+    title: String(r.title),
+    description: String(r.description),
+    acceptanceCriteria: String(r.acceptance_criteria),
+    assigneeAgentId: r.assignee_agent_id ? String(r.assignee_agent_id) : null,
+    status: String(r.status) as import("./types.js").TaskGoalRecord["status"],
+    goalOrder: Number(r.goal_order),
+    completedRunId: r.completed_run_id ? String(r.completed_run_id) : null,
+    createdAt: String(r.created_at),
+    updatedAt: String(r.updated_at)
   };
 }
 

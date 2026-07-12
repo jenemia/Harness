@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { getProject } from "../src/db.js";
+import { getProject, openProjectDb } from "../src/db.js";
 import { getProjectOverview } from "../src/overview-repository.js";
 import {
   createAgentService,
@@ -18,6 +18,7 @@ import {
   updateProjectService,
   updateTaskService
 } from "../src/services.js";
+import { activateNextTaskGoal } from "../src/task-goals.js";
 
 test("application services apply the same validation and mutations for every transport", () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-services-"));
@@ -60,14 +61,26 @@ test("application services apply the same validation and mutations for every tra
     assert.equal(comment.author, "cli");
     assert.equal(comment.body, "verified");
 
-    const subtasks = decomposeTaskService(project, task.id, {
+    const decomposition = decomposeTaskService(project, task.id, {
       text: "- First step\n- Second step",
-      mode: "sequential"
+      mode: "parallel"
     });
-    assert.equal(subtasks.length, 2);
-    assert.equal(subtasks[0].status, "Selected");
-    assert.deepEqual(subtasks[1].dependencyTaskIds, [subtasks[0].id]);
-    assert.equal(subtasks[1].status, "Blocked");
+    assert.equal(decomposition.task.id, task.id);
+    assert.equal(decomposition.goals.length, 2);
+    assert.deepEqual(decomposition.goals.map((goal) => goal.status), ["queued", "queued"]);
+    const goalDb = openProjectDb(project.path);
+    try {
+      assert.equal(activateNextTaskGoal(goalDb, task.id, null).next?.title, "First step");
+      assert.equal(activateNextTaskGoal(goalDb, task.id, "run-1").next?.title, "Second step");
+      const finalTransition = activateNextTaskGoal(goalDb, task.id, "run-2");
+      assert.equal(finalTransition.completed?.title, "Second step");
+      assert.equal(finalTransition.next, null);
+    } finally {
+      goalDb.close();
+    }
+
+    const replacement = createAgentService(project, { name: "Replacement" });
+    updateTaskService(project, task.id, { assigneeAgentId: replacement.id });
 
     const document = createDocumentService(project, { title: " Plan ", content: "body" });
     const memory = createMemoryService(project, { title: " Decision ", content: "keep" });
@@ -77,8 +90,11 @@ test("application services apply the same validation and mutations for every tra
     const renamed = updateProjectService(project.id, { name: "Renamed" });
     assert.equal(renamed.name, "Renamed");
     const overview = getProjectOverview(renamed);
-    assert.equal(overview.tasks.length, 3);
-    assert.equal(overview.comments.length, 1);
+    assert.equal(overview.tasks.length, 1);
+    assert.equal(overview.taskGoals.length, 2);
+    assert.equal(overview.comments.length, 2);
+    assert.match(overview.comments[0].body, /담당자 변경: Worker → Replacement/);
+    assert.match(overview.comments[0].body, /확인된 변경 없음/);
     assert.ok(overview.events.some((event) => event.type === "task.decomposed"));
 
     unregisterProjectService(project.id);

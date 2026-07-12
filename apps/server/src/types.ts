@@ -257,6 +257,20 @@ export type TaskRecord = {
   updatedAt: string;
 };
 
+export type TaskGoalRecord = {
+  id: string;
+  taskId: string;
+  title: string;
+  description: string;
+  acceptanceCriteria: string;
+  assigneeAgentId: string | null;
+  status: "queued" | "active" | "completed";
+  goalOrder: number;
+  completedRunId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DocumentRecord = {
   id: string;
   title: string;
@@ -558,6 +572,7 @@ export type ProjectOverview = {
   settings: ProjectSettings;
   agents: AgentRecord[];
   tasks: TaskRecord[];
+  taskGoals: TaskGoalRecord[];
   documents: DocumentRecord[];
   memories: MemoryRecord[];
   globalMemories: MemoryRecord[];

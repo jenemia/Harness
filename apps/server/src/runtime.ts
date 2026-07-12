@@ -16,7 +16,6 @@ import {
   mapMemory,
   mapRun,
   mapTask,
-  nextTaskOrder,
   now,
   openProjectDb,
   projectHarnessDir
@@ -29,6 +28,7 @@ import { assertNoCredentialMaterial, redactCredentialMaterial } from "./credenti
 import { appendProviderEvent, nextProviderEventSequence } from "./provider-events.js";
 import { createApprovalRecordInDb, recoverInteractions, respondInteractionInDb, suspendRunForInteractionInDb, type RespondInteractionInput } from "./interactions.js";
 import { generateCompletionReport } from "./completion-reviews.js";
+import { activeTaskGoal, activateNextTaskGoal, appendTaskGoals, listTaskGoals, recordTaskHandoff } from "./task-goals.js";
 import {
   canonicalWorkspacePath,
   captureProjectSnapshot,
@@ -1114,7 +1114,14 @@ async function executeTask(
     const workspace = await providers.workspace().ensureTaskWorkspace(project.path, task);
     const snapshotRef = await providers.workspace().snapshotRef(workspace.worktreePath);
     const freshTask = getTask(db, task.id) ?? task;
-    const execution = withProviderCommand(agent, freshTask, settings);
+    const currentGoal = activeTaskGoal(db, task.id);
+    const executionTask = currentGoal ? {
+      ...freshTask,
+      title: `${freshTask.title}: ${currentGoal.title}`,
+      description: currentGoal.description || freshTask.description,
+      acceptanceCriteria: currentGoal.acceptanceCriteria || freshTask.acceptanceCriteria
+    } : freshTask;
+    const execution = withProviderCommand(agent, executionTask, settings);
     const executionAgent = execution.agent;
     const selectedProvider = providers.llm(executionAgent.modelBackend);
     const commandPreview = executionAgent.cliCommand ? redactCredentialMaterial(executionAgent.cliCommand) : null;
@@ -1274,7 +1281,7 @@ async function executeTask(
           "harness.run.resumed": Boolean(resumeContext)
         }, async (span) => {
           if (resumeContext) span.addEvent("interaction.resumed", { "harness.resume.count": 1 });
-          const providerResult = await selectedProvider.run(executionAgent, freshTask, workspace, {
+          const providerResult = await selectedProvider.run(executionAgent, executionTask, workspace, {
           globalMemory,
           projectMemory,
           taskComments,
@@ -1555,6 +1562,26 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
     metadata: evaluation
   });
   createAutomaticFollowUps(db, task, completedBy, evaluation);
+  const goalTransition = activateNextTaskGoal(db, task.id, evaluation.runId);
+  if (goalTransition.next) {
+    const nextAgentId = goalTransition.next.assigneeAgentId || task.assigneeAgentId;
+    if (!nextAgentId) {
+      setTaskBlocked(db, task.id, "The next goal has no assigned agent.");
+      return;
+    }
+    if (nextAgentId !== task.assigneeAgentId) {
+      recordTaskHandoff(db, task, task.assigneeAgentId, nextAgentId, {
+        reason: "Advanced to the next sequential goal.",
+        completedGoal: goalTransition.completed,
+        nextGoal: goalTransition.next,
+        runId: evaluation.runId
+      });
+      assignTask(db, task.id, nextAgentId);
+    }
+    updateTaskStatus(db, task.id, "Selected");
+    deferRuntimeTask(() => startTask(project, task.id));
+    return;
+  }
   if (handoffDecision) {
     const nextAgent = findAgentForHandoff(db, handoffDecision.role, completedBy.id);
     if (!nextAgent) {
@@ -1625,14 +1652,10 @@ function performHandoff(
 ) {
   assignTask(db, task.id, toAgent.id);
   updateTaskStatus(db, task.id, toAgent.role === "reviewer" ? "In Review" : "Selected");
-  db.prepare("INSERT INTO handoffs VALUES (?, ?, ?, ?, ?, ?)").run(
-    randomUUID(),
-    task.id,
-    fromAgent.id,
-    toAgent.id,
-    `${handoffDecision.reason} ${reasonSuffix}`,
-    now()
-  );
+  recordTaskHandoff(db, task, fromAgent.id, toAgent.id, {
+    reason: `${handoffDecision.reason} ${reasonSuffix}`,
+    runId: evaluation?.runId || null
+  });
   insertEvent(db, {
     taskId: task.id,
     agentId: toAgent.id,
@@ -1773,7 +1796,7 @@ function createAutomaticFollowUps(
     return [];
   }
 
-  const existingTitles = getExistingFollowUpTitles(db, sourceTask.id);
+  const existingTitles = new Set(listTaskGoals(db, sourceTask.id).map((goal) => normalizeFollowUpTitle(goal.title)));
   const skippedTitles: string[] = [];
   const newCandidates = candidates.filter((candidate) => {
     const key = normalizeFollowUpTitle(candidate.title);
@@ -1789,7 +1812,7 @@ function createAutomaticFollowUps(
       taskId: sourceTask.id,
       agentId: completedBy.id,
       type: "followups.skipped",
-      message: "PM skipped automatic follow-up creation because matching child tasks already exist.",
+      message: "PM skipped automatic follow-up creation because matching goals already exist.",
       metadata: {
         runId: evaluation.runId,
         automatic: true,
@@ -1799,105 +1822,23 @@ function createAutomaticFollowUps(
     return [];
   }
 
-  const tasks = newCandidates.map((candidate) => insertFollowUpTask(db, sourceTask, candidate));
+  const goals = appendTaskGoals(db, sourceTask, newCandidates.map((candidate) => ({
+    ...candidate,
+    acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale."
+  })));
   insertEvent(db, {
     taskId: sourceTask.id,
     agentId: completedBy.id,
     type: "followups.created",
-    message: `PM created ${tasks.length} follow-up task(s) from completion output.`,
+    message: `PM added ${goals.length} follow-up goal(s) from completion output.`,
     metadata: {
       runId: evaluation.runId,
       automatic: true,
-      followUpTaskIds: tasks.map((task) => task.id),
+      followUpGoalIds: goals.map((goal) => goal.id),
       skippedTitles
     }
   });
-  return tasks;
-}
-
-function getExistingFollowUpTitles(db: DatabaseSync, parentTaskId: string) {
-  return new Set(
-    db
-      .prepare("SELECT * FROM tasks WHERE parent_task_id = ?")
-      .all(parentTaskId)
-      .map(mapTask)
-      .filter((task) => task.labels.includes("follow-up"))
-      .map((task) => normalizeFollowUpTitle(task.title))
-  );
-}
-
-function insertFollowUpTask(
-  db: DatabaseSync,
-  sourceTask: TaskRecord,
-  candidate: { title: string; description: string }
-): TaskRecord {
-  const timestamp = now();
-  const task: TaskRecord = {
-    id: randomUUID(),
-    title: candidate.title,
-    description: candidate.description,
-    status: "Backlog",
-    priority: "Medium",
-    modelBackend: sourceTask.modelBackend,
-    assigneeAgentId: null,
-    reporter: "pm-agent",
-    parentTaskId: sourceTask.id,
-    dependencyTaskIds: [sourceTask.id],
-    waivedDependencyTaskIds: [],
-    labels: unique(["follow-up", ...sourceTask.labels.filter((label) => label.startsWith("role:"))]),
-    linkedFiles: sourceTask.linkedFiles,
-    acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale.",
-    workspaceMode: sourceTask.workspaceMode,
-    taskOrder: nextTaskOrder(db),
-    branchName: null,
-    worktreePath: null,
-    blockedReason: null,
-    mergeStatus: "none",
-    mergeError: null,
-    createdAt: timestamp,
-    updatedAt: timestamp
-  };
-
-  db.prepare(`
-    INSERT INTO tasks (
-      id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
-      parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths, acceptance_criteria, workspace_mode,
-      task_order, branch_name, worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    task.id,
-    task.title,
-    task.description,
-    task.status,
-    task.priority,
-    task.modelBackend,
-    task.assigneeAgentId,
-    task.reporter,
-    task.parentTaskId,
-    JSON.stringify(task.dependencyTaskIds),
-    JSON.stringify(task.waivedDependencyTaskIds),
-    JSON.stringify(task.labels),
-    JSON.stringify(task.linkedFiles),
-    task.acceptanceCriteria,
-    task.workspaceMode,
-    task.taskOrder,
-    task.branchName,
-    task.worktreePath,
-    task.blockedReason,
-    task.mergeStatus,
-    task.mergeError,
-    task.createdAt,
-    task.updatedAt
-  );
-
-  insertEvent(db, {
-    taskId: task.id,
-    agentId: null,
-    type: "task.created",
-    message: `${task.title} was created as an automatic follow-up.`,
-    metadata: { sourceTaskId: sourceTask.id, status: task.status, priority: task.priority, automatic: true }
-  });
-  return task;
+  return goals;
 }
 
 function parseAutomaticFollowUpCandidates(output: string, sourceTitle: string) {

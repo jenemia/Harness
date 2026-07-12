@@ -112,8 +112,9 @@ test("completion reports preserve snapshot diffs, review state, inline comments,
     assert.equal(updateInlineReviewComment(project, comment.id, "dismissed").status, "dismissed");
     const followUpComment = createInlineReviewComment(project, "completed-run", { filePath: "src/auth.ts", line: 1, side: "new", body: "Add a denial test." });
     const followUp = createReviewFollowUp(project, "completed-run", [followUpComment.id]);
-    assert.ok(followUp.task.labels.includes("review-follow-up"));
-    assert.equal(followUp.comments[0].followUpTaskId, followUp.task.id);
+    assert.match(followUp.goal.title, /Address review/);
+    assert.equal(followUp.task.id, task.id);
+    assert.equal(followUp.comments[0].followUpTaskId, followUp.goal.id);
 
     insertRun(project.path, {
       id: "follow-up-run",
@@ -129,8 +130,8 @@ test("completion reports preserve snapshot diffs, review state, inline comments,
     snapshot = getProjectOverview(project);
     assert.equal(snapshot.inlineReviewComments.find((item) => item.id === followUpComment.id)?.status, "addressed");
     assert.equal(snapshot.inlineReviewComments.find((item) => item.id === followUpComment.id)?.addressedByRunId, "follow-up-run");
-    assert.equal(snapshot.completionReports.filter((item) => item.taskId === task.id).length, 1);
-    assert.equal(snapshot.completionReports.find((item) => item.runId === "follow-up-run")?.revision, 1);
+    assert.equal(snapshot.completionReports.filter((item) => item.taskId === task.id).length, 2);
+    assert.equal(snapshot.completionReports.find((item) => item.runId === "follow-up-run")?.revision, 2);
 
     insertRun(project.path, {
       id: "revision-run",
@@ -142,7 +143,7 @@ test("completion reports preserve snapshot diffs, review state, inline comments,
       output: "Tests passed. Follow-up revision completed.",
       changedFiles: []
     });
-    assert.equal(generateCompletionReport(project, "revision-run").revision, 2);
+    assert.equal(generateCompletionReport(project, "revision-run").revision, 3);
 
     const failedTask = createTaskService(project, { title: "Review failed changes", status: "Blocked", assigneeAgentId: agent.id, workspaceMode: "worktree" });
     insertRun(project.path, {

@@ -16,7 +16,7 @@ import {
 } from "./db.js";
 import { assertNoCredentialMaterial, redactCredentialMaterial } from "./credential-security.js";
 import { withProjectWriterLock } from "./project-store.js";
-import { createTaskService } from "./services.js";
+import { activateNextTaskGoal, appendTaskGoals, activeTaskGoal } from "./task-goals.js";
 import type {
   CompletionReportRecord,
   InlineReviewCommentRecord,
@@ -121,11 +121,12 @@ function generateCompletionReportMutation(project: ProjectRecord, runId: string,
         recommended?.order || null, recommended?.reason || null, createdAt
       );
     }
+    const reviewGoal = activeTaskGoal(db, task.id);
     db.prepare(`
       UPDATE inline_review_comments
       SET status = 'addressed', addressed_by_run_id = ?, updated_at = ?
-      WHERE follow_up_task_id = ? AND status = 'open'
-    `).run(run.id, createdAt, task.id);
+      WHERE follow_up_task_id IN (?, ?) AND status = 'open'
+    `).run(run.id, createdAt, task.id, reviewGoal?.id || task.id);
     insertEvent(db, {
       taskId: task.id,
       agentId: run.agentId,
@@ -306,26 +307,22 @@ export function createReviewFollowUp(project: ProjectRecord, runId: string, comm
     db.close();
   }
   if (!comments.length) throw new Error("Select at least one open review comment.");
-  const task = createTaskService(project, {
-    title: `Address review: ${sourceTask.title}`,
-    description: comments.map((comment) => `- ${comment.filePath}:${comment.line} (${comment.side}) ${comment.body}`).join("\n"),
-    status: "Backlog",
-    reporter: "review",
-    parentTaskId: sourceTask.id,
-    dependencyTaskIds: sourceTask.status === "Done" ? [sourceTask.id] : [],
-    linkedFiles: [...new Set(comments.map((comment) => comment.filePath))],
-    labels: ["follow-up", "review-follow-up"],
-    workspaceMode: sourceTask.workspaceMode,
-    acceptanceCriteria: "Selected inline review comments are addressed and verified."
-  });
   return withProjectWriterLock(project.path, () => {
     const updateDb = openProjectDb(project.path);
     try {
       const timestamp = now();
+      const [goal] = appendTaskGoals(updateDb, sourceTask, [{
+        title: `Address review: ${sourceTask.title}`,
+        description: comments.map((comment) => `- ${comment.filePath}:${comment.line} (${comment.side}) ${comment.body}`).join("\n"),
+        acceptanceCriteria: "Selected inline review comments are addressed and verified."
+      }]);
+      if (!activeTaskGoal(updateDb, sourceTask.id)) activateNextTaskGoal(updateDb, sourceTask.id, null);
+      updateDb.prepare("UPDATE tasks SET status = 'Selected', merge_status = 'none', updated_at = ? WHERE id = ?")
+        .run(timestamp, sourceTask.id);
       const stmt = updateDb.prepare("UPDATE inline_review_comments SET follow_up_task_id = ?, updated_at = ? WHERE id = ?");
-      for (const comment of comments) stmt.run(task.id, timestamp, comment.id);
-      insertEvent(updateDb, { taskId: sourceTask.id, agentId: null, type: "review.followup.created", message: `Created follow-up ${task.title} from ${comments.length} review comment(s).`, metadata: { runId, followUpTaskId: task.id, commentIds } });
-      return { task, comments: commentIds.map((id) => mapInlineReviewComment(updateDb.prepare("SELECT * FROM inline_review_comments WHERE id = ?").get(id))) };
+      for (const comment of comments) stmt.run(goal.id, timestamp, comment.id);
+      insertEvent(updateDb, { taskId: sourceTask.id, agentId: null, type: "review.followup.created", message: `Added review follow-up goal to ${sourceTask.title}.`, metadata: { runId, followUpGoalId: goal.id, commentIds } });
+      return { task: sourceTask, goal, comments: commentIds.map((id) => mapInlineReviewComment(updateDb.prepare("SELECT * FROM inline_review_comments WHERE id = ?").get(id))) };
     } finally {
       updateDb.close();
     }

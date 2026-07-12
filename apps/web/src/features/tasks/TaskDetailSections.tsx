@@ -225,10 +225,10 @@ export function TaskRuns(props: {
             formatProviderCommandResolution(startMetadata);
           const followUpEvent = followUpEvents.get(run.id) || null;
           const followUpMetadata = asRecord(followUpEvent?.metadata);
-          const followUpTaskIds = Array.isArray(
-            followUpMetadata.followUpTaskIds,
+          const followUpGoalIds = Array.isArray(
+            followUpMetadata.followUpGoalIds,
           )
-            ? followUpMetadata.followUpTaskIds.filter(
+            ? followUpMetadata.followUpGoalIds.filter(
                 (item): item is string => typeof item === "string",
               )
             : [];
@@ -277,7 +277,7 @@ export function TaskRuns(props: {
                   <GitFork size={14} />
                   <span>
                     {followUpEvent.type === "followups.created"
-                      ? `${followUpTaskIds.length} automatic follow-up${followUpTaskIds.length === 1 ? "" : "s"}`
+                      ? `${followUpGoalIds.length} automatic follow-up goal${followUpGoalIds.length === 1 ? "" : "s"}`
                       : "Automatic follow-up skipped"}
                     {skippedTitles.length
                       ? ` · ${skippedTitles.length} duplicate${skippedTitles.length === 1 ? "" : "s"}`

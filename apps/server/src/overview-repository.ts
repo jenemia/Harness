@@ -23,6 +23,7 @@ import {
   mapRun,
   mapRunFileReview,
   mapTask,
+  mapTaskGoal,
   openProjectDb
 } from "./db.js";
 import type { ProjectOverview, ProjectRecord } from "./types.js";
@@ -48,6 +49,7 @@ export function getProjectOverviewSections(
     if (requested.has("board")) Object.assign(result, {
       agents: db.prepare("SELECT * FROM agents ORDER BY created_at ASC").all().map(mapAgent),
       tasks: db.prepare("SELECT * FROM tasks ORDER BY task_order ASC, created_at ASC").all().map(mapTask),
+      taskGoals: db.prepare("SELECT * FROM task_goals ORDER BY task_id, goal_order ASC").all().map(mapTaskGoal),
       approvals: db.prepare("SELECT * FROM approvals ORDER BY created_at DESC LIMIT 100").all().map(mapApproval),
       previews: db.prepare("SELECT * FROM previews ORDER BY created_at ASC").all().map(mapPreview),
       interactions: db.prepare("SELECT * FROM interactions ORDER BY created_at DESC LIMIT 500").all().map(mapInteraction),

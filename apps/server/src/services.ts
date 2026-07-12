@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import type { DatabaseSync } from "node:sqlite";
 import {
   getProjectSettings,
   importProjectsFromRoot,
@@ -43,6 +42,7 @@ import {
   createAgentDefinition
 } from "./agent-store.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
+import { activateNextTaskGoal, activeTaskGoal, appendTaskGoals, listTaskGoals, recordTaskHandoff } from "./task-goals.js";
 
 export type RegisterProjectInput = {
   path: string;
@@ -381,6 +381,12 @@ function archiveAgentMutation(
     db.exec("BEGIN IMMEDIATE");
     try {
       if (assignedRows.length > 0) {
+        for (const assigned of assignedRows) {
+          const taskRow = db.prepare("SELECT * FROM tasks WHERE id = ?").get(assigned.id);
+          if (taskRow) recordTaskHandoff(db, mapTask(taskRow), agentId, input.reassignToAgentId ?? null, {
+            reason: "Task reassigned because the previous agent was archived."
+          });
+        }
         db.prepare("UPDATE tasks SET assignee_agent_id = ?, updated_at = ? WHERE assignee_agent_id = ? AND status != 'Done'")
           .run(input.reassignToAgentId ?? null, now(), agentId);
       }
@@ -494,7 +500,8 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
 function updateTaskMutation(project: ProjectRecord, taskId: string, input: Partial<TaskRecord>) {
   const db = openProjectDb(project.path);
   try {
-    const existing = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as
+    const existingRow = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    const existing = existingRow as
       | {
           model_backend: string | null;
           assignee_agent_id: string | null;
@@ -547,7 +554,13 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
       message: "Task was updated.",
       metadata: input as Record<string, unknown>
     });
-    return mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId));
+    const updated = mapTask(db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId));
+    if (input.assigneeAgentId !== undefined && input.assigneeAgentId !== existing.assignee_agent_id) {
+      recordTaskHandoff(db, mapTask(existingRow), existing.assignee_agent_id, input.assigneeAgentId, {
+        reason: "Manual task reassignment."
+      });
+    }
+    return updated;
   } finally {
     db.close();
   }
@@ -596,51 +609,33 @@ function decomposeTaskMutation(
   }
 ) {
   const db = openProjectDb(project.path);
-  let sourceTask: TaskRecord;
   try {
     const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
     if (!row) throw new Error("Source task not found.");
-    sourceTask = mapTask(row);
-  } finally {
-    db.close();
-  }
-  const mode = input.mode === "sequential" ? "sequential" : "parallel";
-  const labels = mergeLabels(["decomposed"], sourceTask.labels.filter((label) => label.startsWith("role:")), input.labels || []);
-  const items = parseDecompositionItems(input.items, input.text);
-  if (items.length === 0) throw new Error("At least one decomposition item is required.");
-  const tasks: TaskRecord[] = [];
-  for (const item of items) {
-    const previousTask = tasks.at(-1);
-    const dependencyTaskIds = mode === "sequential" && previousTask ? [previousTask.id] : [];
-    tasks.push(createTaskService(project, {
+    const sourceTask = mapTask(row);
+    const items = parseDecompositionItems(input.items, input.text);
+    if (items.length === 0) throw new Error("At least one decomposition item is required.");
+    const goals = appendTaskGoals(db, sourceTask, items.map((item) => ({
       title: item.title,
-      description: item.description || `Subtask decomposed from ${sourceTask.title}.`,
-      status: dependencyTaskIds.length ? "Blocked" : "Selected",
-      priority: sourceTask.priority,
-      modelBackend: item.modelBackend ?? input.modelBackend ?? sourceTask.modelBackend,
-      assigneeAgentId: item.assigneeAgentId ?? input.assigneeAgentId ?? sourceTask.assigneeAgentId,
-      reporter: input.reporter?.trim() || "pm-agent",
-      parentTaskId: sourceTask.id,
-      dependencyTaskIds,
-      labels: mergeLabels(labels, item.labels || []),
-      linkedFiles: sourceTask.linkedFiles,
+      description: item.description || `Next goal for ${sourceTask.title}.`,
       acceptanceCriteria: item.acceptanceCriteria || sourceTask.acceptanceCriteria,
-      workspaceMode: sourceTask.workspaceMode
-    }));
-  }
-  const eventDb = openProjectDb(project.path);
-  try {
-    insertEvent(eventDb, {
+      assigneeAgentId: item.assigneeAgentId ?? input.assigneeAgentId ?? sourceTask.assigneeAgentId
+    })));
+    if (sourceTask.status === "Done" && !activeTaskGoal(db, sourceTask.id)) {
+      activateNextTaskGoal(db, sourceTask.id, null);
+      db.prepare("UPDATE tasks SET status = 'Selected', merge_status = 'none', updated_at = ? WHERE id = ?").run(now(), sourceTask.id);
+    }
+    insertEvent(db, {
       taskId: sourceTask.id,
       agentId: sourceTask.assigneeAgentId,
       type: "task.decomposed",
-      message: `${tasks.length} subtask(s) were created from ${sourceTask.title}.`,
-      metadata: { mode, subtaskIds: tasks.map((task) => task.id) }
+      message: `${goals.length} sequential goal(s) were added to ${sourceTask.title}.`,
+      metadata: { requestedMode: input.mode || "parallel", normalizedMode: "sequential", goalIds: goals.map((goal) => goal.id) }
     });
+    return { task: sourceTask, goals: listTaskGoals(db, sourceTask.id) };
   } finally {
-    eventDb.close();
+    db.close();
   }
-  return tasks;
 }
 
 function createFollowUpTasksMutation(project: ProjectRecord, runId: string) {
@@ -658,48 +653,29 @@ function createFollowUpTasksMutation(project: ProjectRecord, runId: string) {
     sourceTask = mapTask(sourceTaskRow);
     runAgentId = run.agentId;
     candidates = parseFollowUpCandidates(run.output || run.error || "", sourceTask.title);
-    existingTitles = getExistingFollowUpTitles(db, sourceTask.id);
+    existingTitles = new Set(listTaskGoals(db, sourceTask.id).map((goal) => normalizeFollowUpTitle(goal.title)));
+    const skippedTitles: string[] = [];
+    const goals = appendTaskGoals(db, sourceTask, candidates.filter((candidate) => {
+      const key = normalizeFollowUpTitle(candidate.title);
+      if (existingTitles.has(key)) { skippedTitles.push(candidate.title); return false; }
+      existingTitles.add(key);
+      return true;
+    }).map((candidate) => ({ ...candidate, acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale." })));
+    if (goals.length && sourceTask.status === "Done" && !activeTaskGoal(db, sourceTask.id)) {
+      activateNextTaskGoal(db, sourceTask.id, null);
+      db.prepare("UPDATE tasks SET status = 'Selected', merge_status = 'none', updated_at = ? WHERE id = ?").run(now(), sourceTask.id);
+    }
+    insertEvent(db, {
+      taskId: sourceTask.id,
+      agentId: runAgentId,
+      type: goals.length ? "followups.created" : "followups.skipped",
+      message: goals.length ? `${goals.length} follow-up goal(s) were added.` : "Matching follow-up goals already exist.",
+      metadata: { runId, followUpGoalIds: goals.map((goal) => goal.id), skippedTitles }
+    });
+    return goals;
   } finally {
     db.close();
   }
-  const skippedTitles: string[] = [];
-  const tasks = candidates.filter((candidate) => {
-    const key = normalizeFollowUpTitle(candidate.title);
-    if (existingTitles.has(key)) {
-      skippedTitles.push(candidate.title);
-      return false;
-    }
-    existingTitles.add(key);
-    return true;
-  }).map((candidate) => createTaskService(project, {
-    title: candidate.title,
-    description: candidate.description,
-    status: "Backlog",
-    priority: "Medium",
-    modelBackend: sourceTask.modelBackend,
-    reporter: "pm-agent",
-    parentTaskId: sourceTask.id,
-    dependencyTaskIds: [sourceTask.id],
-    labels: ["follow-up"],
-    linkedFiles: sourceTask.linkedFiles,
-    workspaceMode: sourceTask.workspaceMode,
-    acceptanceCriteria: "The follow-up is completed or explicitly closed with rationale."
-  }));
-  const eventDb = openProjectDb(project.path);
-  try {
-    insertEvent(eventDb, {
-      taskId: sourceTask.id,
-      agentId: runAgentId,
-      type: tasks.length ? "followups.created" : "followups.skipped",
-      message: tasks.length
-        ? `${tasks.length} follow-up task(s) were created from run output.`
-        : "Follow-up creation skipped because matching child tasks already exist.",
-      metadata: { runId, followUpTaskIds: tasks.map((task) => task.id), skippedTitles }
-    });
-  } finally {
-    eventDb.close();
-  }
-  return tasks;
 }
 
 function createDocumentMutation(project: ProjectRecord, input: { title?: string; content?: string }) {
@@ -822,17 +798,6 @@ function parseDecompositionItems(items: DecompositionItemInput[] | undefined, te
     const [title, ...description] = normalized.split(/\s+-\s+/);
     return { title: title || "", description: description.join(" - "), acceptanceCriteria: "", assigneeAgentId: null, modelBackend: null, labels: [] };
   }).filter((item) => item.title);
-}
-
-function mergeLabels(...groups: string[][]) {
-  return normalizeStringList(groups.flat());
-}
-
-function getExistingFollowUpTitles(db: DatabaseSync, parentTaskId: string) {
-  return new Set(db.prepare("SELECT * FROM tasks WHERE parent_task_id = ?").all(parentTaskId)
-    .map(mapTask)
-    .filter((task) => task.labels.includes("follow-up"))
-    .map((task) => normalizeFollowUpTitle(task.title)));
 }
 
 function parseFollowUpCandidates(output: string, sourceTitle: string) {
