@@ -11,6 +11,7 @@ import type { PlanningMode } from "./planner.js";
 import { recoverInterruptedRuns } from "./runtime.js";
 import { recoverDraftReviewRequests, replayDraftEvents } from "./drafts.js";
 import { recoverPreviewProcesses } from "./preview-runtime.js";
+import { startCodeReviewRuntime } from "./code-reviews.js";
 import { ensureDraftReviewAgentRuntime } from "./draft-review-agents.js";
 import { invokeApplicationCommand } from "./application.js";
 import { initializeTelemetry, shutdownTelemetry, withTelemetrySpan } from "./telemetry.js";
@@ -217,6 +218,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, await invokeApplicationCommand("chat:create", { projectId: project.id }), 201);
         return;
       }
+      if (req.method === "GET" && childPath === "chat") {
+        const limit = Number(requestUrl.searchParams.get("limit") || 10);
+        const cursor = requestUrl.searchParams.get("cursor") || undefined;
+        sendJson(res, await invokeApplicationCommand("chat:list", { projectId: project.id, cursor, limit }));
+        return;
+      }
 
       const chatMatch = childPath.match(/^chat\/([^/]+)$/);
       if (chatMatch && req.method === "GET") {
@@ -400,6 +407,21 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, await invokeApplicationCommand("reviews:followup", { projectId: project.id, runId: reviewFollowUpMatch[1], commentIds: body.commentIds }), 201);
         return;
       }
+      if (childPath === "code-reviews" && req.method === "GET") {
+        sendJson(res, await invokeApplicationCommand("reviews:auto-list", { projectId: project.id, taskId: requestUrl.searchParams.get("taskId") || undefined }));
+        return;
+      }
+      const codeReviewRetryMatch = childPath.match(/^code-reviews\/([^/]+)\/retry$/);
+      if (codeReviewRetryMatch && req.method === "POST") {
+        sendJson(res, await invokeApplicationCommand("reviews:auto-retry", { projectId: project.id, jobId: codeReviewRetryMatch[1] }));
+        return;
+      }
+      const codeFindingMatch = childPath.match(/^code-review-findings\/([^/]+)$/);
+      if (codeFindingMatch && req.method === "PATCH") {
+        const body = await readBody<{ status: "addressed" | "dismissed"; reason?: string }>(req);
+        sendJson(res, await invokeApplicationCommand("reviews:auto-finding-update", { projectId: project.id, findingId: codeFindingMatch[1], status: body.status, reason: body.reason }));
+        return;
+      }
 
       if (req.method === "POST" && childPath === "agents") {
         sendJson(res, await invokeApplicationCommand("agents:save", { projectId: project.id, payload: await readBody(req) }), 201);
@@ -511,6 +533,10 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, await invokeApplicationCommand("tasks:create-from-prompt", { projectId: project.id, prompt: body.prompt, autoAssign: body.autoAssign }), 201);
         return;
       }
+      if (req.method === "GET" && childPath === "tasks/completion-branches") {
+        sendJson(res, await invokeApplicationCommand("tasks:completion-branches", { projectId: project.id }));
+        return;
+      }
 
       if (req.method === "POST" && childPath === "documents") {
         sendJson(res, await invokeApplicationCommand("documents:create", { projectId: project.id, payload: await readBody(req) }), 201);
@@ -574,6 +600,18 @@ const server = http.createServer(async (req, res) => {
 
         if (req.method === "POST" && action === "merge") {
           const response = await invokeApplicationCommand("tasks:merge", { projectId: project.id, taskId }) as { result: { ok: boolean } };
+          sendJson(res, response, response.result.ok ? 200 : 409);
+          return;
+        }
+
+        if (req.method === "GET" && action === "completion-branches") {
+          sendJson(res, await invokeApplicationCommand("tasks:completion-branches", { projectId: project.id }));
+          return;
+        }
+
+        if (req.method === "POST" && action === "complete") {
+          const body = await readBody<{ targetBranch?: string; merge?: boolean; removeWorktree?: boolean }>(req);
+          const response = await invokeApplicationCommand("tasks:complete", { projectId: project.id, taskId, targetBranch: body.targetBranch || "", merge: body.merge === true, removeWorktree: body.removeWorktree === true }) as { result: { ok: boolean } };
           sendJson(res, response, response.result.ok ? 200 : 409);
           return;
         }
@@ -672,6 +710,7 @@ async function recoverRegisteredProjects() {
   return withTelemetrySpan("recovery.audit", { "harness.operation": "server.recover" }, async () => {
     const results = await Promise.all(listProjects().map(async (project) => {
       try {
+        startCodeReviewRuntime(project);
         const runtime = recoverInterruptedRuns(project);
         const drafts = recoverDraftReviewRequests(project);
         const previews = await recoverPreviewProcesses(project);

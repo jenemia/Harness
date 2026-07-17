@@ -1,4 +1,5 @@
 import { parse, stringify } from "yaml";
+import type { ReviewSchedule } from "../../api/contracts";
 
 export type ParsedAgentMarkdownDraft = {
   frontmatter: Record<string, unknown>;
@@ -11,7 +12,9 @@ export type ParsedAgentMarkdownDraft = {
   allowedTools: string[];
   maxParallel: number;
   enabled: boolean;
+  reviewSchedule: ReviewSchedule | null;
   persona: string;
+  instructions: string;
   boundaries: string;
 };
 
@@ -33,7 +36,9 @@ export function parseAgentMarkdownDraft(raw: string): ParsedAgentMarkdownDraft {
     allowedTools: stringArray(value.allowedTools),
     maxParallel: Math.max(1, Number(value.maxParallel || 1)),
     enabled: value.enabled !== false,
+    reviewSchedule: parseReviewSchedule(value.reviewSchedule, String(value.role || "worker")),
     persona: sectionValue(sections, "Persona"),
+    instructions: sectionValue(sections, "Instructions"),
     boundaries: sectionValue(sections, "Boundaries"),
   };
 }
@@ -50,15 +55,38 @@ export function updateAgentMarkdownDraft(raw: string, patch: Partial<ParsedAgent
     ...(patch.allowedTools !== undefined ? { allowedTools: patch.allowedTools } : {}),
     ...(patch.maxParallel !== undefined ? { maxParallel: patch.maxParallel } : {}),
     ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+    ...(patch.reviewSchedule !== undefined ? { reviewSchedule: patch.reviewSchedule } : {}),
   };
   const sections = parsed.sections.map((section) => {
     if (section.name === "Persona" && patch.persona !== undefined) return { ...section, content: patch.persona };
+    if (section.name === "Instructions" && patch.instructions !== undefined) return { ...section, content: patch.instructions };
     if (section.name === "Boundaries" && patch.boundaries !== undefined) return { ...section, content: patch.boundaries };
     return section;
   });
+  if (patch.persona !== undefined && !sections.some((section) => section.name === "Persona")) {
+    sections.push({ name: "Persona", content: patch.persona });
+  }
+  if (patch.instructions !== undefined && !sections.some((section) => section.name === "Instructions")) {
+    sections.push({ name: "Instructions", content: patch.instructions });
+  }
   const yaml = stringify(frontmatter, { lineWidth: 0 }).trim();
   const body = sections.map((section) => `# ${section.name}\n\n${section.content.trim()}`).join("\n\n");
   return `---\n${yaml}\n---\n\n${body}\n`;
+}
+
+function parseReviewSchedule(value: unknown, role: string): ReviewSchedule | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return role === "code-reviewer" ? { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null } : null;
+  }
+  const schedule = value as Record<string, unknown>;
+  const trigger = schedule.trigger === "interval" || schedule.trigger === "daily" ? schedule.trigger : "on-commit";
+  return {
+    enabled: schedule.enabled !== false,
+    trigger,
+    intervalMinutes: typeof schedule.intervalMinutes === "number" ? schedule.intervalMinutes : null,
+    dailyAt: typeof schedule.dailyAt === "string" ? schedule.dailyAt : null,
+    timezone: typeof schedule.timezone === "string" ? schedule.timezone : null,
+  };
 }
 
 export function buildLineDiff(before: string, after: string) {

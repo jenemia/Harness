@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -53,10 +53,16 @@ test("Cursor CLI provider uses login session, default stream command, timeout, a
   const bin = path.join(root, "bin");
   mkdirSync(bin, { recursive: true });
   const executable = path.join(bin, "cursor-agent");
+  const argumentLog = path.join(root, "cursor-arguments.log");
+  const codexArgumentLog = path.join(root, "codex-arguments.log");
+  process.env.HARNESS_TEST_CURSOR_ARGUMENT_LOG = argumentLog;
+  process.env.HARNESS_TEST_CODEX_ARGUMENT_LOG = codexArgumentLog;
   writeFileSync(executable, [
     "#!/bin/sh",
     "if [ \"$1\" = \"--version\" ]; then echo 'cursor-agent 1.2.3'; exit 0; fi",
     "if [ \"$1\" = \"status\" ]; then echo 'Logged in'; exit 0; fi",
+    "printf '%s\\n' \"$*\" >> \"$HARNESS_TEST_CURSOR_ARGUMENT_LOG\"",
+    "if [ \"$1\" = \"--resume\" ]; then exit 1; fi",
     "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"apiKeySource\":\"login\",\"cwd\":\"/private\",\"session_id\":\"session-1\",\"model\":\"test-model\",\"permissionMode\":\"default\"}'",
     "printf '%s\\n' '{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"private prompt\"}]},\"session_id\":\"session-1\"}'",
     "printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Cursor completed the task.\"}]},\"session_id\":\"session-1\"}'",
@@ -65,6 +71,16 @@ test("Cursor CLI provider uses login session, default stream command, timeout, a
     "printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":8,\"result\":\"Cursor completed the task.\",\"session_id\":\"session-1\"}'"
   ].join("\n"), "utf8");
   chmodSync(executable, 0o755);
+  const codexExecutable = path.join(bin, "codex");
+  writeFileSync(codexExecutable, [
+    "#!/bin/sh",
+    "if [ \"$1\" = \"--version\" ]; then echo 'codex 1.0'; exit 0; fi",
+    "printf '%s\\n' \"$*\" >> \"$HARNESS_TEST_CODEX_ARGUMENT_LOG\"",
+    "if [ \"$2\" = \"resume\" ]; then exit 1; fi",
+    "printf '%s\\n' '{\"type\":\"thread.started\",\"thread_id\":\"thread-new\"}'",
+    "printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Codex completed the task.\"}}'"
+  ].join("\n"), "utf8");
+  chmodSync(codexExecutable, 0o755);
   process.env.PATH = `${bin}${path.delimiter}${previousPath || ""}`;
 
   try {
@@ -124,11 +140,44 @@ test("Cursor CLI provider uses login session, default stream command, timeout, a
     );
     assert.equal(timedOut.ok, false);
     assert.match(timedOut.error || "", /timed out/i);
+
+    const decisions: string[] = [];
+    const resumed = await providers.llm("cursor-cli").run(
+      { ...agent, cliCommand: 'cursor-agent -p --force --output-format stream-json < "$HARNESS_PROMPT_FILE"' },
+      task,
+      { kind: "harness", branchName: null, worktreePath: run?.worktreePath || project.path },
+      { globalMemory: [], projectMemory: [], timeoutMs: 1000, resumeSession: { sessionId: "session-old", parentRunId: "run-old" }, onEvent: (event) => {
+        if (event.type === "decision" && typeof event.payload.phase === "string") decisions.push(event.payload.phase);
+      } }
+    );
+    assert.equal(resumed.ok, true);
+    assert.deepEqual(decisions, ["session_fallback", "session_initialized"]);
+    const invocations = readFileSync(argumentLog, "utf8").trim().split("\n");
+    assert.match(invocations.at(-2) || "", /^--resume session-old /);
+    assert.doesNotMatch(invocations.at(-1) || "", /--resume/);
+
+    const codexDecisions: string[] = [];
+    const codex = await providers.llm("codex-5.6-sol").run(
+      agent,
+      task,
+      { kind: "harness", branchName: null, worktreePath: run?.worktreePath || project.path },
+      { globalMemory: [], projectMemory: [], timeoutMs: 1000, resumeSession: { sessionId: "thread-old", parentRunId: "run-old" }, onEvent: (event) => {
+        if (event.type === "decision" && typeof event.payload.phase === "string") codexDecisions.push(event.payload.phase);
+      } }
+    );
+    assert.equal(codex.ok, true);
+    assert.match(codex.output, /Codex completed/);
+    assert.deepEqual(codexDecisions, ["session_fallback", "session_initialized"]);
+    const codexInvocations = readFileSync(codexArgumentLog, "utf8").trim().split("\n").filter((line) => line.startsWith("exec "));
+    assert.match(codexInvocations[0], /^exec resume --json --model gpt-5\.6-codex-sol thread-old -$/);
+    assert.match(codexInvocations[1], /^exec --json --sandbox workspace-write --model gpt-5\.6-codex-sol -$/);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
     if (previousPath === undefined) delete process.env.PATH;
     else process.env.PATH = previousPath;
+    delete process.env.HARNESS_TEST_CURSOR_ARGUMENT_LOG;
+    delete process.env.HARNESS_TEST_CODEX_ARGUMENT_LOG;
     rmSync(root, { recursive: true, force: true });
   }
 });

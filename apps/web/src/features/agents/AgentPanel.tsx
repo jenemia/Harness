@@ -1,15 +1,11 @@
-import { Bot, FileText, Plus, X } from "lucide-react";
+import { Bot, FileText, Plus, UsersRound, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type {
-  Agent,
-  AgentTemplate,
-  Overview,
-  ProviderCatalog,
-} from "../../api/contracts";
+import type { Agent, AgentTemplate, Overview, ProviderCatalog } from "../../api/contracts";
 import { agentService, type AgentDocumentBundle } from "../../services/agentService";
-import { formatDate } from "../../shared/format";
 import { useI18n } from "../../i18n";
 import { AgentMarkdownEditor } from "./AgentMarkdownEditor";
+import { connectedAgentModels } from "./agentModelOptions";
+
 export function AgentPanel(props: {
   overview: Overview;
   providerCatalog: ProviderCatalog | null;
@@ -17,339 +13,136 @@ export function AgentPanel(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onTemplatesChanged: (templates: AgentTemplate[]) => void;
   onChanged: () => Promise<void>;
+  onOpenTask: (taskId: string) => void;
 }) {
-  const { locale, t } = useI18n();
-  const [editingAgentId, setEditingAgentId] = useState("");
+  const { t } = useI18n();
+  const activeAgents = props.overview.agents.filter((agent) => !agent.archivedAt);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [editorBundle, setEditorBundle] = useState<AgentDocumentBundle | null>(null);
+  const [editorDirty, setEditorDirty] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [mobileDetail, setMobileDetail] = useState(false);
   const [name, setName] = useState("");
   const [role, setRole] = useState("worker");
-  const [modelBackend, setModelBackend] = useState("mock");
+  const [modelBackend, setModelBackend] = useState(props.overview.settings.defaultModelBackend);
   const [persona, setPersona] = useState("");
   const [cliCommand, setCliCommand] = useState("");
   const [capabilitiesText, setCapabilitiesText] = useState("");
   const [allowedToolsText, setAllowedToolsText] = useState("");
   const [boundaries, setBoundaries] = useState("");
-  const [maxParallel, setMaxParallel] = useState(1);
+  const [maxParallel, setMaxParallel] = useState(props.overview.settings.defaultAgentMaxParallel);
   const [enabled, setEnabled] = useState(true);
-  const [editorBundle, setEditorBundle] = useState<AgentDocumentBundle | null>(null);
-  const selectedProvider = props.providerCatalog?.llmProviders.find(
-    (provider) => provider.id === modelBackend,
+  const connectedModels = useMemo(
+    () => connectedAgentModels(props.providerCatalog, props.overview.settings),
+    [props.providerCatalog, props.overview.settings],
   );
-  const agentStats = useMemo(() => {
-    return new Map(
-      props.overview.agents.map((agent) => {
-        const currentTask = agent.currentTaskId
-          ? props.overview.tasks.find(
-              (task) => task.id === agent.currentTaskId,
-            ) || null
-          : props.overview.tasks.find(
-              (task) =>
-                task.assigneeAgentId === agent.id &&
-                task.status === "In Progress",
-            ) || null;
-        const runs = props.overview.runs.filter(
-          (run) => run.agentId === agent.id,
-        );
-        const latestActivity =
-          props.overview.events.find((event) => event.agentId === agent.id) ||
-          null;
-        return [
-          agent.id,
-          {
-            currentTask,
-            latestActivity,
-            completedRuns: runs.filter((run) => run.status === "completed")
-              .length,
-            failedRuns: runs.filter((run) => run.status === "failed").length,
-            runningRuns: runs.filter((run) => run.status === "running").length,
-          },
-        ];
-      }),
-    );
-  }, [
-    props.overview.agents,
-    props.overview.events,
-    props.overview.runs,
-    props.overview.tasks,
-  ]);
-
-  const formPayload = {
-    name,
-    role,
-    persona,
-    cliCommand: cliCommand || null,
-    modelBackend,
-    maxParallel,
-    enabled,
-    capabilities: parseCapabilities(capabilitiesText),
-    allowedTools: parseCapabilities(allowedToolsText),
-    boundaries,
-  };
 
   useEffect(() => {
-    if (!editingAgentId) {
-      setModelBackend(props.overview.settings.defaultModelBackend);
-      setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
-    }
-  }, [
-    props.overview.settings.defaultModelBackend,
-    props.overview.settings.defaultAgentMaxParallel,
-  ]);
+    if (selectedAgentId && activeAgents.some((agent) => agent.id === selectedAgentId)) return;
+    const first = activeAgents[0];
+    setSelectedAgentId(first?.id || "");
+  }, [activeAgents, selectedAgentId]);
 
-  async function submit(event: FormEvent) {
+  useEffect(() => {
+    if (!selectedAgentId || creating) return;
+    let active = true;
+    void props.runAction(async () => {
+      const bundle = await agentService.get(props.overview.project.id, selectedAgentId);
+      if (active) setEditorBundle(bundle);
+    });
+    return () => { active = false; };
+  }, [creating, props.overview.project.id, selectedAgentId]);
+
+  async function selectAgent(agent: Agent) {
+    if (agent.id === selectedAgentId && !creating) { setMobileDetail(true); return; }
+    if (editorDirty && !window.confirm(t("agents.discardChanges"))) return;
+    setEditorDirty(false);
+    setCreating(false);
+    setEditorBundle(null);
+    setSelectedAgentId(agent.id);
+    setMobileDetail(true);
+  }
+
+  function beginCreate() {
+    if (editorDirty && !window.confirm(t("agents.discardChanges"))) return;
+    setCreating(true);
+    setEditorBundle(null);
+    setMobileDetail(true);
+    setName(""); setRole("worker"); setPersona(""); setCliCommand("");
+    setCapabilitiesText(""); setAllowedToolsText(""); setBoundaries("");
+    setModelBackend(connectedModels.some((model) => model.id === props.overview.settings.defaultModelBackend)
+      ? props.overview.settings.defaultModelBackend : connectedModels[0]?.id || "mock");
+    setMaxParallel(props.overview.settings.defaultAgentMaxParallel); setEnabled(true);
+  }
+
+  function applyTemplate(templateId: string) {
+    const template = props.templates.find((item) => item.id === templateId);
+    if (!template) return;
+    setName(template.name); setRole(template.role); setPersona(template.persona);
+    setCliCommand(template.cliCommand || ""); setCapabilitiesText(template.capabilities.join(", "));
+    setAllowedToolsText(template.allowedTools.join(", ")); setBoundaries(template.boundaries);
+    setModelBackend(template.modelBackend); setMaxParallel(template.maxParallel);
+  }
+
+  const createPayload = {
+    name, role, persona, cliCommand: cliCommand || null, modelBackend, maxParallel, enabled,
+    capabilities: parseCapabilities(capabilitiesText), allowedTools: parseCapabilities(allowedToolsText), boundaries,
+    ...(role === "code-reviewer" ? { reviewSchedule: { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null } } : {}),
+  };
+
+  async function submitCreate(event: FormEvent) {
     event.preventDefault();
     await props.runAction(async () => {
-      await agentService.save(
-        props.overview.project.id,
-        editingAgentId || null,
-        formPayload,
-      );
-      resetForm();
+      const response = await agentService.save(props.overview.project.id, null, createPayload);
+      setCreating(false);
       await props.onChanged();
+      setSelectedAgentId(response.agent.id);
     });
   }
 
   async function saveTemplate() {
     await props.runAction(async () => {
-      const response = await agentService.createTemplate(formPayload);
+      const response = await agentService.createTemplate(createPayload);
       props.onTemplatesChanged(response.templates);
     });
   }
 
-  function applyTemplate(templateId: string) {
-    const template = props.templates.find((item) => item.id === templateId);
-    if (!template) {
-      return;
-    }
-
-    setEditingAgentId("");
-    setName(template.name);
-    setRole(template.role);
-    setPersona(template.persona);
-    setCliCommand(template.cliCommand || "");
-    setCapabilitiesText(template.capabilities.join(", "));
-    setAllowedToolsText(template.allowedTools.join(", "));
-    setBoundaries(template.boundaries);
-    setModelBackend(template.modelBackend);
-    setMaxParallel(template.maxParallel);
-  }
-
-  async function editAgent(agent: Agent) {
-    await props.runAction(async () => {
-      const bundle = await agentService.get(props.overview.project.id, agent.id);
-      setEditingAgentId(agent.id);
-      setEditorBundle(bundle);
-    });
-  }
-
-  function resetForm() {
-    setEditingAgentId("");
-    setName("");
-    setPersona("");
-    setCliCommand("");
-    setCapabilitiesText("");
-    setAllowedToolsText("");
-    setBoundaries("");
-    setRole("worker");
-    setModelBackend(props.overview.settings.defaultModelBackend);
-    setMaxParallel(props.overview.settings.defaultAgentMaxParallel);
-    setEnabled(true);
-    setEditorBundle(null);
-  }
-
   return (
-    <section className="rail-panel">
-      <div className="panel-header">
-        <Bot size={17} />
-        <h2>{t("panel.agents")}</h2>
-      </div>
-      <div className="agent-list">
-        {props.overview.agents.map((agent) => {
-          const stats = agentStats.get(agent.id);
-          return (
-            <div className="agent-row" key={agent.id}>
-              <span className={`status-dot ${agent.status}`} />
-              <div className="agent-row-body">
-                <div className="agent-row-title">
-                  <strong>{agent.name}</strong>
-                  <button
-                    className="mini-button"
-                    type="button"
-                    onClick={() => void editAgent(agent)}
-                  >
-                    {t("common.edit")}
-                  </button>
-                </div>
-                <span>
-                  {agent.role} · {agent.modelBackend} · max {agent.maxParallel}
-                </span>
-                <span>
-                  definition: {agent.parseStatus} · {agent.definitionPath || "not materialized"}
-                </span>
-                {agent.archivedAt && <span>archived: {agent.archivePath}</span>}
-                {agent.parseError && <span>definition error: {agent.parseError}</span>}
-                {agent.capabilities.length > 0 && (
-                  <span>{agent.capabilities.join(", ")}</span>
-                )}
-                {agent.allowedTools.length > 0 && (
-                  <span>tools: {agent.allowedTools.join(", ")}</span>
-                )}
-                {agent.boundaries && (
-                  <span>boundaries: {agent.boundaries}</span>
-                )}
-                <div className="agent-stat-grid">
-                  <b>{stats?.completedRuns || 0} done</b>
-                  <b>{stats?.failedRuns || 0} failed</b>
-                  <b>{stats?.runningRuns || 0} running</b>
-                </div>
-                <span className="agent-context-line">
-                  Current: {stats?.currentTask?.title || "None"}
-                </span>
-                <span className="agent-context-line">
-                  Recent:{" "}
-                  {stats?.latestActivity
-                    ? `${stats.latestActivity.type} · ${formatDate(stats.latestActivity.createdAt, locale)}`
-                    : "None"}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {editorBundle && (
-        <AgentMarkdownEditor
-          overview={props.overview}
-          providerCatalog={props.providerCatalog}
-          bundle={editorBundle}
-          runAction={props.runAction}
-          onBundleChanged={setEditorBundle}
-          onClose={resetForm}
-          onProjectChanged={props.onChanged}
-        />
-      )}
-      {!editorBundle && <form className="stack-form" onSubmit={submit}>
-        {editingAgentId && (
-          <div className="form-group-title">Editing agent</div>
-        )}
-        <select
-          value=""
-          onChange={(event) => applyTemplate(event.target.value)}
-        >
-          <option value="">Apply agent template</option>
-          {props.templates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name} · {template.role}
-            </option>
-          ))}
-        </select>
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Agent name"
-        />
-        <select value={role} onChange={(event) => setRole(event.target.value)}>
-          <option value="worker">worker</option>
-          <option value="programmer">programmer</option>
-          <option value="reviewer">reviewer</option>
-          <option value="project-manager">project-manager</option>
-        </select>
-        <select
-          value={modelBackend}
-          onChange={(event) => setModelBackend(event.target.value)}
-        >
-          {(
-            props.providerCatalog?.llmProviders || [
-              { id: "mock", label: "Mock" },
-            ]
-          ).map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {provider.label}
-            </option>
-          ))}
-        </select>
-        <input
-          min={1}
-          max={8}
-          type="number"
-          value={maxParallel}
-          onChange={(event) =>
-            setMaxParallel(Math.max(1, Number(event.target.value || 1)))
-          }
-          placeholder="Max parallel"
-        />
-        <label className="checkbox-row">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => setEnabled(event.target.checked)}
-          />
-          <span>Enabled for new runs</span>
-        </label>
-        <textarea
-          value={persona}
-          onChange={(event) => setPersona(event.target.value)}
-          placeholder="Persona"
-        />
-        <input
-          value={capabilitiesText}
-          onChange={(event) => setCapabilitiesText(event.target.value)}
-          placeholder="Capabilities, comma separated"
-        />
-        <input
-          value={allowedToolsText}
-          onChange={(event) => setAllowedToolsText(event.target.value)}
-          placeholder="Allowed tools, comma separated"
-        />
-        <textarea
-          value={boundaries}
-          onChange={(event) => setBoundaries(event.target.value)}
-          placeholder="Boundaries and safety limits"
-        />
-        <input
-          value={cliCommand}
-          onChange={(event) => setCliCommand(event.target.value)}
-          placeholder={selectedProvider?.commandExample || "CLI command"}
-        />
-        {selectedProvider && (
-          <div className="provider-help">
-            <span>{selectedProvider.description}</span>
-            <span>
-              {selectedProvider.capabilities.streaming ? "Live stream" : "Single-result fallback"}
-              {selectedProvider.capabilities.toolEvents ? " · tool events" : " · no tool events"}
-              {selectedProvider.capabilities.sessionResume ? " · session resume available" : " · no session resume"}
-            </span>
-          </div>
-        )}
-        {editingAgentId && (
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={resetForm}
-          >
-            <X size={16} />
-            <span>Cancel</span>
-          </button>
-        )}
-        <button
-          className="secondary-button"
-          type="button"
-          onClick={() => void saveTemplate()}
-          disabled={!name.trim()}
-        >
-          <FileText size={16} />
-          <span>Save template</span>
-        </button>
-        <button className="secondary-button" type="submit">
-          <Plus size={16} />
-          <span>{editingAgentId ? "Save agent" : "Agent"}</span>
-        </button>
-      </form>}
+    <section className={`agent-management-layout ${mobileDetail ? "show-detail" : "show-list"}`}>
+      <aside className="agent-management-list">
+        <header>
+          <div><Bot size={18} /><strong>{t("panel.agents")}</strong><span>{activeAgents.length}</span></div>
+          <button className="primary-button compact" type="button" onClick={beginCreate}><Plus size={15} />{t("agents.add")}</button>
+        </header>
+        <div className="agent-selection-list">
+          {activeAgents.map((agent, index) => {
+            const currentTask = props.overview.tasks.find((task) => task.id === agent.currentTaskId) || null;
+            return <button className={`agent-selection-row ${selectedAgentId === agent.id && !creating ? "active" : ""}`} type="button" key={agent.id} onClick={() => void selectAgent(agent)}>
+              <span className={`agent-avatar tone-${index % 5}`}>{agent.name.slice(0, 1).toUpperCase()}</span>
+              <span className="agent-selection-copy"><strong>{agent.name}</strong><small>{currentTask?.title || agent.role}</small></span>
+              <span className={`agent-status-pill ${agent.status}`}><i />{t(`agents.status.${agent.status}`)}</span>
+            </button>;
+          })}
+          {activeAgents.length === 0 && <div className="agent-empty-state"><UsersRound size={28} /><span>{t("agents.empty")}</span></div>}
+        </div>
+      </aside>
+
+      <main className="agent-management-detail">
+        <button className="agent-mobile-back secondary-button compact" type="button" onClick={() => setMobileDetail(false)}>← {t("agents.list")}</button>
+        {creating ? <form className="agent-create-form" onSubmit={submitCreate}>
+          <header><div><span className="modal-kicker">{t("agents.new")}</span><h2>{t("agents.createTitle")}</h2></div><button className="icon-button" type="button" onClick={() => { setCreating(false); setMobileDetail(false); }}><X size={16} /></button></header>
+          <select value="" onChange={(event) => applyTemplate(event.target.value)}><option value="">{t("agents.applyTemplate")}</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.role}</option>)}</select>
+          <div className="agent-form-grid"><input required value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.name")} /><select value={role} onChange={(event) => setRole(event.target.value)}><option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="code-reviewer">code-reviewer</option><option value="project-manager">project-manager</option></select></div>
+          <select value={modelBackend} onChange={(event) => setModelBackend(event.target.value)}>{connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
+          <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.persona")} />
+          <details><summary>{t("agents.advanced")}</summary><div className="stack-form"><input type="number" min={1} max={8} value={maxParallel} onChange={(event) => setMaxParallel(Math.max(1, Number(event.target.value || 1)))} /><label className="checkbox-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>{t("agents.enabled")}</span></label><input value={capabilitiesText} onChange={(event) => setCapabilitiesText(event.target.value)} placeholder="Capabilities" /><input value={allowedToolsText} onChange={(event) => setAllowedToolsText(event.target.value)} placeholder="Allowed tools" /><textarea value={boundaries} onChange={(event) => setBoundaries(event.target.value)} placeholder="Boundaries" /><input value={cliCommand} onChange={(event) => setCliCommand(event.target.value)} placeholder="CLI command" /></div></details>
+          <div className="agent-create-actions"><button className="secondary-button" type="button" disabled={!name.trim()} onClick={() => void saveTemplate()}><FileText size={16} />{t("agents.saveTemplate")}</button><button className="primary-button" type="submit" disabled={!name.trim() || !connectedModels.length}><Plus size={16} />{t("agents.create")}</button></div>
+        </form> : editorBundle ? <AgentMarkdownEditor overview={props.overview} providerCatalog={props.providerCatalog} bundle={editorBundle} runAction={props.runAction} onBundleChanged={setEditorBundle} onClose={() => setMobileDetail(false)} onProjectChanged={props.onChanged} onOpenTask={props.onOpenTask} onDirtyChange={setEditorDirty} /> : <div className="agent-empty-detail"><Bot size={34} /><span>{activeAgents.length ? t("agents.loading") : t("agents.selectOrCreate")}</span></div>}
+      </main>
     </section>
   );
 }
 
 export function parseCapabilities(value: string) {
-  return value
-    .split(",")
-    .map((capability) => capability.trim())
-    .filter(Boolean);
+  return value.split(",").map((capability) => capability.trim()).filter(Boolean);
 }

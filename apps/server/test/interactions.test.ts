@@ -259,6 +259,7 @@ test("interactions persist all kinds, suspend structured provider runs, recover,
       workspaceMode: "harness"
     });
     assert.equal((await startTask(project, approvalTask.id)).accepted, false);
+    assert.equal(getProjectOverview(project).tasks.find((item) => item.id === approvalTask.id)?.status, "In Review");
     const linked = getProjectOverview(project).approvals.find((item) => item.taskId === approvalTask.id);
     assert.ok(linked?.interactionId);
     assert.equal(getProjectOverview(project).interactions.find((item) => item.id === linked.interactionId)?.approvalId, linked.id);

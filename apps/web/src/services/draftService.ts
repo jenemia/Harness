@@ -5,10 +5,10 @@ import { desktopOrHttp } from "../api/desktop";
 export const draftService = {
   create: (projectId: string, content = "") => desktopOrHttp(
     "drafts:create",
-    { projectId, payload: { content } },
+    { projectId, payload: { content, reviewers: [{ role: "planner" }] } },
     () => api<{ draft: DraftSnapshot }>(`/api/projects/${projectId}/drafts`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content, reviewers: [{ role: "planner" }] }),
     }),
   ) as Promise<{ draft: DraftSnapshot }>,
 

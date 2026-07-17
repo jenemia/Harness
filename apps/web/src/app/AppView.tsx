@@ -1,5 +1,5 @@
 import { FolderOpen, MessageCircle, Play, Plus, RefreshCcw, Wifi } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { lazy, startTransition, Suspense, useEffect, useState } from "react";
 import { ScheduleResultLine } from "../features/activity/ScheduleResultLine";
 import { AgentSidebarList } from "../features/agents/AgentSidebarList";
 import { ApprovalsPanel } from "../features/approvals/ApprovalsPanel";
@@ -15,16 +15,22 @@ import { ProjectSwitcher } from "../features/projects/ProjectSwitcher";
 import { statusMessageKey, useI18n } from "../i18n";
 import { SettingsNavigation, type SettingsTab } from "../features/settings/SettingsNavigation";
 import { ModelSelectionPanel } from "../features/settings/ModelSelectionPanel";
+import { TaskCardSettingsPanel } from "../features/settings/TaskCardSettingsPanel";
 import { taskStatuses } from "../shared/taskStatus";
 import { AppNavigation } from "./AppNavigation";
 import type { AppController } from "./useAppController";
 
-const ActivityPanels = lazy(() => import("../features/activity/ActivityPanels").then((module) => ({ default: module.ActivityPanels })));
-const AgentPanel = lazy(() => import("../features/agents/AgentPanel").then((module) => ({ default: module.AgentPanel })));
-const LlmManagementPanel = lazy(() => import("../features/settings/LlmManagementPanel").then((module) => ({ default: module.LlmManagementPanel })));
-const TaskDetailDrawer = lazy(() => import("../features/tasks/TaskDetailDrawer").then((module) => ({ default: module.TaskDetailDrawer })));
-const TaskPromptModal = lazy(() => import("../features/tasks/TaskPromptModal").then((module) => ({ default: module.TaskPromptModal })));
-const ProjectChatModal = lazy(() => import("../features/chat/ProjectChatModal").then((module) => ({ default: module.ProjectChatModal })));
+const loadActivityPanels = () => import("../features/activity/ActivityPanels");
+const loadAgentPanel = () => import("../features/agents/AgentPanel");
+const loadTaskDetailDrawer = () => import("../features/tasks/TaskDetailDrawer");
+const loadTaskPromptModal = () => import("../features/tasks/TaskPromptModal");
+const loadProjectChatModal = () => import("../features/chat/ProjectChatModal");
+
+const ActivityPanels = lazy(() => loadActivityPanels().then((module) => ({ default: module.ActivityPanels })));
+const AgentPanel = lazy(() => loadAgentPanel().then((module) => ({ default: module.AgentPanel })));
+const TaskDetailDrawer = lazy(() => loadTaskDetailDrawer().then((module) => ({ default: module.TaskDetailDrawer })));
+const TaskPromptModal = lazy(() => loadTaskPromptModal().then((module) => ({ default: module.TaskPromptModal })));
+const ProjectChatModal = lazy(() => loadProjectChatModal().then((module) => ({ default: module.ProjectChatModal })));
 
 export function AppView({ controller }: { controller: AppController }) {
   const { t, locale } = useI18n();
@@ -74,7 +80,26 @@ export function AppView({ controller }: { controller: AppController }) {
     initializeProjectGit,
     activeSection,
     setActiveSection,
+    hasInitializedOverview,
   } = controller;
+
+  useEffect(() => {
+    const preload = () => {
+      void Promise.all([
+        loadActivityPanels(),
+        loadAgentPanel(),
+        loadTaskDetailDrawer(),
+        loadTaskPromptModal(),
+        loadProjectChatModal(),
+      ]).catch(() => undefined);
+    };
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(preload);
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timer = setTimeout(preload, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const sectionTitle = {
     board: t("nav.board"),
@@ -84,11 +109,10 @@ export function AppView({ controller }: { controller: AppController }) {
   }[activeSection];
 
   return (
-    <Suspense fallback={<div className="busy-line">{t("app.working")}</div>}>
     <div className="app-shell">
       <AppNavigation
         activeSection={activeSection}
-        onChange={setActiveSection}
+        onChange={(section) => startTransition(() => setActiveSection(section))}
       />
 
       <aside className="context-sidebar">
@@ -170,7 +194,7 @@ export function AppView({ controller }: { controller: AppController }) {
           </header>
 
           {error && <div className="error-line">{error}</div>}
-          {isChatOpen && overview && <ProjectChatModal projectId={overview.project.id} projectPath={overview.project.path} onClose={() => setIsChatOpen(false)} />}
+          {isChatOpen && overview && <Suspense fallback={null}><ProjectChatModal projectId={overview.project.id} projectPath={overview.project.path} onClose={() => setIsChatOpen(false)} /></Suspense>}
           {activeSection === "board" && overview && lastScheduleResult && (
             <ScheduleResultLine
               result={lastScheduleResult}
@@ -179,14 +203,16 @@ export function AppView({ controller }: { controller: AppController }) {
             />
           )}
 
-          {activeSection === "settings" ? (
+          {!hasInitializedOverview ? (
+            <div className="empty-state" aria-busy="true">
+              <RefreshCcw size={28} />
+              <h2>{t("app.working")}</h2>
+            </div>
+          ) : activeSection === "settings" ? (
             <div className="settings-detail-page">
               {settingsTab === "models" && <ModelSelectionPanel overview={overview} providerCatalog={providerCatalog} settings={settings}
-                runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview} />}
-              {settingsTab === "connections" && <LlmManagementPanel
-                overview={overview} providerCatalog={providerCatalog} settings={settings} runAction={runAction}
-                onChanged={setSettings} onRefreshProviders={refreshProviders}
-              />}
+                runAction={runAction} onChanged={setSettings} onProjectChanged={refreshOverview} onRefreshProviders={refreshProviders} />}
+              {settingsTab === "task-cards" && overview && <TaskCardSettingsPanel overview={overview} korean={locale === "ko"} runAction={runAction} onChanged={refreshOverview} />}
             </div>
           ) : overview ? (
             <>
@@ -296,20 +322,21 @@ export function AppView({ controller }: { controller: AppController }) {
 
               {activeSection === "agents" && (
                 <div className="feature-page agents-page">
-                  <AgentPanel
+                  <Suspense fallback={null}><AgentPanel
                     overview={overview}
                     providerCatalog={providerCatalog}
                     templates={agentTemplates}
                     runAction={runAction}
                     onTemplatesChanged={setAgentTemplates}
                     onChanged={refreshOverview}
-                  />
+                    onOpenTask={setSelectedTaskId}
+                  /></Suspense>
                 </div>
               )}
 
               {activeSection === "runs" && (
                 <div className="feature-page activity-page">
-                  <ActivityPanels overview={overview} />
+                  <Suspense fallback={null}><ActivityPanels overview={overview} /></Suspense>
                 </div>
               )}
             </>
@@ -330,15 +357,15 @@ export function AppView({ controller }: { controller: AppController }) {
 
         {isBusy && <div className="busy-line">{t("app.working")}</div>}
         {overview && isTaskPromptOpen && (
-          <TaskPromptModal
+          <Suspense fallback={null}><TaskPromptModal
             projectId={overview.project.id}
             onClose={() => setIsTaskPromptOpen(false)}
             runAction={runAction}
             onChanged={refreshOverview}
-          />
+          /></Suspense>
         )}
         {overview && selectedTask && (
-          <TaskDetailDrawer
+          <Suspense fallback={null}><TaskDetailDrawer
             overview={overview}
             task={selectedTask}
             providerCatalog={providerCatalog}
@@ -350,10 +377,9 @@ export function AppView({ controller }: { controller: AppController }) {
             onClose={() => setSelectedTaskId("")}
             runAction={runAction}
             onChanged={refreshOverview}
-          />
+          /></Suspense>
         )}
       </main>
     </div>
-    </Suspense>
   );
 }

@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   getProjectSettings,
+  getProjectSettingsFromDb,
   importProjectsFromRoot,
   insertEvent,
   mapAgent,
@@ -130,6 +131,9 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
       allowedTools: normalizeStringList(input.allowedTools),
       boundaries: input.boundaries?.trim() || "",
       maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
+      reviewSchedule: input.reviewSchedule ?? (input.role === "code-reviewer"
+        ? { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null }
+        : null),
       enabled: input.enabled !== false,
       status: "idle",
       currentTaskId: null,
@@ -149,8 +153,8 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
     db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, review_schedule, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       agent.id,
       agent.name,
@@ -162,6 +166,7 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
       JSON.stringify(agent.allowedTools),
       agent.boundaries,
       agent.maxParallel,
+      agent.reviewSchedule ? JSON.stringify(agent.reviewSchedule) : null,
       agent.status,
       agent.currentTaskId,
       agent.createdAt,
@@ -333,12 +338,13 @@ function cloneAgentMutation(project: ProjectRecord, agentId: string, input: { na
     db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at, enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, review_schedule, status, current_task_id, created_at, updated_at, enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       clone.id, clone.name, clone.role, clone.persona, clone.modelBackend, clone.cliCommand,
       JSON.stringify(clone.capabilities), JSON.stringify(clone.allowedTools), clone.boundaries,
-      clone.maxParallel, clone.status, null, timestamp, timestamp, clone.enabled ? 1 : 0
+      clone.maxParallel, clone.reviewSchedule ? JSON.stringify(clone.reviewSchedule) : null,
+      clone.status, null, timestamp, timestamp, clone.enabled ? 1 : 0
     );
     syncProjectAgentDefinitions(db, project.path);
     insertEvent(db, { taskId: null, agentId: clone.id, type: "agent.cloned", message: `${clone.name} was cloned.`, metadata: { sourceAgentId: agentId } });
@@ -428,6 +434,7 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
   try {
     const timestamp = now();
     const status = input.status || "Backlog";
+    const autoAssign = input.autoAssign !== false;
     const dependencyTaskIds = normalizeStringList(input.dependencyTaskIds);
     const labels = normalizeStringList(input.labels);
     const assigneeRow = input.assigneeAgentId
@@ -437,14 +444,21 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       throw new Error("Assignee agent not found.");
     }
     if (assigneeRow && mapAgent(assigneeRow).archivedAt) throw new Error("Archived agents cannot be assigned tasks.");
+    const settings = getProjectSettingsFromDb(db);
+    const useNewWorktree = input.useNewWorktree ??
+      (input.workspaceMode ? input.workspaceMode === "worktree" : settings.defaultUseNewWorktree);
     const workspaceMode = resolveTaskWorkspaceMode({
-      explicit: input.workspaceMode,
+      explicit: useNewWorktree ? "worktree" : "harness",
       title: input.title,
       description: input.description,
       acceptanceCriteria: input.acceptanceCriteria,
       labels,
       agent: assigneeRow ? mapAgent(assigneeRow) : null
     });
+    const projectManagerRow = autoAssign && status === "Backlog"
+      ? db.prepare("SELECT * FROM agents WHERE role = ? AND archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC LIMIT 1").get("project-manager")
+      : null;
+    const initialAssigneeId = projectManagerRow ? mapAgent(projectManagerRow).id : input.assigneeAgentId || null;
     const task: TaskRecord = {
       id: randomUUID(),
       title: input.title.trim(),
@@ -452,8 +466,8 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       status,
       priority: input.priority || "Medium",
       modelBackend: input.modelBackend?.trim() || null,
-      assigneeAgentId: input.assigneeAgentId || null,
-      autoAssign: input.autoAssign !== false,
+      assigneeAgentId: initialAssigneeId,
+      autoAssign,
       reporter: input.reporter?.trim() || "human",
       parentTaskId: input.parentTaskId || null,
       dependencyTaskIds,
@@ -462,6 +476,7 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       linkedFiles: normalizeStringList(input.linkedFiles),
       acceptanceCriteria: input.acceptanceCriteria?.trim() || "",
       workspaceMode,
+      useNewWorktree,
       taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,
@@ -475,14 +490,14 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, auto_assign, reporter,
         parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths,
-        acceptance_criteria, workspace_mode, task_order, branch_name, worktree_path, blocked_reason,
+        acceptance_criteria, workspace_mode, use_new_worktree, task_order, branch_name, worktree_path, blocked_reason,
         merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id, task.title, task.description, task.status, task.priority, task.modelBackend,
       task.assigneeAgentId, task.autoAssign ? 1 : 0, task.reporter, task.parentTaskId, JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.waivedDependencyTaskIds), JSON.stringify(task.labels), JSON.stringify(task.linkedFiles),
-      task.acceptanceCriteria, task.workspaceMode, task.taskOrder, task.branchName, task.worktreePath,
+      task.acceptanceCriteria, task.workspaceMode, task.useNewWorktree ? 1 : 0, task.taskOrder, task.branchName, task.worktreePath,
       task.blockedReason, task.mergeStatus, task.mergeError, task.createdAt, task.updatedAt
     );
     insertEvent(db, {
@@ -513,6 +528,14 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
     if (!existing) {
       throw new Error("Task not found.");
     }
+    const existingTask = mapTask(existingRow);
+    if (input.status === "Done" && existingTask.status === "Development Complete" && existingTask.useNewWorktree) {
+      throw new Error("워크트리 일감은 완료 확인 절차를 통해 머지 및 정리해야 합니다.");
+    }
+    if (input.useNewWorktree !== undefined && input.useNewWorktree !== existingTask.useNewWorktree &&
+      (existingTask.status !== "Backlog" && existingTask.status !== "Selected" || existingTask.worktreePath)) {
+      throw new Error("새 워크트리 설정은 작업 시작 전에만 변경할 수 있습니다.");
+    }
     if (input.parentTaskId === taskId) {
       throw new Error("A task cannot be its own parent.");
     }
@@ -528,7 +551,7 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
           dependency_task_ids = COALESCE(?, dependency_task_ids),
           waived_dependency_task_ids = COALESCE(?, waived_dependency_task_ids), labels = COALESCE(?, labels),
           linked_file_paths = COALESCE(?, linked_file_paths), acceptance_criteria = COALESCE(?, acceptance_criteria),
-          workspace_mode = COALESCE(?, workspace_mode), blocked_reason = ?, updated_at = ?
+          workspace_mode = COALESCE(?, workspace_mode), use_new_worktree = COALESCE(?, use_new_worktree), blocked_reason = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.title?.trim() || null,
@@ -544,7 +567,10 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
       Array.isArray(input.labels) ? JSON.stringify(normalizeStringList(input.labels)) : null,
       Array.isArray(input.linkedFiles) ? JSON.stringify(normalizeStringList(input.linkedFiles)) : null,
       input.acceptanceCriteria === undefined ? null : input.acceptanceCriteria.trim(),
-      input.workspaceMode === undefined ? null : parseWorkspaceModeOption(input.workspaceMode) || null,
+      input.useNewWorktree === undefined
+        ? input.workspaceMode === undefined ? null : parseWorkspaceModeOption(input.workspaceMode) || null
+        : input.useNewWorktree ? "worktree" : "harness",
+      input.useNewWorktree === undefined ? null : input.useNewWorktree ? 1 : 0,
       input.blockedReason === undefined ? existing.blocked_reason : input.blockedReason,
       now(),
       taskId

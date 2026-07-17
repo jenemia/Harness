@@ -202,6 +202,11 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
         labels: ["pm-plan", `role:${inputTask.role}`],
         agent: inputTask.assigneeAgent
       }),
+      useNewWorktree: resolveTaskWorkspaceMode({
+        title: inputTask.title, description: inputTask.description,
+        acceptanceCriteria: inputTask.acceptanceCriteria, labels: ["pm-plan", `role:${inputTask.role}`],
+        agent: inputTask.assigneeAgent
+      }) === "worktree",
       taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,
@@ -218,8 +223,8 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, reporter,
         parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths, acceptance_criteria, workspace_mode,
-        task_order, branch_name, worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        use_new_worktree, task_order, branch_name, worktree_path, blocked_reason, merge_status, merge_error, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id,
       task.title,
@@ -236,6 +241,7 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       JSON.stringify(task.linkedFiles),
       task.acceptanceCriteria,
       task.workspaceMode,
+      task.useNewWorktree ? 1 : 0,
       task.taskOrder,
       task.branchName,
       task.worktreePath,

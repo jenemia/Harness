@@ -43,7 +43,7 @@ test("MCP tools enforce client scopes, dry-run, project policy, bridge routing, 
 
     const initialized = await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }, "cursor-test");
     assert.equal((initialized as { result: { protocolVersion: string } }).result.protocolVersion, harnessMcpProtocolVersion);
-    assert.equal(harnessMcpTools.length, 22);
+    assert.equal(harnessMcpTools.length, 25);
     assert.ok(harnessMcpTools.every((tool) => tool.inputSchema["x-harness-schema-version"] === harnessMcpSchemaVersion));
     assert.ok(harnessMcpTools.every((tool) => tool.outputSchema["x-harness-schema-version"] === harnessMcpSchemaVersion));
     await assert.rejects(

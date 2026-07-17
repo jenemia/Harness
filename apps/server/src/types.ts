@@ -135,6 +135,7 @@ export type ProjectOAuthAccountLink = {
 };
 
 export type ProjectSettings = {
+  defaultUseNewWorktree: boolean;
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;
   autoStartPlans: boolean;
@@ -155,6 +156,14 @@ export type ProjectSettings = {
   updatedAt: string | null;
 };
 
+export type ReviewSchedule = {
+  enabled: boolean;
+  trigger: "on-commit" | "interval" | "daily";
+  intervalMinutes: number | null;
+  dailyAt: string | null;
+  timezone: string | null;
+};
+
 export type AgentRecord = {
   id: string;
   name: string;
@@ -166,6 +175,7 @@ export type AgentRecord = {
   allowedTools: string[];
   boundaries: string;
   maxParallel: number;
+  reviewSchedule: ReviewSchedule | null;
   enabled: boolean;
   status: "idle" | "busy" | "offline";
   currentTaskId: string | null;
@@ -191,6 +201,7 @@ export type AgentTemplateRecord = {
   allowedTools: string[];
   boundaries: string;
   maxParallel: number;
+  reviewSchedule: ReviewSchedule | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -221,6 +232,7 @@ export type ProjectTemplateAgent = {
   allowedTools: string[];
   boundaries: string;
   maxParallel: number;
+  reviewSchedule?: ReviewSchedule | null;
 };
 
 export type ProjectTemplateRecord = {
@@ -249,6 +261,7 @@ export type TaskRecord = {
   linkedFiles: string[];
   acceptanceCriteria: string;
   workspaceMode: TaskWorkspaceMode;
+  useNewWorktree: boolean;
   taskOrder: number;
   branchName: string | null;
   worktreePath: string | null;
@@ -269,6 +282,8 @@ export type TaskGoalRecord = {
   status: "queued" | "active" | "completed";
   goalOrder: number;
   completedRunId: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -501,6 +516,55 @@ export type RunRecord = {
   correlationId: string | null;
   parentRunId: string | null;
   resumedFromInteractionId: string | null;
+  commitSha: string | null;
+  commitParentSha: string | null;
+  providerSessionId: string | null;
+};
+
+export type CodeReviewJobStatus = "queued" | "running" | "findings" | "clean" | "failed" | "blocked";
+
+export type CodeReviewJobRecord = {
+  id: string;
+  taskId: string;
+  sourceRunId: string;
+  sourceAgentId: string;
+  reviewerAgentId: string;
+  commitSha: string;
+  baseSha: string;
+  headSha: string;
+  status: CodeReviewJobStatus;
+  cycle: number;
+  attempt: number;
+  report: Record<string, unknown> | null;
+  output: string | null;
+  error: string | null;
+  remediationGoalId: string | null;
+  remediationRunId: string | null;
+  sessionResumed: boolean;
+  sessionFallback: boolean;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CodeReviewFindingRecord = {
+  id: string;
+  jobId: string;
+  taskId: string;
+  title: string;
+  body: string;
+  priority: "P0" | "P1" | "P2" | "P3";
+  confidence: number;
+  category: "bug" | "security" | "regression" | "test_gap" | "maintainability";
+  filePath: string;
+  line: number;
+  status: "open" | "addressed" | "dismissed";
+  dismissalReason: string | null;
+  inlineCommentId: string | null;
+  addressedByRunId: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CompletionReportRecord = {
@@ -596,4 +660,6 @@ export type ProjectOverview = {
   completionReports: CompletionReportRecord[];
   runFileReviews: RunFileReviewRecord[];
   inlineReviewComments: InlineReviewCommentRecord[];
+  codeReviewJobs: CodeReviewJobRecord[];
+  codeReviewFindings: CodeReviewFindingRecord[];
 };

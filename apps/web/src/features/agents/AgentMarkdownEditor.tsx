@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Agent, Overview, ProviderCatalog } from "../../api/contracts";
 import { agentService, type AgentDocumentBundle, type AgentInstructionDocument } from "../../services/agentService";
 import { buildLineDiff, parseAgentMarkdownDraft, type ParsedAgentMarkdownDraft, updateAgentMarkdownDraft } from "./agentMarkdownDraft";
+import { connectedAgentModels, modelIsConnected } from "./agentModelOptions";
 
 type ValidationState = { status: "idle" | "pending" | "valid" | "invalid"; message: string };
 export function AgentMarkdownEditor(props: {
@@ -13,6 +14,8 @@ export function AgentMarkdownEditor(props: {
   onBundleChanged: (bundle: AgentDocumentBundle) => void;
   onClose: () => void;
   onProjectChanged: () => Promise<void>;
+  onOpenTask: (taskId: string) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const projectId = props.overview.project.id;
   const agentId = props.bundle.agent.id;
@@ -43,6 +46,14 @@ export function AgentMarkdownEditor(props: {
   const selectedInstruction = props.bundle.instructions.find((item) => item.path === selectedInstructionPath) || null;
   const assignedOpenTasks = props.overview.tasks.filter((task) => task.assigneeAgentId === agentId && task.status !== "Done");
   const replacementAgents = props.overview.agents.filter((agent) => agent.id !== agentId && !agent.archivedAt && agent.enabled);
+  const liveAgent = props.overview.agents.find((agent) => agent.id === agentId) || props.bundle.agent;
+  const connectedModels = connectedAgentModels(props.providerCatalog, props.overview.settings);
+  const currentModelConnected = modelIsConnected(parsed.value?.modelBackend || props.bundle.agent.modelBackend, props.providerCatalog, props.overview.settings);
+
+  useEffect(() => {
+    props.onDirtyChange(dirty);
+    return () => props.onDirtyChange(false);
+  }, [dirty, props.onDirtyChange]);
 
   useEffect(() => {
     const source = props.bundle.source;
@@ -292,6 +303,46 @@ export function AgentMarkdownEditor(props: {
 
   return (
     <div className="agent-editor-card" data-testid="agent-markdown-editor">
+      <header className="agent-detail-header">
+        <div className="agent-detail-identity">
+          <span className="agent-detail-avatar">{props.bundle.agent.name.slice(0, 1).toUpperCase()}</span>
+          <div><span className="modal-kicker">{props.bundle.agent.role}</span><h2>{parsed.value?.name || props.bundle.agent.name}</h2></div>
+        </div>
+        <div className="agent-detail-badges">
+          <span className={`agent-status-pill ${liveAgent.status}`}><i />{liveAgent.status}</span>
+          <span className={`agent-enabled-pill ${parsed.value?.enabled ? "enabled" : "disabled"}`}>{parsed.value?.enabled ? "Enabled" : "Disabled"}</span>
+        </div>
+      </header>
+
+      <section className="agent-primary-editor">
+        <label><span>Model</span><select aria-label="Agent connected model" value={parsed.value?.modelBackend || props.bundle.agent.modelBackend} disabled={!parsed.value || connectedModels.length === 0} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>
+          {!currentModelConnected && <option value={parsed.value?.modelBackend || props.bundle.agent.modelBackend}>{parsed.value?.modelBackend || props.bundle.agent.modelBackend} · disconnected</option>}
+          {connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+        </select>{!currentModelConnected && <small className="agent-model-warning">Current model is disconnected. Choose a connected model before saving.</small>}</label>
+        <label><span>Persona</span><textarea className="agent-main-textarea" aria-label="Agent editor persona" value={parsed.value?.persona || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ persona: event.target.value })} placeholder="Describe the agent persona in Markdown" /></label>
+        <label><span>Instructions</span><textarea className="agent-main-textarea" aria-label="Agent editor instructions" value={parsed.value?.instructions || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ instructions: event.target.value })} placeholder="Write the agent's default instructions in Markdown" /></label>
+      </section>
+
+      <section className="agent-assigned-tasks">
+        <header><div><h3>Assigned tasks</h3><span>Open work currently owned by this agent</span></div><b>{assignedOpenTasks.length}</b></header>
+        <div className="agent-task-list">
+          {assignedOpenTasks.map((task) => <button type="button" key={task.id} onClick={() => props.onOpenTask(task.id)}><span><strong>{task.title}</strong><small>{task.id.slice(0, 8)}</small></span><span className={`task-status-chip status-${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</span><span className={`priority-pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span></button>)}
+          {assignedOpenTasks.length === 0 && <div className="agent-no-tasks">No assigned open tasks.</div>}
+        </div>
+      </section>
+
+      <div className={`agent-validation ${validation.status}`} role="status">
+        <strong>{validation.status === "valid" ? "Valid" : validation.status === "pending" ? "Validating" : "Validation error"}</strong>
+        <span>{validation.message}</span>
+      </div>
+
+      <div className="agent-editor-actions primary-actions">
+        <button className="secondary-button" type="button" disabled={!dirty} onClick={() => void resetDraft()}><RefreshCw size={15} /> Reload</button>
+        <button className="primary-button" type="button" disabled={!dirty || validation.status !== "valid" || !currentModelConnected} onClick={() => void saveRaw()}><Save size={15} /> Save changes</button>
+      </div>
+
+      <details className="agent-advanced-settings">
+        <summary>Advanced settings</summary>
       <div className="agent-editor-toolbar">
         <div>
           <strong>{parsed.value?.name || props.bundle.agent.name}</strong>
@@ -309,14 +360,23 @@ export function AgentMarkdownEditor(props: {
           <h3>Structured form</h3>
           <input aria-label="Agent editor name" value={parsed.value?.name || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ name: event.target.value })} />
           <select aria-label="Agent editor role" value={parsed.value?.role || "worker"} disabled={!parsed.value} onChange={(event) => updateStructured({ role: event.target.value })}>
-            <option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="project-manager">project-manager</option>
+            <option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="code-reviewer">code-reviewer</option><option value="project-manager">project-manager</option>
           </select>
-          <select aria-label="Agent editor provider" value={parsed.value?.modelBackend || "mock"} disabled={!parsed.value} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>
-            {(props.providerCatalog?.llmProviders || [{ id: "mock", label: "Mock" }]).map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
-          </select>
+          <select aria-label="Agent editor provider" value={parsed.value?.modelBackend || "mock"} disabled={!parsed.value} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>{!currentModelConnected && <option value={parsed.value?.modelBackend || "mock"}>{parsed.value?.modelBackend || "mock"} · disconnected</option>}{connectedModels.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select>
           <input aria-label="Agent editor max parallel" type="number" min={1} max={8} value={parsed.value?.maxParallel || 1} disabled={!parsed.value} onChange={(event) => updateStructured({ maxParallel: Math.max(1, Number(event.target.value || 1)) })} />
           <label className="checkbox-row"><input type="checkbox" checked={parsed.value?.enabled || false} disabled={!parsed.value} onChange={(event) => updateStructured({ enabled: event.target.checked })} /><span>Enabled for new runs</span></label>
-          <textarea aria-label="Agent editor persona" value={parsed.value?.persona || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ persona: event.target.value })} placeholder="Persona" />
+          {(parsed.value?.role === "code-reviewer" || parsed.value?.capabilities.includes("autoreview")) && (() => {
+            const schedule = parsed.value?.reviewSchedule || { enabled: true, trigger: "on-commit" as const, intervalMinutes: null, dailyAt: null, timezone: null };
+            const updateSchedule = (next: Partial<typeof schedule>) => updateStructured({ reviewSchedule: { ...schedule, ...next } });
+            return <div className="agent-review-schedule">
+              <label className="checkbox-row"><input aria-label="Automatic review enabled" type="checkbox" checked={schedule.enabled} onChange={(event) => updateSchedule({ enabled: event.target.checked })} /><span>Automatic commit review</span></label>
+              <select aria-label="Review schedule trigger" value={schedule.trigger} onChange={(event) => updateSchedule({ trigger: event.target.value as typeof schedule.trigger })}>
+                <option value="on-commit">on-commit</option><option value="interval">interval</option><option value="daily">daily</option>
+              </select>
+              {schedule.trigger === "interval" && <input aria-label="Review interval minutes" type="number" min={15} value={schedule.intervalMinutes ?? 15} onChange={(event) => updateSchedule({ intervalMinutes: Number(event.target.value) })} />}
+              {schedule.trigger === "daily" && <><input aria-label="Daily review time" type="time" value={schedule.dailyAt ?? "09:00"} onChange={(event) => updateSchedule({ dailyAt: event.target.value })} /><input aria-label="Review timezone" value={schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone} onChange={(event) => updateSchedule({ timezone: event.target.value })} placeholder="Asia/Seoul" /></>}
+            </div>;
+          })()}
           <input aria-label="Agent editor capabilities" value={(parsed.value?.capabilities || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ capabilities: parseList(event.target.value) })} placeholder="Capabilities" />
           <input aria-label="Agent editor allowed tools" value={(parsed.value?.allowedTools || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ allowedTools: parseList(event.target.value) })} placeholder="Allowed tools" />
           <textarea aria-label="Agent editor boundaries" value={parsed.value?.boundaries || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ boundaries: event.target.value })} placeholder="Boundaries" />
@@ -326,11 +386,6 @@ export function AgentMarkdownEditor(props: {
           <h3>Raw agent.md</h3>
           <textarea aria-label="Raw agent Markdown" value={draftRaw} onChange={(event) => setDraftRaw(event.target.value)} spellCheck={false} />
         </section>
-      </div>
-
-      <div className={`agent-validation ${validation.status}`} role="status">
-        <strong>{validation.status === "valid" ? "Valid" : validation.status === "pending" ? "Validating" : "Validation error"}</strong>
-        <span>{validation.message}</span>
       </div>
 
       {externalBundle && <div className="agent-external-conflict" role="alert">
@@ -356,11 +411,6 @@ export function AgentMarkdownEditor(props: {
           <h3>Instruction preview</h3>
           <div className="markdown-preview">{selectedInstruction?.content || "Select or create an instruction file."}</div>
         </section>
-      </div>
-
-      <div className="agent-editor-actions">
-        <button className="secondary-button" type="button" disabled={!dirty} onClick={() => void resetDraft()}><RefreshCw size={15} /> Reload</button>
-        <button className="primary-button" type="button" disabled={!dirty || validation.status !== "valid"} onClick={() => void saveRaw()}><Save size={15} /> Save Markdown</button>
       </div>
 
       <section className="agent-instruction-editor">
@@ -399,6 +449,7 @@ export function AgentMarkdownEditor(props: {
         <span>{assignedOpenTasks.length} open assigned task(s); active runs are always blocked by the service.</span>
         <button className="secondary-button danger" type="button" disabled={dirty || (assignedOpenTasks.length > 0 && !archiveReplacement)} onClick={() => void archiveAgent()}><Archive size={15} /> Archive</button>
       </section>
+      </details>
     </div>
   );
 }

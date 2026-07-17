@@ -135,6 +135,7 @@ export function openGlobalDb() {
       allowed_tools TEXT NOT NULL DEFAULT '[]',
       boundaries TEXT NOT NULL DEFAULT '',
       max_parallel INTEGER NOT NULL,
+      review_schedule TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -167,6 +168,7 @@ export function openGlobalDb() {
   `);
   ensureColumn(db, "agent_templates", "allowed_tools", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "agent_templates", "boundaries", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "agent_templates", "review_schedule", "TEXT");
   seedDefaultAgentTemplates(db);
   seedDefaultWorkflowTemplates(db);
   seedDefaultProjectTemplates(db);
@@ -175,11 +177,6 @@ export function openGlobalDb() {
 }
 
 function seedDefaultAgentTemplates(db: DatabaseSync) {
-  const count = db.prepare("SELECT COUNT(*) AS count FROM agent_templates").get() as { count: number };
-  if (count.count > 0) {
-    return;
-  }
-
   const timestamp = now();
   const templates = [
     {
@@ -191,6 +188,17 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       capabilities: ["planning", "assignment", "handoff"],
       allowedTools: ["kanban", "documents", "memory"],
       boundaries: "Do not run shell commands or edit project files directly; delegate implementation to worker agents.",
+      maxParallel: 1
+    },
+    {
+      name: "Planning Agent",
+      role: "planner",
+      persona: "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+      modelBackend: "mock",
+      cliCommand: null,
+      capabilities: ["planning", "requirements", "discussion"],
+      allowedTools: ["documents", "memory"],
+      boundaries: "Do not run implementation commands or edit project files; only analyze and plan the requested work.",
       maxParallel: 1
     },
     {
@@ -214,16 +222,29 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       allowedTools: ["worktree", "diff", "tests"],
       boundaries: "Review and request changes when risk remains; do not merge without approval.",
       maxParallel: 1
+    },
+    {
+      name: "Code Review Agent",
+      role: "code-reviewer",
+      persona: "Run the vendored autoreview skill against Harness commits and route actionable findings back to the originating task.",
+      modelBackend: "codex",
+      cliCommand: null,
+      capabilities: ["review", "quality", "autoreview"],
+      allowedTools: ["diff", "autoreview"],
+      boundaries: "Remain read-only, review only explicit Harness commit refs, and never fetch, push, or discover pull requests.",
+      maxParallel: 1,
+      reviewSchedule: { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null }
     }
   ];
   const stmt = db.prepare(`
       INSERT INTO agent_templates (
         id, name, role, persona, model_backend, cli_command,
-        capabilities, allowed_tools, boundaries, max_parallel, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        capabilities, allowed_tools, boundaries, max_parallel, review_schedule, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  for (const template of templates) {
+  const existingRoles = new Set((db.prepare("SELECT role FROM agent_templates").all() as Array<{ role: string }>).map((row) => row.role));
+  for (const template of templates.filter((template) => !existingRoles.has(template.role))) {
     stmt.run(
       randomUUID(),
       template.name,
@@ -235,6 +256,7 @@ function seedDefaultAgentTemplates(db: DatabaseSync) {
       JSON.stringify(template.allowedTools),
       template.boundaries,
       template.maxParallel,
+      "reviewSchedule" in template ? JSON.stringify(template.reviewSchedule) : null,
       timestamp,
       timestamp
     );
@@ -316,11 +338,6 @@ function seedDefaultWorkflowTemplates(db: DatabaseSync) {
 }
 
 function seedDefaultProjectTemplates(db: DatabaseSync) {
-  const count = db.prepare("SELECT COUNT(*) AS count FROM project_templates").get() as { count: number };
-  if (count.count > 0) {
-    return;
-  }
-
   const timestamp = now();
   const templates: Array<{
     name: string;
@@ -343,6 +360,14 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           maxParallel: 1
         },
         {
+          name: "Planning Agent",
+          role: "planner",
+          persona: "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+          modelBackend: "mock", cliCommand: null,
+          capabilities: ["planning", "requirements", "discussion"], allowedTools: ["documents", "memory"],
+          boundaries: "Do not run implementation commands or edit project files; only analyze and plan the requested work.", maxParallel: 1
+        },
+        {
           name: "Programmer Agent",
           role: "programmer",
           persona: "Implement scoped engineering tasks inside the task worktree and report the result clearly.",
@@ -363,6 +388,18 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
           allowedTools: ["worktree", "diff", "tests"],
           boundaries: "Review and request changes when risk remains; do not merge without approval.",
           maxParallel: 1
+        },
+        {
+          name: "Code Review Agent",
+          role: "code-reviewer",
+          persona: "Run the vendored autoreview skill against Harness commits and route actionable findings back to the originating task.",
+          modelBackend: "codex",
+          cliCommand: null,
+          capabilities: ["review", "quality", "autoreview"],
+          allowedTools: ["diff", "autoreview"],
+          boundaries: "Remain read-only, review only explicit Harness commit refs, and never fetch, push, or discover pull requests.",
+          maxParallel: 1,
+          reviewSchedule: { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null }
         }
       ]
     },
@@ -457,13 +494,24 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
     }
   ];
 
+  const existingRows = db.prepare("SELECT id, name, agents FROM project_templates").all() as Array<{ id: string; name: string; agents: string }>;
+  const softwareAgent = templates[0].agents.find((agent) => agent.capabilities.includes("autoreview"));
+  for (const row of existingRows.filter((value) => value.name === templates[0].name)) {
+    const agents = normalizeProjectTemplateAgents(JSON.parse(row.agents));
+    if (softwareAgent && !agents.some((agent) => agent.capabilities.includes("autoreview"))) {
+      db.prepare("UPDATE project_templates SET agents = ?, updated_at = ? WHERE id = ?")
+        .run(JSON.stringify([...agents, softwareAgent]), timestamp, row.id);
+    }
+  }
+
   const stmt = db.prepare(`
     INSERT INTO project_templates (
       id, name, description, agents, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  for (const template of templates) {
+  const existingNames = new Set(existingRows.map((row) => row.name));
+  for (const template of templates.filter((value) => !existingNames.has(value.name))) {
     stmt.run(
       randomUUID(),
       template.name,
@@ -696,6 +744,7 @@ export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentT
     allowedTools: Array.isArray(input.allowedTools) ? input.allowedTools : [],
     boundaries: input.boundaries?.trim() || "",
     maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
+    reviewSchedule: input.reviewSchedule ?? null,
     createdAt: timestamp,
     updatedAt: timestamp
   };
@@ -705,8 +754,8 @@ export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentT
     db.prepare(`
       INSERT INTO agent_templates (
         id, name, role, persona, model_backend, cli_command,
-        capabilities, allowed_tools, boundaries, max_parallel, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        capabilities, allowed_tools, boundaries, max_parallel, review_schedule, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       template.id,
       template.name,
@@ -718,6 +767,7 @@ export function createAgentTemplate(input: Partial<AgentTemplateRecord>): AgentT
       JSON.stringify(template.allowedTools),
       template.boundaries,
       template.maxParallel,
+      template.reviewSchedule ? JSON.stringify(template.reviewSchedule) : null,
       template.createdAt,
       template.updatedAt
     );
@@ -865,8 +915,8 @@ function seedProjectFromTemplateMutation(projectPath: string, templateId: string
     const stmt = db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, review_schedule, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const agent of template.agents) {
@@ -881,6 +931,7 @@ function seedProjectFromTemplateMutation(projectPath: string, templateId: string
         JSON.stringify(agent.allowedTools || []),
         agent.boundaries || "",
         agent.maxParallel,
+        agent.reviewSchedule ? JSON.stringify(agent.reviewSchedule) : null,
         "idle",
         null,
         timestamp,
@@ -941,7 +992,8 @@ function normalizeProjectTemplateAgents(input: unknown): ProjectTemplateAgent[] 
           ? value.allowedTools.map((tool) => tool.trim()).filter(Boolean)
           : [],
         boundaries: value.boundaries?.trim() || "",
-        maxParallel: Math.max(1, Number(value.maxParallel || 1))
+        maxParallel: Math.max(1, Number(value.maxParallel || 1)),
+        reviewSchedule: value.reviewSchedule ?? null
       };
     })
     .filter((agent) => agent.name);
@@ -981,6 +1033,7 @@ export function openProjectDb(projectPath: string) {
       allowed_tools TEXT NOT NULL DEFAULT '[]',
       boundaries TEXT NOT NULL DEFAULT '',
       max_parallel INTEGER NOT NULL,
+      review_schedule TEXT,
       status TEXT NOT NULL,
       current_task_id TEXT,
       created_at TEXT NOT NULL,
@@ -1003,6 +1056,7 @@ export function openProjectDb(projectPath: string) {
       linked_file_paths TEXT NOT NULL DEFAULT '[]',
       acceptance_criteria TEXT NOT NULL,
       workspace_mode TEXT NOT NULL DEFAULT 'worktree',
+      use_new_worktree INTEGER NOT NULL DEFAULT 1,
       task_order INTEGER NOT NULL DEFAULT 0,
       branch_name TEXT,
       worktree_path TEXT,
@@ -1062,7 +1116,10 @@ export function openProjectDb(projectPath: string) {
       completed_at TEXT,
       correlation_id TEXT,
       parent_run_id TEXT,
-      resumed_from_interaction_id TEXT
+      resumed_from_interaction_id TEXT,
+      commit_sha TEXT,
+      commit_parent_sha TEXT,
+      provider_session_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS project_metadata (
@@ -1113,6 +1170,8 @@ export function openProjectDb(projectPath: string) {
       status TEXT NOT NULL,
       goal_order INTEGER NOT NULL,
       completed_run_id TEXT,
+      started_at TEXT,
+      completed_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -1344,6 +1403,53 @@ export function openProjectDb(projectPath: string) {
     CREATE INDEX IF NOT EXISTS inline_review_comments_run_status
       ON inline_review_comments(run_id, status, created_at);
 
+    CREATE TABLE IF NOT EXISTS code_review_jobs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      source_run_id TEXT NOT NULL,
+      source_agent_id TEXT NOT NULL,
+      reviewer_agent_id TEXT NOT NULL,
+      commit_sha TEXT NOT NULL UNIQUE,
+      base_sha TEXT NOT NULL,
+      head_sha TEXT NOT NULL,
+      status TEXT NOT NULL,
+      cycle INTEGER NOT NULL DEFAULT 0,
+      attempt INTEGER NOT NULL DEFAULT 0,
+      report TEXT,
+      output TEXT,
+      error TEXT,
+      remediation_goal_id TEXT,
+      remediation_run_id TEXT,
+      session_resumed INTEGER NOT NULL DEFAULT 0,
+      session_fallback INTEGER NOT NULL DEFAULT 0,
+      started_at TEXT,
+      completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS code_review_jobs_status_created ON code_review_jobs(status, created_at);
+    CREATE INDEX IF NOT EXISTS code_review_jobs_task_created ON code_review_jobs(task_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS code_review_findings (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      priority TEXT NOT NULL,
+      confidence REAL NOT NULL,
+      category TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      line INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      dismissal_reason TEXT,
+      inline_comment_id TEXT,
+      addressed_by_run_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS code_review_findings_job_status ON code_review_findings(job_id, status);
+
     CREATE TABLE IF NOT EXISTS workspace_guards (
       workspace_path TEXT PRIMARY KEY,
       hook_path TEXT NOT NULL,
@@ -1377,6 +1483,28 @@ export function openProjectDb(projectPath: string) {
       display_name TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      agent_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS chat_sessions_updated
+      ON chat_sessions(updated_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS chat_messages_session_created
+      ON chat_messages(session_id, created_at, id);
   `);
   migrateDraftReviewRequestsForConversationTurns(db);
   ensureColumn(db, "approvals", "interaction_id", "TEXT");
@@ -1408,16 +1536,27 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "agents", "enabled", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "agents", "archived_at", "TEXT");
   ensureColumn(db, "agents", "archive_path", "TEXT");
+  ensureColumn(db, "agents", "review_schedule", "TEXT");
   ensureColumn(db, "tasks", "dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "waived_dependency_task_ids", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "linked_file_paths", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "tasks", "model_backend", "TEXT");
   ensureColumn(db, "tasks", "workspace_mode", "TEXT NOT NULL DEFAULT 'worktree'");
+  ensureColumn(db, "tasks", "use_new_worktree", "INTEGER NOT NULL DEFAULT 1");
+  db.exec("UPDATE tasks SET use_new_worktree = CASE WHEN workspace_mode = 'worktree' THEN 1 ELSE 0 END");
   ensureColumn(db, "tasks", "task_order", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "tasks", "blocked_reason", "TEXT");
   ensureColumn(db, "tasks", "merge_status", "TEXT NOT NULL DEFAULT 'none'");
   ensureColumn(db, "tasks", "merge_error", "TEXT");
   ensureColumn(db, "tasks", "auto_assign", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "task_goals", "started_at", "TEXT");
+  ensureColumn(db, "task_goals", "completed_at", "TEXT");
+  db.exec(`
+    UPDATE task_goals SET started_at = created_at
+    WHERE started_at IS NULL AND status IN ('active', 'completed');
+    UPDATE task_goals SET completed_at = updated_at
+    WHERE completed_at IS NULL AND status = 'completed';
+  `);
   ensureColumn(db, "runs", "snapshot_ref", "TEXT");
   ensureColumn(db, "runs", "model_backend", "TEXT");
   ensureColumn(db, "runs", "provider_id", "TEXT");
@@ -1426,6 +1565,9 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "runs", "agent_definition_hash", "TEXT");
   ensureColumn(db, "runs", "agent_definition_schema_version", "INTEGER");
   ensureColumn(db, "runs", "agent_definition_snapshot", "TEXT");
+  ensureColumn(db, "runs", "commit_sha", "TEXT");
+  ensureColumn(db, "runs", "commit_parent_sha", "TEXT");
+  ensureColumn(db, "runs", "provider_session_id", "TEXT");
   db.exec(`
     CREATE INDEX IF NOT EXISTS tasks_status_order ON tasks(status, task_order, created_at);
     CREATE INDEX IF NOT EXISTS tasks_parent ON tasks(parent_task_id);
@@ -1442,6 +1584,34 @@ export function openProjectDb(projectPath: string) {
     CREATE INDEX IF NOT EXISTS approvals_status_created ON approvals(status, created_at DESC);
   `);
   purgeCredentialProviderCommands(db, "project_settings");
+  const activeAgentCount = (db.prepare("SELECT COUNT(*) AS count FROM agents WHERE archived_at IS NULL").get() as { count: number }).count;
+  const plannerExists = db.prepare("SELECT id FROM agents WHERE role = 'planner' AND archived_at IS NULL LIMIT 1").get();
+  if (activeAgentCount > 0 && !plannerExists) {
+    const timestamp = now();
+    db.prepare(`INSERT INTO agents (
+      id, name, role, persona, model_backend, cli_command, capabilities, allowed_tools, boundaries,
+      max_parallel, status, current_task_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), "Planning Agent", "planner",
+        "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+        "mock", null, JSON.stringify(["planning", "requirements", "discussion"]), JSON.stringify(["documents", "memory"]),
+        "Do not run implementation commands or edit project files; only analyze and plan the requested work.",
+        1, "idle", null, timestamp, timestamp);
+  }
+  const autoreviewerExists = db.prepare("SELECT id FROM agents WHERE archived_at IS NULL AND capabilities LIKE '%\"autoreview\"%' LIMIT 1").get();
+  if (activeAgentCount > 0 && !autoreviewerExists) {
+    const timestamp = now();
+    db.prepare(`INSERT INTO agents (
+      id, name, role, persona, model_backend, cli_command, capabilities, allowed_tools, boundaries,
+      max_parallel, review_schedule, status, current_task_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), "Code Review Agent", "code-reviewer",
+        "Run the vendored autoreview skill against Harness commits and route actionable findings back to the originating task.",
+        "codex", null, JSON.stringify(["review", "quality", "autoreview"]), JSON.stringify(["diff", "autoreview"]),
+        "Remain read-only, review only explicit Harness commit refs, and never fetch, push, or discover pull requests.",
+        1, JSON.stringify({ enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null }),
+        "idle", null, timestamp, timestamp);
+  }
   syncProjectAgentDefinitions(db, projectPath);
   initializedProjectDatabases.add(databaseKey);
   return db;
@@ -1450,6 +1620,7 @@ export function openProjectDb(projectPath: string) {
 export function defaultProjectSettings(): ProjectSettings {
   const globalSettings = getGlobalSettings();
   return {
+    defaultUseNewWorktree: true,
     defaultModelBackend: globalSettings.defaultModelBackend,
     defaultAgentMaxParallel: globalSettings.defaultAgentMaxParallel,
     autoStartPlans: globalSettings.autoStartPlans,
@@ -1499,6 +1670,7 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "defaultModelBackend") {
       settings.defaultModelBackend = row.value;
     }
+    if (row.key === "defaultUseNewWorktree") settings.defaultUseNewWorktree = row.value === "true";
     if (row.key === "defaultAgentMaxParallel") {
       settings.defaultAgentMaxParallel = Math.max(1, Number(row.value || 1));
     }
@@ -1559,6 +1731,7 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
         : getProjectProviderCommandOverridesFromDb(db);
     const timestamp = now();
     const next: ProjectSettings = {
+      defaultUseNewWorktree: input.defaultUseNewWorktree ?? current.defaultUseNewWorktree,
       defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
       defaultAgentMaxParallel: Math.max(1, Number(input.defaultAgentMaxParallel || current.defaultAgentMaxParallel)),
       autoStartPlans: input.autoStartPlans ?? current.autoStartPlans,
@@ -1585,6 +1758,7 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
     };
 
     const stmt = db.prepare("INSERT OR REPLACE INTO project_settings VALUES (?, ?, ?)");
+    stmt.run("defaultUseNewWorktree", String(next.defaultUseNewWorktree), timestamp);
     stmt.run("defaultModelBackend", next.defaultModelBackend, timestamp);
     stmt.run("defaultAgentMaxParallel", String(next.defaultAgentMaxParallel), timestamp);
     stmt.run("autoStartPlans", String(next.autoStartPlans), timestamp);
@@ -2265,13 +2439,17 @@ function mapProjectOAuthAccountLink(row: unknown): ProjectOAuthAccountLink {
 function seedDefaultAgentsMutation(projectPath: string) {
   const db = openProjectDb(projectPath);
   try {
-    const count = db.prepare("SELECT COUNT(*) AS count FROM agents").get() as { count: number };
-    if (count.count > 0) {
-      return;
-    }
-
     const timestamp = now();
     const agents = [
+      {
+        id: randomUUID(),
+        name: "Planning Agent",
+        role: "planner",
+        persona: "Discuss requirements with the user, surface open questions, and produce a decision-complete task plan.",
+        modelBackend: "mock", cliCommand: null,
+        capabilities: ["planning", "requirements", "discussion"], allowedTools: ["documents", "memory"],
+        boundaries: "Do not run implementation commands or edit project files; only analyze and plan the requested work.", maxParallel: 1
+      },
       {
         id: randomUUID(),
         name: "PM Agent",
@@ -2307,17 +2485,31 @@ function seedDefaultAgentsMutation(projectPath: string) {
         allowedTools: ["worktree", "diff", "tests"],
         boundaries: "Review and request changes when risk remains; do not merge without approval.",
         maxParallel: 1
+      },
+      {
+        id: randomUUID(),
+        name: "Code Review Agent",
+        role: "code-reviewer",
+        persona: "Run the vendored autoreview skill against Harness commits and route actionable findings back to the originating task.",
+        modelBackend: "codex",
+        cliCommand: null,
+        capabilities: ["review", "quality", "autoreview"],
+        allowedTools: ["diff", "autoreview"],
+        boundaries: "Remain read-only, review only explicit Harness commit refs, and never fetch, push, or discover pull requests.",
+        maxParallel: 1,
+        reviewSchedule: { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null }
       }
     ];
 
     const stmt = db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, review_schedule, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    for (const agent of agents) {
+    const existingRoles = new Set((db.prepare("SELECT role FROM agents WHERE archived_at IS NULL").all() as Array<{ role: string }>).map((row) => row.role));
+    for (const agent of agents.filter((agent) => !existingRoles.has(agent.role))) {
       stmt.run(
         agent.id,
         agent.name,
@@ -2329,6 +2521,7 @@ function seedDefaultAgentsMutation(projectPath: string) {
         JSON.stringify(agent.allowedTools),
         agent.boundaries,
         agent.maxParallel,
+        "reviewSchedule" in agent ? JSON.stringify(agent.reviewSchedule) : null,
         "idle",
         null,
         timestamp,
@@ -2408,6 +2601,7 @@ export function mapAgent(row: unknown): AgentRecord {
     allowedTools: parseJsonStringArray(r.allowed_tools),
     boundaries: r.boundaries ? String(r.boundaries) : "",
     maxParallel: Number(r.max_parallel),
+    reviewSchedule: parseReviewScheduleValue(r.review_schedule),
     enabled: Number(r.enabled ?? 1) !== 0,
     status: String(r.status) as AgentRecord["status"],
     currentTaskId: r.current_task_id ? String(r.current_task_id) : null,
@@ -2439,6 +2633,7 @@ export function mapAgentTemplate(row: unknown): AgentTemplateRecord {
     allowedTools: parseJsonStringArray(r.allowed_tools),
     boundaries: r.boundaries ? String(r.boundaries) : "",
     maxParallel: Number(r.max_parallel),
+    reviewSchedule: parseReviewScheduleValue(r.review_schedule),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };
@@ -2453,6 +2648,16 @@ function parseJsonStringArray(value: unknown) {
     return Array.isArray(parsed) ? parsed.map((item) => String(item)).filter(Boolean) : [];
   } catch {
     return [];
+  }
+}
+
+function parseReviewScheduleValue(value: unknown): AgentRecord["reviewSchedule"] {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(String(value)) as AgentRecord["reviewSchedule"];
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
   }
 }
 
@@ -2499,6 +2704,9 @@ export function mapTask(row: unknown): TaskRecord {
     linkedFiles: parseJsonStringArray(r.linked_file_paths),
     acceptanceCriteria: String(r.acceptance_criteria),
     workspaceMode: r.workspace_mode === "harness" ? "harness" : "worktree",
+    useNewWorktree: r.use_new_worktree === undefined || r.use_new_worktree === null
+      ? r.workspace_mode !== "harness"
+      : Number(r.use_new_worktree) === 1,
     taskOrder: Number(r.task_order || 0),
     branchName: r.branch_name ? String(r.branch_name) : null,
     worktreePath: r.worktree_path ? String(r.worktree_path) : null,
@@ -2637,6 +2845,8 @@ export function mapTaskGoal(row: unknown): import("./types.js").TaskGoalRecord {
     status: String(r.status) as import("./types.js").TaskGoalRecord["status"],
     goalOrder: Number(r.goal_order),
     completedRunId: r.completed_run_id ? String(r.completed_run_id) : null,
+    startedAt: r.started_at ? String(r.started_at) : null,
+    completedAt: r.completed_at ? String(r.completed_at) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
   };
@@ -2681,7 +2891,10 @@ export function mapRun(row: unknown): RunRecord {
     completedAt: r.completed_at ? String(r.completed_at) : null,
     correlationId: r.correlation_id ? String(r.correlation_id) : null,
     parentRunId: r.parent_run_id ? String(r.parent_run_id) : null,
-    resumedFromInteractionId: r.resumed_from_interaction_id ? String(r.resumed_from_interaction_id) : null
+    resumedFromInteractionId: r.resumed_from_interaction_id ? String(r.resumed_from_interaction_id) : null,
+    commitSha: r.commit_sha ? String(r.commit_sha) : null,
+    commitParentSha: r.commit_parent_sha ? String(r.commit_parent_sha) : null,
+    providerSessionId: r.provider_session_id ? String(r.provider_session_id) : null
   };
 }
 

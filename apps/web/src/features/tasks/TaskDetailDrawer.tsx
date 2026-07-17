@@ -23,8 +23,11 @@ import type {
   Task,
   TaskStatus,
 } from "../../api/contracts";
+import { TaskCompletionModal } from "./TaskCompletionModal";
 import { taskService } from "../../services/taskService";
+import { reviewService } from "../../services/reviewService";
 import { parseLabels, parseListText } from "../../shared/formParsing";
+import { formatDate, formatDuration } from "../../shared/format";
 import { taskStatuses } from "../../shared/taskStatus";
 import { statusMessageKey, useI18n } from "../../i18n";
 import {
@@ -47,7 +50,8 @@ export function TaskDetailDrawer(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
-  const { t } = useI18n();
+  const [completionOpen, setCompletionOpen] = useState(false);
+  const { locale, t } = useI18n();
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(props.task.title);
   const [editDescription, setEditDescription] = useState(
@@ -180,6 +184,22 @@ export function TaskDetailDrawer(props: {
     });
   }
 
+  async function retryAutomaticReview(jobId: string) {
+    await props.runAction(async () => {
+      await reviewService.retryAutomatic(props.overview.project.id, jobId);
+      await props.onChanged();
+    });
+  }
+
+  async function updateAutomaticFinding(findingId: string, status: "addressed" | "dismissed") {
+    const reason = status === "dismissed" ? window.prompt("Why is this finding being dismissed?") : undefined;
+    if (status === "dismissed" && !reason?.trim()) return;
+    await props.runAction(async () => {
+      await reviewService.updateAutomaticFinding(props.overview.project.id, findingId, status, reason || undefined);
+      await props.onChanged();
+    });
+  }
+
   async function requestChanges() {
     await props.runAction(async () => {
       await taskService.requestChanges(
@@ -253,6 +273,7 @@ export function TaskDetailDrawer(props: {
   }
 
   return (
+    <>{completionOpen && <TaskCompletionModal projectId={props.overview.project.id} task={props.task} runAction={props.runAction} onCompleted={props.onChanged} onClose={() => setCompletionOpen(false)} />}
     <div
       className="drawer-backdrop"
       role="presentation"
@@ -308,9 +329,8 @@ export function TaskDetailDrawer(props: {
               <span>{t("task.resume")}</span>
             </button>
           ) : props.task.status === "Development Complete" ? (
-            <button className="merge-button inline" type="button" onClick={() => void props.runAction(async () => {
-              await taskService.update(props.overview.project.id, props.task.id, { status: "Done" });
-              await props.onChanged();
+            <button className="merge-button inline" type="button" onClick={() => props.task.useNewWorktree ? setCompletionOpen(true) : void props.runAction(async () => {
+              await taskService.update(props.overview.project.id, props.task.id, { status: "Done" }); await props.onChanged();
             })}>
               <CheckCircle2 size={16} /><span>{t("task.confirmComplete")}</span>
             </button>
@@ -572,7 +592,11 @@ export function TaskDetailDrawer(props: {
                 <PathLine
                   key={goal.id}
                   icon={goal.status === "completed" ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
-                  value={`${goal.goalOrder + 1}. ${goal.title} · ${goal.status}`}
+                  value={`${goal.goalOrder + 1}. ${goal.title} · ${goal.status}${
+                    goal.status === "completed" && goal.startedAt && goal.completedAt
+                      ? ` · ${locale === "ko" ? "소요" : "Duration"} ${formatDuration(goal.startedAt, goal.completedAt, locale)} · ${locale === "ko" ? "완료" : "Finished"} ${formatDate(goal.completedAt, locale)}`
+                      : ""
+                  }`}
                 />
               ))}
             </div>
@@ -668,6 +692,30 @@ export function TaskDetailDrawer(props: {
           runAction={props.runAction}
           onChanged={props.onChanged}
         />
+        {props.overview.codeReviewJobs.some((job) => job.taskId === props.task.id) && <section className="drawer-section automatic-code-review">
+          <h3>Automatic code review</h3>
+          {props.overview.codeReviewJobs.filter((job) => job.taskId === props.task.id).map((job) => {
+            const reviewer = props.overview.agents.find((agent) => agent.id === job.reviewerAgentId);
+            const findings = props.overview.codeReviewFindings.filter((finding) => finding.jobId === job.id);
+            return <article className="review-card" key={job.id}>
+              <div className="review-card-heading"><strong>{job.status}</strong><span>{job.headSha.slice(0, 12)} · {reviewer?.name || "Code Review Agent"}</span></div>
+              <div className="detail-grid">
+                <DetailItem label="Source run" value={job.sourceRunId.slice(0, 8)} />
+                <DetailItem label="Reviewed" value={job.completedAt ? formatDate(job.completedAt, locale) : job.startedAt ? formatDate(job.startedAt, locale) : "Queued"} />
+                <DetailItem label="Remediation" value={job.remediationRunId ? job.remediationRunId.slice(0, 8) : "—"} />
+                <DetailItem label="Session" value={job.sessionResumed ? "resumed" : job.sessionFallback ? "fresh-run fallback" : "not needed"} />
+              </div>
+              {job.error && <div className="error-banner"><AlertTriangle size={14} /><span>{job.error}</span></div>}
+              {(job.status === "failed" || job.status === "blocked") && <button className="secondary-button inline" type="button" onClick={() => void retryAutomaticReview(job.id)}><RefreshCcw size={14} /> Retry review</button>}
+              {findings.map((finding) => <div className={`automatic-finding ${finding.status}`} key={finding.id}>
+                <strong>[{finding.priority}] {finding.title}</strong>
+                <span>{finding.filePath || "repository"}{finding.line ? `:${finding.line}` : ""} · {finding.category} · confidence {Math.round(finding.confidence * 100)}%</span>
+                <p>{finding.body}</p>
+                {finding.status === "open" && <div className="inline-actions"><button className="mini-button" type="button" onClick={() => void updateAutomaticFinding(finding.id, "addressed")}>Addressed</button><button className="mini-button" type="button" onClick={() => void updateAutomaticFinding(finding.id, "dismissed")}>Dismiss</button></div>}
+              </div>)}
+            </article>;
+          })}
+        </section>}
         <TaskRuns
           projectId={props.overview.project.id}
           runs={runs}
@@ -685,6 +733,6 @@ export function TaskDetailDrawer(props: {
         />
         <TaskTimeline events={events} providerEvents={providerEvents} runs={runs} />
       </aside>
-    </div>
+    </div></>
   );
 }

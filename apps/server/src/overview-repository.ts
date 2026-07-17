@@ -27,6 +27,7 @@ import {
   openProjectDb
 } from "./db.js";
 import type { ProjectOverview, ProjectRecord } from "./types.js";
+import { mapCodeReviewFinding, mapCodeReviewJob } from "./code-reviews.js";
 
 export type ProjectOverviewSection = "board" | "activity" | "collaboration" | "reviews";
 
@@ -73,11 +74,15 @@ export function getProjectOverviewSections(
       draftApplyHistory: db.prepare("SELECT * FROM draft_apply_history ORDER BY created_at DESC LIMIT 500").all().map(mapDraftApplyHistory),
       draftEvents: db.prepare("SELECT * FROM draft_events ORDER BY created_at DESC, sequence DESC LIMIT 1000").all().map(mapDraftEvent)
     });
-    if (requested.has("reviews")) Object.assign(result, {
-      completionReports: db.prepare("SELECT * FROM completion_reports ORDER BY created_at DESC LIMIT 100").all().map(mapCompletionReport),
-      runFileReviews: db.prepare("SELECT * FROM run_file_reviews ORDER BY recommendation_order IS NULL, recommendation_order, path LIMIT 1000").all().map(mapRunFileReview),
-      inlineReviewComments: db.prepare("SELECT * FROM inline_review_comments ORDER BY created_at DESC LIMIT 1000").all().map(mapInlineReviewComment)
-    });
+    if (requested.has("reviews")) {
+      Object.assign(result, {
+        completionReports: db.prepare("SELECT * FROM completion_reports ORDER BY created_at DESC LIMIT 100").all().map(mapCompletionReport),
+        runFileReviews: db.prepare("SELECT * FROM run_file_reviews ORDER BY recommendation_order IS NULL, recommendation_order, path LIMIT 1000").all().map(mapRunFileReview),
+        inlineReviewComments: db.prepare("SELECT * FROM inline_review_comments ORDER BY created_at DESC LIMIT 1000").all().map(mapInlineReviewComment),
+        codeReviewJobs: db.prepare("SELECT * FROM code_review_jobs ORDER BY created_at DESC LIMIT 500").all().map(mapCodeReviewJob),
+        codeReviewFindings: db.prepare("SELECT * FROM code_review_findings ORDER BY created_at DESC LIMIT 2000").all().map(mapCodeReviewFinding)
+      });
+    }
     return result;
   } finally {
     db.close();

@@ -35,6 +35,8 @@ import {
 } from "./completion-reviews.js";
 import {
   approveMerge,
+  completeTask,
+  listTaskCompletionBranches,
   decideApproval,
   initializeProjectWorkspace,
   listRuntimeProviders,
@@ -102,8 +104,9 @@ import { correlationAttributes, operationSpanName, withTelemetrySpan } from "./t
 import { subscribeAgentFileEvents } from "./agent-file-events.js";
 import { listPreviews, registerPreview, removePreview, type PreviewRegistrationInput } from "./previews.js";
 import { recoverPreviewProcesses, restartPreview, startPreview, stopPreview } from "./preview-runtime.js";
+import { listCodeReviews, retryCodeReview, startCodeReviewRuntime, updateCodeReviewFinding } from "./code-reviews.js";
 import { openPreviewTarget } from "./preview-opener.js";
-import { createChatSession, getChatSession, sendChatMessage } from "./chat.js";
+import { createChatSession, getChatSession, listChatSessions, sendChatMessage } from "./chat.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -137,6 +140,7 @@ export function subscribeApplicationAgentEvents(
 export function recoverApplicationState() {
   return withTelemetrySpan("recovery.audit", { "harness.operation": "application.recover" }, () => Promise.all(listProjects().map(async (project) => {
     try {
+      startCodeReviewRuntime(project);
       return {
         projectId: project.id,
         runtime: recoverInterruptedRuns(project),
@@ -210,6 +214,10 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "chat:create": {
       const value = input(payload) as HarnessCommandInputs["chat:create"];
       return { session: createChatSession(requiredProject(value.projectId)) };
+    }
+    case "chat:list": {
+      const value = input(payload) as HarnessCommandInputs["chat:list"];
+      return listChatSessions(requiredProject(value.projectId), value);
     }
     case "chat:get": {
       const value = input(payload) as HarnessCommandInputs["chat:get"];
@@ -447,6 +455,18 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["reviews:followup"];
       return createReviewFollowUp(requiredProject(value.projectId), value.runId, value.commentIds);
     }
+    case "reviews:auto-list": {
+      const value = input(payload) as HarnessCommandInputs["reviews:auto-list"];
+      return listCodeReviews(requiredProject(value.projectId), value.taskId);
+    }
+    case "reviews:auto-retry": {
+      const value = input(payload) as HarnessCommandInputs["reviews:auto-retry"];
+      return retryCodeReview(requiredProject(value.projectId), value.jobId);
+    }
+    case "reviews:auto-finding-update": {
+      const value = input(payload) as HarnessCommandInputs["reviews:auto-finding-update"];
+      return { finding: updateCodeReviewFinding(requiredProject(value.projectId), value.findingId, value.status, value.reason) };
+    }
     case "drafts:create": {
       const value = input(payload) as HarnessCommandInputs["drafts:create"];
       return { draft: createDraftSession(requiredProject(value.projectId), value.payload) };
@@ -563,6 +583,15 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["tasks:merge"];
       const project = requiredProject(value.projectId);
       return { result: await approveMerge(project, value.taskId), overview: getProjectOverview(project) };
+    }
+    case "tasks:completion-branches": {
+      const value = input(payload) as HarnessCommandInputs["tasks:completion-branches"];
+      return { branches: await listTaskCompletionBranches(requiredProject(value.projectId)) };
+    }
+    case "tasks:complete": {
+      const value = input(payload) as HarnessCommandInputs["tasks:complete"];
+      const project = requiredProject(value.projectId);
+      return { result: await completeTask(project, value.taskId, value), overview: getProjectOverview(project) };
     }
     case "tasks:resolve-merge": {
       const value = input(payload) as HarnessCommandInputs["tasks:resolve-merge"];

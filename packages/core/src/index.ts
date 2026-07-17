@@ -12,6 +12,7 @@ export type HarnessCommandInputs = {
   "projects:init-git": { projectId: string };
   "projects:schedule": { projectId: string };
   "chat:create": { projectId: string };
+  "chat:list": { projectId: string; cursor?: string; limit?: number };
   "chat:get": { projectId: string; sessionId: string };
   "chat:send": { projectId: string; sessionId: string; content: string };
   "providers:list": Record<string, never>;
@@ -67,6 +68,9 @@ export type HarnessCommandInputs = {
   "reviews:comment-create": { projectId: string; runId: string; filePath: string; line: number; side: "old" | "new"; body: string };
   "reviews:comment-update": { projectId: string; commentId: string; status: "open" | "addressed" | "dismissed" };
   "reviews:followup": { projectId: string; runId: string; commentIds: string[] };
+  "reviews:auto-list": { projectId: string; taskId?: string };
+  "reviews:auto-retry": { projectId: string; jobId: string };
+  "reviews:auto-finding-update": { projectId: string; findingId: string; status: "addressed" | "dismissed"; reason?: string };
   "interactions:list": {
     projectId: string;
     status?: "pending" | "resolved" | "rejected" | "expired";
@@ -126,6 +130,8 @@ export type HarnessCommandInputs = {
   "tasks:comment": { projectId: string; taskId: string; author?: string; body?: string };
   "tasks:decompose": { projectId: string; taskId: string; payload: Record<string, unknown> };
   "tasks:merge": { projectId: string; taskId: string };
+  "tasks:completion-branches": { projectId: string };
+  "tasks:complete": { projectId: string; taskId: string; targetBranch: string; merge: boolean; removeWorktree: boolean };
   "tasks:resolve-merge": { projectId: string; taskId: string };
   "tasks:request-changes": { projectId: string; taskId: string; reason?: string };
 };
@@ -235,6 +241,8 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "projects:update" || command === "projects:remove" || command === "projects:overview" ||
       command === "projects:report" || command === "projects:init-git" || command === "projects:schedule") return true;
   if (command === "chat:create") return true;
+  if (command === "chat:list") return (payload.cursor === undefined || isText(payload.cursor)) &&
+    (payload.limit === undefined || (isNonNegativeInteger(payload.limit) && Number(payload.limit) > 0));
   if (command === "chat:get") return isText(payload.sessionId);
   if (command === "chat:send") return isText(payload.sessionId) && isText(payload.content);
   if (command === "agents:save") return isRecord(payload.payload) && (payload.agentId === undefined || payload.agentId === null || isText(payload.agentId));
@@ -266,6 +274,9 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
     (payload.action === "resolve" || payload.action === "reject") && isRecord(payload.responsePayload) &&
     isText(payload.idempotencyKey);
   if (command === "reviews:report") return isText(payload.runId);
+  if (command === "reviews:auto-list") return payload.taskId === undefined || isText(payload.taskId);
+  if (command === "reviews:auto-retry") return isText(payload.jobId);
+  if (command === "reviews:auto-finding-update") return isText(payload.findingId) && (payload.status === "addressed" || payload.status === "dismissed") && (payload.reason === undefined || typeof payload.reason === "string");
   if (command === "reviews:diff") return isText(payload.runId) && isText(payload.filePath) &&
     (payload.ignoreWhitespace === undefined || typeof payload.ignoreWhitespace === "boolean") &&
     (payload.offset === undefined || isNonNegativeInteger(payload.offset)) &&
@@ -297,7 +308,9 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "tasks:create-from-prompt") return isText(payload.prompt) &&
     (payload.autoAssign === undefined || typeof payload.autoAssign === "boolean");
   if (command === "tasks:create") return isRecord(payload.payload);
+  if (command === "tasks:completion-branches") return true;
   if (!isText(payload.taskId)) return false;
+  if (command === "tasks:complete") return isText(payload.targetBranch) && typeof payload.merge === "boolean" && typeof payload.removeWorktree === "boolean";
   if (command === "tasks:update" || command === "tasks:decompose") return isRecord(payload.payload);
   if (command === "tasks:move") return payload.direction === "up" || payload.direction === "down";
   return true;
@@ -305,7 +318,7 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
 
 const commandNames = new Set<HarnessCommand>([
   "projects:list", "projects:overview", "projects:overview-sections", "projects:create", "projects:update", "projects:remove", "projects:import",
-  "projects:report", "projects:init-git", "projects:schedule", "chat:create", "chat:get", "chat:send", "providers:list", "providers:probe", "templates:agents", "templates:workflows",
+  "projects:report", "projects:init-git", "projects:schedule", "chat:create", "chat:list", "chat:get", "chat:send", "providers:list", "providers:probe", "templates:agents", "templates:workflows",
   "mcp:clients", "mcp:client-save", "mcp:diagnose",
   "templates:projects", "templates:agent-create", "templates:workflow-create", "templates:project-create", "settings:get", "settings:update", "project-settings:get", "project-settings:update",
   "system:select-folder", "agents:save", "agents:get", "agents:raw-preview", "agents:raw-save", "agents:instruction-save", "agents:instruction-rename", "agents:instruction-remove", "agents:instruction-reorder", "agents:clone", "agents:archive", "agents:open-folder",
@@ -314,12 +327,13 @@ const commandNames = new Set<HarnessCommand>([
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
   "interactions:list", "interactions:respond",
   "reviews:report", "reviews:diff", "reviews:file-update", "reviews:comment-create", "reviews:comment-update", "reviews:followup",
+  "reviews:auto-list", "reviews:auto-retry", "reviews:auto-finding-update",
   "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",
   "drafts:events", "drafts:recover",
   "tasks:create-from-prompt", "tasks:create", "tasks:update", "tasks:start", "tasks:pause", "tasks:resume", "tasks:move",
-  "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:resolve-merge", "tasks:request-changes"
+  "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:completion-branches", "tasks:complete", "tasks:resolve-merge", "tasks:request-changes"
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -7,6 +7,7 @@ import { parse, stringify } from "yaml";
 import {
   AgentDefinitionConflictError,
   createAgentRunSnapshot,
+  parseReviewSchedule,
   readAgentDefinition,
   updateAgentDefinition
 } from "../src/agent-store.js";
@@ -68,7 +69,7 @@ test("agent Markdown is the validated source of truth and run snapshot", async (
     const completed = await waitForCompletedRun(project.id, () => getProjectOverview(project));
     assert.equal(completed.status, "completed");
     assert.equal(completed.agentDefinitionHash, snapshot.hash);
-    assert.equal(completed.agentDefinitionSchemaVersion, 1);
+    assert.equal(completed.agentDefinitionSchemaVersion, 2);
     assert.match(completed.agentDefinitionSnapshot || "", /instructions\/review.md/);
     const providerEvents = getProjectOverview(project).providerEvents.filter((event) => event.runId === completed.id);
     assert.deepEqual(providerEvents.map((event) => event.type).sort(), ["result", "text_delta"]);
@@ -141,13 +142,26 @@ test("agent Markdown is the validated source of truth and run snapshot", async (
     }
 
     const seeded = registerProjectService({ path: path.join(root, "seeded"), seedDefaults: true });
-    assert.equal(seeded.overview.agents.length, 3);
+    assert.equal(seeded.overview.agents.length, 5);
+    assert.ok(seeded.overview.agents.some((value) => value.role === "planner"));
+    assert.ok(seeded.overview.agents.some((value) => value.role === "code-reviewer" && value.capabilities.includes("autoreview")));
     assert.ok(seeded.overview.agents.every((value) => value.parseStatus === "valid" && value.definitionPath));
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("review schedules validate trigger-specific settings and IANA timezones", () => {
+  assert.deepEqual(parseReviewSchedule(undefined, "code-reviewer"), {
+    enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null
+  });
+  assert.equal(parseReviewSchedule({ enabled: true, trigger: "interval", intervalMinutes: 15 }, "code-reviewer")?.intervalMinutes, 15);
+  assert.throws(() => parseReviewSchedule({ enabled: true, trigger: "interval", intervalMinutes: 14 }, "code-reviewer"), /at least 15/);
+  assert.equal(parseReviewSchedule({ enabled: true, trigger: "daily", dailyAt: "09:30", timezone: "Asia/Seoul" }, "code-reviewer")?.timezone, "Asia/Seoul");
+  assert.throws(() => parseReviewSchedule({ enabled: true, trigger: "daily", dailyAt: "25:00", timezone: "Asia/Seoul" }, "code-reviewer"), /HH:mm/);
+  assert.throws(() => parseReviewSchedule({ enabled: true, trigger: "daily", dailyAt: "09:30", timezone: "Mars/Olympus" }, "code-reviewer"), /IANA/);
 });
 
 function writeAgentDocument(

@@ -76,6 +76,9 @@ const commands: Record<string, CommandHandler> = {
   "runs:list": listRunsCommand,
   "runs:show": showRunCommand,
   "runs:followups": createRunFollowUpsCommand,
+  "reviews:auto-list": listAutoReviewsCommand,
+  "reviews:auto-retry": retryAutoReviewCommand,
+  "reviews:auto-finding-update": updateAutoReviewFindingCommand,
   "tasks:list": listTasksCommand,
   "tasks:show": showTaskCommand,
   "tasks:create": createTaskCommand,
@@ -733,6 +736,26 @@ function createRunFollowUpsCommand(args: string[]) {
   const projectId = getRequiredOption(options, "project");
   const runId = getRequiredOption(options, "run");
   return invokeTransport("runs:followups", { projectId, runId });
+}
+
+function listAutoReviewsCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("reviews:auto-list", { projectId: getRequiredOption(options, "project"), ...(options.task ? { taskId: options.task } : {}) });
+}
+
+function retryAutoReviewCommand(args: string[]) {
+  const options = parseOptions(args);
+  return invokeTransport("reviews:auto-retry", { projectId: getRequiredOption(options, "project"), jobId: getRequiredOption(options, "job") });
+}
+
+function updateAutoReviewFindingCommand(args: string[]) {
+  const options = parseOptions(args);
+  const status = getRequiredOption(options, "status");
+  if (status !== "addressed" && status !== "dismissed") throw new Error("--status must be addressed or dismissed.");
+  return invokeTransport("reviews:auto-finding-update", {
+    projectId: getRequiredOption(options, "project"), findingId: getRequiredOption(options, "finding"), status,
+    ...(options.reason ? { reason: options.reason } : {})
+  });
 }
 
 async function listTasksCommand(args: string[]) {

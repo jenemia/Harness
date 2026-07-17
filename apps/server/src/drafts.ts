@@ -67,10 +67,12 @@ export function createDraftSession(
     try {
       const timestamp = now();
       const draftId = randomUUID();
-      const reviewers = input.reviewers?.length ? input.reviewers : [
+      const reviewers = (input.reviewers?.length ? input.reviewers : [
         { role: "planning-reviewer" as const, agentId: null },
         { role: "edge-case-reviewer" as const, agentId: null }
-      ];
+      ]).map((reviewer) => reviewer.role === "planner" && !reviewer.agentId
+        ? { ...reviewer, agentId: (db.prepare("SELECT id FROM agents WHERE role = 'planner' AND archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC LIMIT 1").get() as { id: string } | undefined)?.id || null }
+        : reviewer);
       for (const reviewer of reviewers) {
         if (reviewer.agentId && !db.prepare("SELECT id FROM agents WHERE id = ?").get(reviewer.agentId)) {
           throw new Error(`Draft reviewer agent not found: ${reviewer.agentId}`);

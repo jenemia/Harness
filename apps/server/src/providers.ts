@@ -41,6 +41,7 @@ export type LlmRunContext = {
     responsePayload: Record<string, unknown>;
     checkpoint: Record<string, unknown> | null;
   };
+  resumeSession?: { sessionId: string; parentRunId: string };
   workspaceProtection?: {
     canonicalWorkspacePath: string;
     pushExceptionToken?: string;
@@ -108,7 +109,7 @@ export type WorkspaceProvider = {
   initializeProject(projectPath: string): Promise<{ initialized: boolean; committed: boolean; head: string | null; output: string }>;
   ensureGitReady(projectPath: string): Promise<void>;
   ensureTaskWorkspace(projectPath: string, task: TaskRecord): Promise<TaskWorkspace>;
-  commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null }>;
+  commitAll(cwd: string, message: string): Promise<{ committed: boolean; output: string; error: string | null; commitSha: string | null; parentSha: string | null }>;
   mergeBranch(projectPath: string, branchName: string, message: string): Promise<CommandResult>;
   mergeState(projectPath: string, branchName: string): Promise<MergeState>;
   finalizeMerge(projectPath: string): Promise<CommandResult>;
@@ -116,6 +117,9 @@ export type WorkspaceProvider = {
   workingTreeStatus(projectPath: string): Promise<string>;
   snapshotRef(cwd: string): Promise<string>;
   changedFiles(cwd: string): Promise<string[]>;
+  localBranches(projectPath: string): Promise<{ current: string; branches: string[] }>;
+  checkoutBranch(projectPath: string, branchName: string): Promise<CommandResult>;
+  removeWorktree(projectPath: string, worktreePath: string): Promise<CommandResult>;
 };
 
 export type LlmProvider = {
@@ -379,18 +383,13 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
     createMockLlmProvider(),
     createShellLlmProvider(platformProvider),
     createCursorCliProvider(platformProvider),
-    createCliLlmProvider(platformProvider, {
-      id: "codex",
-      label: "Codex CLI",
-      description: "Runs Codex CLI with its existing user login session inside the task workspace.",
-      commandExample: "codex exec \"$HARNESS_PROMPT_FILE\"",
-      authentication: { strategy: "cli-session", executable: "codex", versionArgs: ["--version"], statusArgs: ["login", "status"], loginCommand: "codex login" }
-    }),
+    ...createCodexCliProviders(platformProvider),
     createCliLlmProvider(platformProvider, {
       id: "claude",
       label: "Claude Code CLI",
       description: "Runs Claude Code CLI with its existing user login session inside the task workspace.",
       commandExample: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\"",
+      defaultCommand: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\"",
       authentication: { strategy: "cli-session", executable: "claude", versionArgs: ["--version"], statusArgs: ["auth", "status"], loginCommand: "claude login" }
     }),
     createCliLlmProvider(platformProvider, {
@@ -412,6 +411,95 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
       commandExample: "openrouter-cli run --prompt-file \"$HARNESS_PROMPT_FILE\""
     })
   ]);
+}
+
+function createCodexCliProviders(platformProvider: PlatformProvider) {
+  const authentication: CliAuthenticationDefinition = {
+    strategy: "cli-session",
+    executable: "codex",
+    versionArgs: ["--version"],
+    statusArgs: ["login", "status"],
+    loginCommand: "codex login"
+  };
+  const models = [
+    ["codex", "Codex CLI (default)", null],
+    ["codex-5.5", "Codex · GPT-5.5", "gpt-5.5-codex"],
+    ["codex-5.6-sol", "Codex · GPT-5.6 Sol", "gpt-5.6-codex-sol"],
+    ["codex-5.6-terra", "Codex · GPT-5.6 Terra", "gpt-5.6-codex-terra"],
+    ["codex-5.6-luna", "Codex · GPT-5.6 Luna", "gpt-5.6-codex-luna"]
+  ] as const;
+
+  return models.map(([id, label, model]) => createCodexCliProvider(platformProvider, {
+    id,
+    label,
+    description: "Runs Codex CLI with its existing user login session inside the task workspace.",
+    commandExample: codexCommand(model),
+    defaultCommand: codexCommand(model),
+    authentication
+  }));
+}
+
+function createCodexCliProvider(
+  platformProvider: PlatformProvider,
+  input: Omit<LlmProviderDefinition, "kind" | "requiresCommand" | "capabilities"> & { id: string; defaultCommand?: string | null }
+): LlmProvider {
+  const modelById: Record<string, string> = {
+    "codex-5.5": "gpt-5.5-codex",
+    "codex-5.6-sol": "gpt-5.6-codex-sol",
+    "codex-5.6-terra": "gpt-5.6-codex-terra",
+    "codex-5.6-luna": "gpt-5.6-codex-luna"
+  };
+  const model = modelById[input.id] || null;
+  return {
+    id: input.id,
+    definition: {
+      ...input,
+      kind: "llm-cli",
+      requiresCommand: true,
+      capabilities: { ...nonStreamingCapabilities, streaming: true, sessionResume: true }
+    },
+    async run(agent, task, workspace, context) {
+      let output = "";
+      let sessionId = context?.resumeSession?.sessionId || "";
+      const resumeCommand = context?.resumeSession
+        ? ["codex exec resume --json", model ? `--model ${shellQuote(model)}` : "", shellQuote(sessionId), `- < \"$HARNESS_PROMPT_FILE\"`].filter(Boolean).join(" ")
+        : null;
+      const freshCommand = ["codex exec --json --sandbox workspace-write", model ? `--model ${shellQuote(model)}` : "", `- < \"$HARNESS_PROMPT_FILE\"`].filter(Boolean).join(" ");
+      const invoke = (command: string) => platformProvider.runShellLines(
+          command, workspace.worktreePath, buildLlmEnvironment(input.id, agent, task, workspace, context), context?.timeoutMs,
+          (line) => {
+            try {
+              const event = JSON.parse(line) as Record<string, unknown>;
+              if (event.type === "thread.started" && typeof event.thread_id === "string") {
+                sessionId = event.thread_id;
+                context?.onEvent?.({ type: "decision", payload: { phase: "session_initialized", sessionId } });
+              }
+              const item = event.item && typeof event.item === "object" ? event.item as Record<string, unknown> : null;
+              if (event.type === "item.completed" && item?.type === "agent_message" && typeof item.text === "string") {
+                output += item.text;
+                context?.onEvent?.({ type: "text_delta", payload: { text: item.text, sessionId } });
+              }
+            } catch { /* subprocess status remains authoritative */ }
+          });
+      let result = await invoke(resumeCommand || freshCommand);
+      if (!result.ok && resumeCommand) {
+        output = "";
+        context?.onEvent?.({ type: "decision", payload: { phase: "session_fallback", sessionId: context?.resumeSession?.sessionId } });
+        result = await invoke(freshCommand);
+      }
+      return { status: result.ok ? "completed" : "failed", ok: result.ok, output, error: result.ok ? null : result.error };
+    }
+  };
+}
+
+export function codexCommand(model: string | null) {
+  return ["codex exec", model ? `--model ${model}` : "", "--sandbox workspace-write", "- < \"$HARNESS_PROMPT_FILE\""]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function shellQuote(value: string) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 function createLocalAgentPolicyProvider(): PolicyProvider {
@@ -780,7 +868,7 @@ function createGitWorktreeWorkspaceProvider(
     async commitAll(cwd, message) {
       const status = await platformProvider.run("git", ["status", "--porcelain"], cwd);
       if (!status.stdout.trim()) {
-        return { committed: false, output: "No file changes to commit.", error: null };
+        return { committed: false, output: "No file changes to commit.", error: null, commitSha: null, parentSha: null };
       }
 
       await platformProvider.run("git", ["add", "-A"], cwd);
@@ -798,7 +886,15 @@ function createGitWorktreeWorkspaceProvider(
         cwd
       );
 
-      return { committed: true, output: commit.stdout || "Committed task changes.", error: null };
+      const commitSha = (await platformProvider.run("git", ["rev-parse", "HEAD"], cwd)).stdout.trim();
+      const parent = await platformProvider.run("git", ["rev-parse", "HEAD^"], cwd, true);
+      return {
+        committed: true,
+        output: commit.stdout || "Committed task changes.",
+        error: null,
+        commitSha: commitSha || null,
+        parentSha: parent.ok ? parent.stdout.trim() || null : null
+      };
     },
 
     mergeBranch(projectPath, branchName, message) {
@@ -841,6 +937,20 @@ function createGitWorktreeWorkspaceProvider(
 
     async workingTreeStatus(projectPath) {
       return (await platformProvider.run("git", ["status", "--porcelain"], projectPath)).stdout;
+    },
+
+    async localBranches(projectPath) {
+      const current = await platformProvider.run("git", ["branch", "--show-current"], projectPath, true);
+      const list = await platformProvider.run("git", ["for-each-ref", "--format=%(refname:short)", "refs/heads"], projectPath, true);
+      return { current: current.stdout.trim(), branches: list.stdout.split("\n").map((value) => value.trim()).filter(Boolean) };
+    },
+
+    checkoutBranch(projectPath, branchName) {
+      return platformProvider.run("git", ["checkout", branchName], projectPath, true);
+    },
+
+    removeWorktree(projectPath, worktreePath) {
+      return platformProvider.run("git", ["worktree", "remove", worktreePath], projectPath, true);
     },
 
     async snapshotRef(cwd) {
@@ -1148,12 +1258,11 @@ function createCursorCliProvider(platformProvider: PlatformProvider): LlmProvide
       let terminalSeen = false;
       let terminalError = false;
       let eventError: string | null = null;
-      const processResult = await platformProvider.runShellLines(
-        agent.cliCommand,
-        workspace.worktreePath,
-        buildLlmEnvironment("cursor-cli", agent, task, workspace, context),
-        context?.timeoutMs,
-        (line) => {
+      const cursorCommand = context?.resumeSession
+        ? `cursor-agent --resume ${shellQuote(context.resumeSession.sessionId)} -p --force --output-format stream-json < \"$HARNESS_PROMPT_FILE\"`
+        : agent.cliCommand;
+      const invoke = (command: string) => platformProvider.runShellLines(
+        command, workspace.worktreePath, buildLlmEnvironment("cursor-cli", agent, task, workspace, context), context?.timeoutMs, (line) => {
           const event = parseCursorStreamLine(line);
           if (!event) return;
           if (event.type === "text_delta" && typeof event.payload.text === "string") assistantOutput += event.payload.text;
@@ -1167,9 +1276,15 @@ function createCursorCliProvider(platformProvider: PlatformProvider): LlmProvide
           } catch (error) {
             eventError = error instanceof Error ? error.message : String(error);
           }
-        }
-      );
-      const ok = processResult.ok && terminalSeen && !terminalError && !eventError;
+        });
+      let processResult = await invoke(cursorCommand);
+      let ok = processResult.ok && terminalSeen && !terminalError && !eventError;
+      if (!ok && context?.resumeSession) {
+        assistantOutput = ""; terminalSummary = ""; terminalSeen = false; terminalError = false; eventError = null;
+        context.onEvent?.({ type: "decision", payload: { phase: "session_fallback", sessionId: context.resumeSession.sessionId } });
+        processResult = await invoke(agent.cliCommand);
+        ok = processResult.ok && terminalSeen && !terminalError && !eventError;
+      }
       return {
         status: ok ? "completed" : "failed",
         ok,

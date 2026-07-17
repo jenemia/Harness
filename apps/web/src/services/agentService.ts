@@ -38,7 +38,7 @@ export type AgentDocumentBundle = {
 export const agentService = {
   get: (projectId: string, agentId: string) => desktopOrHttp(
     "agents:get", { projectId, agentId }, () => api<AgentDocumentBundle>(`/api/projects/${projectId}/agents/${agentId}`)),
-  save: (projectId: string, agentId: string | null, payload: AgentPayload) => desktopOrHttp(
+  save: (projectId: string, agentId: string | null, payload: AgentPayload) => desktopOrHttp<{ agent: Agent }, "agents:save">(
     "agents:save", { projectId, agentId, payload }, () => api(
       agentId
         ? `/api/projects/${projectId}/agents/${agentId}`
