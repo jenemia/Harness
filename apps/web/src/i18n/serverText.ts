@@ -4,6 +4,8 @@ const koreanEventTerms: Record<string, string> = {
   agent: "에이전트",
   approval: "승인",
   approved: "승인됨",
+  applied: "적용됨",
+  archived: "보관됨",
   automatic: "자동",
   blocked: "차단됨",
   changes_requested: "변경 요청",
@@ -31,11 +33,13 @@ const koreanEventTerms: Record<string, string> = {
   live: "실행 중",
   memory: "메모리",
   merge: "병합",
+  mcp: "MCP",
   pending: "대기 중",
   plan: "계획",
   pm: "PM",
   policy: "정책",
   preview: "미리보기",
+  project: "프로젝트",
   queued: "대기열 등록",
   raw: "원본",
   recovered: "복구됨",
@@ -57,15 +61,21 @@ const koreanEventTerms: Record<string, string> = {
   skipped: "건너뜀",
   started: "시작됨",
   stopped: "중지됨",
+  succeeded: "성공",
   suspended: "일시 중단됨",
   task: "일감",
   template: "템플릿",
+  tool: "도구",
   unblocked: "차단 해제됨",
   updated: "수정됨",
   workspace: "작업 공간",
 };
 
 const exactKoreanText: Record<string, string> = {
+  "Agent definition has not been materialized yet.":
+    "에이전트 정의 파일이 아직 생성되지 않았습니다.",
+  "Agent is disabled in its agent.md definition.":
+    "agent.md 정의에서 에이전트가 비활성화되어 있습니다.",
   "Agent instruction files changed.": "에이전트 지침 파일이 변경되었습니다.",
   "Agent run failed.": "에이전트 실행이 실패했습니다.",
   "Completion report generation failed; the run result remains valid.":
@@ -106,6 +116,8 @@ const exactKoreanText: Record<string, string> = {
     "스케줄링 가능한 작업 에이전트가 없습니다.",
   "Project has reached its parallel run limit.":
     "프로젝트가 병렬 실행 제한에 도달했습니다.",
+  "Command execution approval was rejected.": "명령 실행 승인이 거절되었습니다.",
+  "Task is already running.": "일감이 이미 실행 중입니다.",
   "Task changes are waiting for human merge approval.":
     "일감 변경 사항이 사용자의 병합 승인을 기다리고 있습니다.",
   "Task was returned to the backlog for PM reassignment.":
@@ -140,15 +152,47 @@ function koreanDependencyItems(value: string) {
     });
 }
 
+function koreanAgentDefinitionError(value: string) {
+  return value === "Fix agent.md before starting a new run."
+    ? "새 실행을 시작하기 전에 agent.md를 수정하세요."
+    : value;
+}
+
+function koreanRiskItems(value: string) {
+  const risks: Record<string, string> = {
+    "recursive forced delete": "재귀 강제 삭제",
+    "hard Git reset": "Git 강제 초기화",
+    "Git clean": "Git 정리",
+    "Git push": "Git 푸시",
+    "Git merge or rebase": "Git 병합 또는 리베이스",
+    sudo: "sudo 권한 상승",
+    "package install or update": "패키지 설치 또는 업데이트",
+    "remote script piped to shell": "원격 스크립트의 셸 전달 실행",
+  };
+  return value
+    .split(", ")
+    .map((risk) => risks[risk] || risk)
+    .join(", ");
+}
+
 const koreanPatterns: Array<[RegExp, (...values: string[]) => string]> = [
   [/^Review backlog limit reached \((\d+) cards \/ (\d+) unreviewed lines\)\.$/, (cards, lines) => `검토 백로그 제한에 도달했습니다(카드 ${cards}개 / 미검토 변경 ${lines}줄).`],
   [/^Waiting on dependencies: (.+)$/, (items) => `의존 일감을 기다리는 중: ${koreanDependencyItems(items)}`],
+  [/^Agent definition is invalid: (.+)$/, (error) => `에이전트 정의가 유효하지 않습니다: ${koreanAgentDefinitionError(error)}`],
+  [/^(.+) is not allowed to run (.+)\. Add one of these allowed tools: (.+)\.$/, (agent, provider, tools) => `${agent}은(는) ${provider}을(를) 실행할 수 없습니다. 다음 허용 도구 중 하나를 추가하세요: ${tools}.`],
+  [/^(.+) needs approval before running (.+)\. Risky command policy requires approval before running: (.+)\.$/, (agent, provider, risks) => `${agent}이(가) ${provider}을(를) 실행하려면 승인이 필요합니다. 위험 명령 정책에 따라 다음 항목은 실행 전 승인이 필요합니다: ${koreanRiskItems(risks)}.`],
+  [/^(.+) needs approval before running (.+)\.$/, (agent, provider) => `${agent}이(가) ${provider}을(를) 실행하려면 승인이 필요합니다.`],
+  [/^Risky command policy requires approval before running: (.+)\.$/, (risks) => `위험 명령 정책에 따라 다음 항목은 실행 전 승인이 필요합니다: ${koreanRiskItems(risks)}.`],
   [/^(.+) commented on this task\.$/, (author) => `${koreanActorSubject(author)} 이 일감에 댓글을 남겼습니다.`],
   [/^(.+) was added to project memory\.$/, (title) => `${title}을(를) 프로젝트 메모리에 추가했습니다.`],
   [/^(.+) was created\.$/, (name) => `${name}을(를) 생성했습니다.`],
   [/^(.+) was updated\.$/, (name) => `${name}을(를) 수정했습니다.`],
   [/^(.+) was archived\.$/, (name) => `${name}을(를) 보관 처리했습니다.`],
   [/^(.+) was cloned\.$/, (name) => `${name}을(를) 복제했습니다.`],
+  [/^(.+) Markdown was saved\.$/, (name) => `${name} Markdown을 저장했습니다.`],
+  [/^(.+) project template created (\d+) agent\(s\)\.$/, (name, count) => `${name} 프로젝트 템플릿으로 에이전트 ${count}개를 생성했습니다.`],
+  [/^(.+) called (.+) as dry-run\.$/, (client, tool) => `${client}이(가) ${tool} 도구를 시험 실행으로 호출했습니다.`],
+  [/^(.+) called (.+)\.$/, (client, tool) => `${client}이(가) ${tool} 도구를 호출했습니다.`],
   [/^(.+) preview is booting\.$/, (label) => `${label} 미리보기를 시작하는 중입니다.`],
   [/^(.+) preview is live\.$/, (label) => `${label} 미리보기가 실행 중입니다.`],
   [/^(.+) preview was stopped\.$/, (label) => `${label} 미리보기를 중지했습니다.`],
