@@ -104,6 +104,7 @@ import { correlationAttributes, operationSpanName, withTelemetrySpan } from "./t
 import { subscribeAgentFileEvents } from "./agent-file-events.js";
 import { listPreviews, registerPreview, removePreview, type PreviewRegistrationInput } from "./previews.js";
 import { recoverPreviewProcesses, restartPreview, startPreview, stopPreview } from "./preview-runtime.js";
+import { listCodeReviews, retryCodeReview, startCodeReviewRuntime, updateCodeReviewFinding } from "./code-reviews.js";
 import { openPreviewTarget } from "./preview-opener.js";
 import { createChatSession, getChatSession, listChatSessions, sendChatMessage } from "./chat.js";
 
@@ -139,6 +140,7 @@ export function subscribeApplicationAgentEvents(
 export function recoverApplicationState() {
   return withTelemetrySpan("recovery.audit", { "harness.operation": "application.recover" }, () => Promise.all(listProjects().map(async (project) => {
     try {
+      startCodeReviewRuntime(project);
       return {
         projectId: project.id,
         runtime: recoverInterruptedRuns(project),
@@ -452,6 +454,18 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "reviews:followup": {
       const value = input(payload) as HarnessCommandInputs["reviews:followup"];
       return createReviewFollowUp(requiredProject(value.projectId), value.runId, value.commentIds);
+    }
+    case "reviews:auto-list": {
+      const value = input(payload) as HarnessCommandInputs["reviews:auto-list"];
+      return listCodeReviews(requiredProject(value.projectId), value.taskId);
+    }
+    case "reviews:auto-retry": {
+      const value = input(payload) as HarnessCommandInputs["reviews:auto-retry"];
+      return retryCodeReview(requiredProject(value.projectId), value.jobId);
+    }
+    case "reviews:auto-finding-update": {
+      const value = input(payload) as HarnessCommandInputs["reviews:auto-finding-update"];
+      return { finding: updateCodeReviewFinding(requiredProject(value.projectId), value.findingId, value.status, value.reason) };
     }
     case "drafts:create": {
       const value = input(payload) as HarnessCommandInputs["drafts:create"];

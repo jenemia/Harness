@@ -131,6 +131,9 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
       allowedTools: normalizeStringList(input.allowedTools),
       boundaries: input.boundaries?.trim() || "",
       maxParallel: Math.max(1, Number(input.maxParallel || settings.defaultAgentMaxParallel)),
+      reviewSchedule: input.reviewSchedule ?? (input.role === "code-reviewer"
+        ? { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null }
+        : null),
       enabled: input.enabled !== false,
       status: "idle",
       currentTaskId: null,
@@ -150,8 +153,8 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
     db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, review_schedule, status, current_task_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       agent.id,
       agent.name,
@@ -163,6 +166,7 @@ function createAgentMutation(project: ProjectRecord, input: Partial<AgentRecord>
       JSON.stringify(agent.allowedTools),
       agent.boundaries,
       agent.maxParallel,
+      agent.reviewSchedule ? JSON.stringify(agent.reviewSchedule) : null,
       agent.status,
       agent.currentTaskId,
       agent.createdAt,
@@ -334,12 +338,13 @@ function cloneAgentMutation(project: ProjectRecord, agentId: string, input: { na
     db.prepare(`
       INSERT INTO agents (
         id, name, role, persona, model_backend, cli_command, capabilities,
-        allowed_tools, boundaries, max_parallel, status, current_task_id, created_at, updated_at, enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        allowed_tools, boundaries, max_parallel, review_schedule, status, current_task_id, created_at, updated_at, enabled
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       clone.id, clone.name, clone.role, clone.persona, clone.modelBackend, clone.cliCommand,
       JSON.stringify(clone.capabilities), JSON.stringify(clone.allowedTools), clone.boundaries,
-      clone.maxParallel, clone.status, null, timestamp, timestamp, clone.enabled ? 1 : 0
+      clone.maxParallel, clone.reviewSchedule ? JSON.stringify(clone.reviewSchedule) : null,
+      clone.status, null, timestamp, timestamp, clone.enabled ? 1 : 0
     );
     syncProjectAgentDefinitions(db, project.path);
     insertEvent(db, { taskId: null, agentId: clone.id, type: "agent.cloned", message: `${clone.name} was cloned.`, metadata: { sourceAgentId: agentId } });

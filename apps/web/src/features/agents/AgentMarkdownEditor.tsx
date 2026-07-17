@@ -360,11 +360,23 @@ export function AgentMarkdownEditor(props: {
           <h3>Structured form</h3>
           <input aria-label="Agent editor name" value={parsed.value?.name || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ name: event.target.value })} />
           <select aria-label="Agent editor role" value={parsed.value?.role || "worker"} disabled={!parsed.value} onChange={(event) => updateStructured({ role: event.target.value })}>
-            <option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="project-manager">project-manager</option>
+            <option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="code-reviewer">code-reviewer</option><option value="project-manager">project-manager</option>
           </select>
           <select aria-label="Agent editor provider" value={parsed.value?.modelBackend || "mock"} disabled={!parsed.value} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>{!currentModelConnected && <option value={parsed.value?.modelBackend || "mock"}>{parsed.value?.modelBackend || "mock"} · disconnected</option>}{connectedModels.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select>
           <input aria-label="Agent editor max parallel" type="number" min={1} max={8} value={parsed.value?.maxParallel || 1} disabled={!parsed.value} onChange={(event) => updateStructured({ maxParallel: Math.max(1, Number(event.target.value || 1)) })} />
           <label className="checkbox-row"><input type="checkbox" checked={parsed.value?.enabled || false} disabled={!parsed.value} onChange={(event) => updateStructured({ enabled: event.target.checked })} /><span>Enabled for new runs</span></label>
+          {(parsed.value?.role === "code-reviewer" || parsed.value?.capabilities.includes("autoreview")) && (() => {
+            const schedule = parsed.value?.reviewSchedule || { enabled: true, trigger: "on-commit" as const, intervalMinutes: null, dailyAt: null, timezone: null };
+            const updateSchedule = (next: Partial<typeof schedule>) => updateStructured({ reviewSchedule: { ...schedule, ...next } });
+            return <div className="agent-review-schedule">
+              <label className="checkbox-row"><input aria-label="Automatic review enabled" type="checkbox" checked={schedule.enabled} onChange={(event) => updateSchedule({ enabled: event.target.checked })} /><span>Automatic commit review</span></label>
+              <select aria-label="Review schedule trigger" value={schedule.trigger} onChange={(event) => updateSchedule({ trigger: event.target.value as typeof schedule.trigger })}>
+                <option value="on-commit">on-commit</option><option value="interval">interval</option><option value="daily">daily</option>
+              </select>
+              {schedule.trigger === "interval" && <input aria-label="Review interval minutes" type="number" min={15} value={schedule.intervalMinutes ?? 15} onChange={(event) => updateSchedule({ intervalMinutes: Number(event.target.value) })} />}
+              {schedule.trigger === "daily" && <><input aria-label="Daily review time" type="time" value={schedule.dailyAt ?? "09:00"} onChange={(event) => updateSchedule({ dailyAt: event.target.value })} /><input aria-label="Review timezone" value={schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone} onChange={(event) => updateSchedule({ timezone: event.target.value })} placeholder="Asia/Seoul" /></>}
+            </div>;
+          })()}
           <input aria-label="Agent editor capabilities" value={(parsed.value?.capabilities || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ capabilities: parseList(event.target.value) })} placeholder="Capabilities" />
           <input aria-label="Agent editor allowed tools" value={(parsed.value?.allowedTools || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ allowedTools: parseList(event.target.value) })} placeholder="Allowed tools" />
           <textarea aria-label="Agent editor boundaries" value={parsed.value?.boundaries || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ boundaries: event.target.value })} placeholder="Boundaries" />

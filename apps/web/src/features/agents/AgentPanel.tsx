@@ -87,6 +87,7 @@ export function AgentPanel(props: {
   const createPayload = {
     name, role, persona, cliCommand: cliCommand || null, modelBackend, maxParallel, enabled,
     capabilities: parseCapabilities(capabilitiesText), allowedTools: parseCapabilities(allowedToolsText), boundaries,
+    ...(role === "code-reviewer" ? { reviewSchedule: { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null } } : {}),
   };
 
   async function submitCreate(event: FormEvent) {
@@ -131,7 +132,7 @@ export function AgentPanel(props: {
         {creating ? <form className="agent-create-form" onSubmit={submitCreate}>
           <header><div><span className="modal-kicker">{t("agents.new")}</span><h2>{t("agents.createTitle")}</h2></div><button className="icon-button" type="button" onClick={() => { setCreating(false); setMobileDetail(false); }}><X size={16} /></button></header>
           <select value="" onChange={(event) => applyTemplate(event.target.value)}><option value="">{t("agents.applyTemplate")}</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.role}</option>)}</select>
-          <div className="agent-form-grid"><input required value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.name")} /><select value={role} onChange={(event) => setRole(event.target.value)}><option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="project-manager">project-manager</option></select></div>
+          <div className="agent-form-grid"><input required value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.name")} /><select value={role} onChange={(event) => setRole(event.target.value)}><option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="code-reviewer">code-reviewer</option><option value="project-manager">project-manager</option></select></div>
           <select value={modelBackend} onChange={(event) => setModelBackend(event.target.value)}>{connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
           <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.persona")} />
           <details><summary>{t("agents.advanced")}</summary><div className="stack-form"><input type="number" min={1} max={8} value={maxParallel} onChange={(event) => setMaxParallel(Math.max(1, Number(event.target.value || 1)))} /><label className="checkbox-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>{t("agents.enabled")}</span></label><input value={capabilitiesText} onChange={(event) => setCapabilitiesText(event.target.value)} placeholder="Capabilities" /><input value={allowedToolsText} onChange={(event) => setAllowedToolsText(event.target.value)} placeholder="Allowed tools" /><textarea value={boundaries} onChange={(event) => setBoundaries(event.target.value)} placeholder="Boundaries" /><input value={cliCommand} onChange={(event) => setCliCommand(event.target.value)} placeholder="CLI command" /></div></details>

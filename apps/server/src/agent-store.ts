@@ -14,10 +14,10 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { parse, stringify } from "yaml";
 import { projectHarnessPath } from "./project-store.js";
-import type { AgentRecord } from "./types.js";
+import type { AgentRecord, ReviewSchedule } from "./types.js";
 import { assertNoCredentialMaterial } from "./credential-security.js";
 
-const agentSchemaVersion = 1;
+const agentSchemaVersion = 2;
 const knownSections = ["Persona", "Instructions", "Boundaries", "Review Policy", "Output Format"];
 
 export type AgentParseStatus = "valid" | "invalid";
@@ -55,6 +55,7 @@ export type AgentDocument = {
     capabilities: string[];
     allowedTools: string[];
     maxParallel: number;
+    reviewSchedule: ReviewSchedule | null;
     enabled: boolean;
     instructionFiles: string[];
     persona: string;
@@ -89,6 +90,7 @@ export function createAgentDefinition(projectPath: string, agent: AgentRecord): 
       allowedTools: agent.allowedTools,
       maxParallel: agent.maxParallel,
       enabled: agent.enabled,
+      ...(agent.reviewSchedule ? { reviewSchedule: agent.reviewSchedule } : {}),
       instructionFiles: []
     },
     sections: [
@@ -135,7 +137,7 @@ function parseAgentDocument(projectPath: string, relativePath: string, filePath:
   const role = requiredString(value.role, "role");
   const modelBackend = requiredString(value.modelBackend, "modelBackend");
   const schemaVersion = Number(value.schemaVersion);
-  if (schemaVersion !== agentSchemaVersion) throw new Error(`Unsupported agent schema version: ${value.schemaVersion}`);
+  if (schemaVersion !== 1 && schemaVersion !== agentSchemaVersion) throw new Error(`Unsupported agent schema version: ${value.schemaVersion}`);
   const instructionFiles = stringList(value.instructionFiles);
   const folderPath = path.dirname(filePath);
   for (const instructionFile of instructionFiles) validateInstructionPath(folderPath, instructionFile);
@@ -163,6 +165,7 @@ function parseAgentDocument(projectPath: string, relativePath: string, filePath:
       allowedTools: stringList(value.allowedTools),
       maxParallel: Math.max(1, Number(value.maxParallel || 1)),
       enabled: value.enabled !== false,
+      reviewSchedule: parseReviewSchedule(value.reviewSchedule, role),
       instructionFiles,
       persona,
       instructions,
@@ -356,7 +359,8 @@ export function updateAgentDefinition(
     ...(patch.capabilities !== undefined ? { capabilities: normalizeStrings(patch.capabilities) } : {}),
     ...(patch.allowedTools !== undefined ? { allowedTools: normalizeStrings(patch.allowedTools) } : {}),
     ...(patch.maxParallel !== undefined ? { maxParallel: Math.max(1, Number(patch.maxParallel)) } : {}),
-    ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {})
+    ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+    ...(patch.reviewSchedule !== undefined ? { reviewSchedule: patch.reviewSchedule } : {})
   };
   const sections = document.sections.map((section) => {
     if (section.name === "Persona" && patch.persona !== undefined) return { ...section, content: patch.persona.trim() };
@@ -390,7 +394,7 @@ export function syncProjectAgentDefinitions(db: DatabaseSync, projectPath: strin
       if (!agentIndexMatches(row, document)) {
         db.prepare(`
           UPDATE agents SET name = ?, role = ?, persona = ?, model_backend = ?, cli_command = ?,
-            capabilities = ?, allowed_tools = ?, boundaries = ?, max_parallel = ?, definition_path = ?,
+            capabilities = ?, allowed_tools = ?, boundaries = ?, max_parallel = ?, review_schedule = ?, definition_path = ?,
             definition_hash = ?, definition_schema_version = ?, parse_status = ?, parse_error = ?, enabled = ?, updated_at = ?
           WHERE id = ?
         `).run(
@@ -403,6 +407,7 @@ export function syncProjectAgentDefinitions(db: DatabaseSync, projectPath: strin
           JSON.stringify(document.definition.allowedTools),
           document.definition.boundaries,
           document.definition.maxParallel,
+          document.definition.reviewSchedule ? JSON.stringify(document.definition.reviewSchedule) : null,
           document.relativePath,
           document.hash,
           document.definition.schemaVersion,
@@ -456,6 +461,7 @@ function agentIndexMatches(row: Record<string, unknown>, document: AgentDocument
     JSON.stringify(parseStoredList(row.allowed_tools)) === JSON.stringify(definition.allowedTools) &&
     String(row.boundaries || "") === definition.boundaries &&
     Number(row.max_parallel) === definition.maxParallel &&
+    JSON.stringify(parseStoredReviewSchedule(row.review_schedule)) === JSON.stringify(definition.reviewSchedule) &&
     Number(row.enabled ?? 1) === (definition.enabled ? 1 : 0) &&
     String(row.definition_path || "") === document.relativePath &&
     String(row.definition_hash || "") === document.hash &&
@@ -569,6 +575,7 @@ function legacyAgent(row: Record<string, unknown>): AgentRecord {
     allowedTools: parseStoredList(row.allowed_tools),
     boundaries: String(row.boundaries || ""),
     maxParallel: Number(row.max_parallel || 1),
+    reviewSchedule: parseStoredReviewSchedule(row.review_schedule),
     enabled: Number(row.enabled ?? 1) !== 0,
     status: String(row.status) as AgentRecord["status"],
     currentTaskId: row.current_task_id ? String(row.current_task_id) : null,
@@ -609,6 +616,43 @@ function stringList(value: unknown) {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) throw new Error("Agent list fields must be arrays.");
   return normalizeStrings(value);
+}
+
+export function parseReviewSchedule(value: unknown, role = "code-reviewer"): ReviewSchedule | null {
+  if (value === undefined || value === null) return role === "code-reviewer" ? defaultReviewSchedule() : null;
+  if (!isRecord(value)) throw new Error("reviewSchedule must be an object.");
+  const trigger = String(value.trigger || "on-commit");
+  if (!(["on-commit", "interval", "daily"] as string[]).includes(trigger)) throw new Error("reviewSchedule.trigger is invalid.");
+  const intervalMinutes = value.intervalMinutes === undefined || value.intervalMinutes === null ? null : Number(value.intervalMinutes);
+  const dailyAt = typeof value.dailyAt === "string" && value.dailyAt.trim() ? value.dailyAt.trim() : null;
+  const timezone = typeof value.timezone === "string" && value.timezone.trim() ? value.timezone.trim() : null;
+  if (trigger === "interval" && (!Number.isInteger(intervalMinutes) || Number(intervalMinutes) < 15)) {
+    throw new Error("Interval review schedules require intervalMinutes of at least 15.");
+  }
+  if (trigger === "daily") {
+    if (!dailyAt || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(dailyAt)) throw new Error("Daily review schedules require dailyAt in HH:mm format.");
+    if (!timezone || !isIanaTimezone(timezone)) throw new Error("Daily review schedules require a valid IANA timezone.");
+  }
+  return {
+    enabled: value.enabled !== false,
+    trigger: trigger as ReviewSchedule["trigger"],
+    intervalMinutes: trigger === "interval" ? intervalMinutes : null,
+    dailyAt: trigger === "daily" ? dailyAt : null,
+    timezone: trigger === "daily" ? timezone : null
+  };
+}
+
+export function defaultReviewSchedule(): ReviewSchedule {
+  return { enabled: true, trigger: "on-commit", intervalMinutes: null, dailyAt: null, timezone: null };
+}
+
+function parseStoredReviewSchedule(value: unknown) {
+  if (!value) return null;
+  try { return parseReviewSchedule(JSON.parse(String(value))); } catch { return null; }
+}
+
+function isIanaTimezone(value: string) {
+  try { new Intl.DateTimeFormat("en-US", { timeZone: value }).format(); return true; } catch { return false; }
 }
 
 function normalizeStrings(value: unknown[]) {

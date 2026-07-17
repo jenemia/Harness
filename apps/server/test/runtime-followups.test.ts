@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectCompletionSignals, parseAutomaticFollowUpCandidates } from "../src/runtime.js";
+import { detectCompletionSignals, implementationCommitMessage, parseAutomaticFollowUpCandidates } from "../src/runtime.js";
 import { codexCommand } from "../src/providers.js";
 
 test("Codex commands pipe prompt file contents with workspace write access", () => {
@@ -8,6 +8,14 @@ test("Codex commands pipe prompt file contents with workspace write access", () 
     codexCommand("gpt-5.6-codex-sol"),
     'codex exec --model gpt-5.6-codex-sol --sandbox workspace-write - < "$HARNESS_PROMPT_FILE"',
   );
+});
+
+test("implementation commits carry full task and run provenance without provider session identifiers", () => {
+  const taskId = "11111111-1111-4111-8111-111111111111";
+  const runId = "22222222-2222-4222-8222-222222222222";
+  const message = implementationCommitMessage({ id: taskId, title: "Implement review queue" }, runId);
+  assert.equal(message, `Harness task 11111111: Implement review queue\n\nHarness-Task: ${taskId}\nHarness-Run: ${runId}`);
+  assert.doesNotMatch(message, /Session/i);
 });
 
 test("automatic follow-ups require an explicit follow-up prefix", () => {

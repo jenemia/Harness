@@ -61,6 +61,9 @@ export const harnessMcpTools: McpToolDefinition[] = [
   { name: "decompose_task", description: "Create structured subtasks through the shared task service. Supports dry-run preview.", access: "write", inputSchema: objectSchema({ ...projectId, taskId: text, payload: { type: "object" }, ...dryRun }, ["projectId", "taskId", "payload"]), outputSchema: toolOutputSchema },
   { name: "list_runs", description: "List project runs with optional task and status filters.", access: "read", inputSchema: objectSchema({ ...projectId, taskId: { type: "string" }, status: { type: "string" } }, ["projectId"]), outputSchema: toolOutputSchema },
   { name: "get_run", description: "Get one run and its provider events, report, files, and review comments.", access: "read", inputSchema: objectSchema({ ...projectId, runId: text }, ["projectId", "runId"]), outputSchema: toolOutputSchema },
+  { name: "list_code_reviews", description: "List commit-based autoreview jobs and findings.", access: "read", inputSchema: objectSchema({ ...projectId, taskId: { type: "string" } }, ["projectId"]), outputSchema: toolOutputSchema },
+  { name: "retry_code_review", description: "Retry a failed or blocked autoreview job.", access: "write", inputSchema: objectSchema({ ...projectId, jobId: text, ...dryRun }, ["projectId", "jobId"]), outputSchema: toolOutputSchema },
+  { name: "update_code_review_finding", description: "Address or dismiss an autoreview finding.", access: "write", inputSchema: objectSchema({ ...projectId, findingId: text, status: { enum: ["addressed", "dismissed"] }, reason: { type: "string" }, ...dryRun }, ["projectId", "findingId", "status"]), outputSchema: toolOutputSchema },
   { name: "list_interactions", description: "List interactions with optional status, kind, task, and run filters.", access: "read", inputSchema: objectSchema({ ...projectId, status: { type: "string" }, kind: { type: "string" }, taskId: { type: "string" }, runId: { type: "string" } }, ["projectId"]), outputSchema: toolOutputSchema },
   { name: "resolve_interaction", description: "Resolve or reject an interaction through the shared resume service. Supports dry-run preview.", access: "write", inputSchema: objectSchema({ ...projectId, interactionId: text, action: { enum: ["resolve", "reject"] }, responsePayload: { type: "object" }, idempotencyKey: { type: "string" }, ...dryRun }, ["projectId", "interactionId", "action"]), outputSchema: toolOutputSchema },
   { name: "list_approvals", description: "List approvals with optional status and kind filters.", access: "read", inputSchema: objectSchema({ ...projectId, status: { type: "string" }, kind: { type: "string" } }, ["projectId"]), outputSchema: toolOutputSchema }
@@ -210,6 +213,12 @@ async function dispatchTool(toolName: string, args: Record<string, unknown>, cli
   if (toolName === "comment_task") return previewOrInvoke(isDryRun, "tasks:comment", { projectId: project, taskId: requiredText(args.taskId, "taskId"), body: requiredText(args.body, "body"), author: typeof args.author === "string" ? args.author : `mcp:${client.id}` });
   if (toolName === "schedule_task") return previewOrInvoke(isDryRun, "projects:schedule", { projectId: project });
   if (toolName === "decompose_task") return previewOrInvoke(isDryRun, "tasks:decompose", { projectId: project, taskId: requiredText(args.taskId, "taskId"), payload: requiredRecord(args.payload, "payload") });
+  if (toolName === "list_code_reviews") return invoke("reviews:auto-list", { projectId: project, ...(typeof args.taskId === "string" ? { taskId: args.taskId } : {}) });
+  if (toolName === "retry_code_review") return previewOrInvoke(isDryRun, "reviews:auto-retry", { projectId: project, jobId: requiredText(args.jobId, "jobId") });
+  if (toolName === "update_code_review_finding") {
+    if (args.status !== "addressed" && args.status !== "dismissed") throw new Error("status must be addressed or dismissed");
+    return previewOrInvoke(isDryRun, "reviews:auto-finding-update", { projectId: project, findingId: requiredText(args.findingId, "findingId"), status: args.status, ...(typeof args.reason === "string" ? { reason: args.reason } : {}) });
+  }
   if (toolName === "list_runs" || toolName === "get_run" || toolName === "list_approvals") {
     const overview = asRecord(await invoke("projects:overview", { projectId: project }));
     if (toolName === "list_runs") return { runs: array(overview.runs).filter((run) =>

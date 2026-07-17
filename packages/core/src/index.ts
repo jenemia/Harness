@@ -68,6 +68,9 @@ export type HarnessCommandInputs = {
   "reviews:comment-create": { projectId: string; runId: string; filePath: string; line: number; side: "old" | "new"; body: string };
   "reviews:comment-update": { projectId: string; commentId: string; status: "open" | "addressed" | "dismissed" };
   "reviews:followup": { projectId: string; runId: string; commentIds: string[] };
+  "reviews:auto-list": { projectId: string; taskId?: string };
+  "reviews:auto-retry": { projectId: string; jobId: string };
+  "reviews:auto-finding-update": { projectId: string; findingId: string; status: "addressed" | "dismissed"; reason?: string };
   "interactions:list": {
     projectId: string;
     status?: "pending" | "resolved" | "rejected" | "expired";
@@ -271,6 +274,9 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
     (payload.action === "resolve" || payload.action === "reject") && isRecord(payload.responsePayload) &&
     isText(payload.idempotencyKey);
   if (command === "reviews:report") return isText(payload.runId);
+  if (command === "reviews:auto-list") return payload.taskId === undefined || isText(payload.taskId);
+  if (command === "reviews:auto-retry") return isText(payload.jobId);
+  if (command === "reviews:auto-finding-update") return isText(payload.findingId) && (payload.status === "addressed" || payload.status === "dismissed") && (payload.reason === undefined || typeof payload.reason === "string");
   if (command === "reviews:diff") return isText(payload.runId) && isText(payload.filePath) &&
     (payload.ignoreWhitespace === undefined || typeof payload.ignoreWhitespace === "boolean") &&
     (payload.offset === undefined || isNonNegativeInteger(payload.offset)) &&
@@ -321,6 +327,7 @@ const commandNames = new Set<HarnessCommand>([
   "global-memories:update", "memories:create", "memories:update", "approvals:decide", "runs:followups",
   "interactions:list", "interactions:respond",
   "reviews:report", "reviews:diff", "reviews:file-update", "reviews:comment-create", "reviews:comment-update", "reviews:followup",
+  "reviews:auto-list", "reviews:auto-retry", "reviews:auto-finding-update",
   "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",

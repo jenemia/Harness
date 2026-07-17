@@ -57,7 +57,7 @@ test("project layout, WAL, writer lock, move recovery, and interrupted run recov
     recoveredLock.release();
     assert.equal(existsSync(layout.lockPath), false);
 
-    const agent = createAgentService(project, { name: "Worker" });
+    const agent = createAgentService(project, { name: "Custom Reviewer", role: "reviewer", capabilities: ["custom-review"] });
     const task = createTaskService(project, { title: "Interrupted task", assigneeAgentId: agent.id, status: "Selected" });
     const runtimeDb = openProjectDb(project.path);
     const startedAt = new Date().toISOString();
@@ -101,6 +101,8 @@ test("project layout, WAL, writer lock, move recovery, and interrupted run recov
     const reopened = registerProjectService({ path: movedPath, name: "Portable moved", seedDefaults: false });
     assert.equal(reopened.project.id, project.id);
     assert.ok(reopened.overview.tasks.some((value) => value.id === task.id));
+    assert.ok(reopened.overview.agents.some((value) => value.id === agent.id && value.name === "Custom Reviewer" && value.capabilities.includes("custom-review") && !value.capabilities.includes("autoreview")));
+    assert.ok(reopened.overview.agents.some((value) => value.role === "code-reviewer" && value.capabilities.includes("autoreview")));
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;

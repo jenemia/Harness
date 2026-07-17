@@ -16,6 +16,7 @@ import {
   mapMemory,
   mapRun,
   mapTask,
+  mapTaskGoal,
   now,
   openProjectDb,
   projectHarnessDir
@@ -29,6 +30,7 @@ import { appendProviderEvent, nextProviderEventSequence } from "./provider-event
 import { createApprovalRecordInDb, recoverInteractions, respondInteractionInDb, suspendRunForInteractionInDb, type RespondInteractionInput } from "./interactions.js";
 import { generateCompletionReport } from "./completion-reviews.js";
 import { activeTaskGoal, activateNextTaskGoal, appendTaskGoals, listTaskGoals, recordTaskHandoff } from "./task-goals.js";
+import { enqueueCodeReviewForRun } from "./code-reviews.js";
 import {
   canonicalWorkspacePath,
   captureProjectSnapshot,
@@ -124,7 +126,7 @@ export async function probeRuntimeProvider(project: ProjectRecord | null, modelB
   const agent: AgentRecord = {
     id: "provider-probe", name: "Connection Probe", role: "diagnostic", persona: "Return only a short confirmation.",
     modelBackend, cliCommand: resolution.command, capabilities: [], allowedTools: [], boundaries: "Do not use tools or modify files.",
-    maxParallel: 1, enabled: true, status: "idle", currentTaskId: null, definitionPath: null, definitionHash: null,
+    maxParallel: 1, reviewSchedule: null, enabled: true, status: "idle", currentTaskId: null, definitionPath: null, definitionHash: null,
     definitionSchemaVersion: null, parseStatus: "legacy", parseError: null, archivedAt: null, archivePath: null,
     createdAt: timestamp, updatedAt: timestamp
   };
@@ -1112,6 +1114,11 @@ export const unblockReadyDependents = runtimeMutation(unblockReadyDependentsMuta
 export const decideApproval = asyncRuntimeMutation(decideApprovalMutation);
 export const respondInteraction = asyncRuntimeMutation(respondInteractionMutation);
 export const resumeInteraction = asyncRuntimeMutation(resumeInteractionMutation);
+export const finalizeReviewedTask = asyncRuntimeMutation(finalizeReviewedTaskMutation);
+
+export function implementationCommitMessage(task: Pick<TaskRecord, "id" | "title">, runId: string) {
+  return `Harness task ${task.id.slice(0, 8)}: ${task.title}\n\nHarness-Task: ${task.id}\nHarness-Run: ${runId}`;
+}
 
 async function executeTask(
   project: ProjectRecord,
@@ -1166,11 +1173,25 @@ async function executeTask(
     const snapshotRef = await providers.workspace().snapshotRef(workspace.worktreePath);
     const freshTask = getTask(db, task.id) ?? task;
     const currentGoal = activeTaskGoal(db, task.id);
-    const executionTask = currentGoal ? {
+    const reviewResumeRow = db.prepare(`
+      SELECT j.id AS job_id, j.source_run_id, j.remediation_goal_id,
+             COALESCE(rr.provider_session_id, r.provider_session_id) AS provider_session_id,
+             CASE WHEN rr.provider_session_id IS NOT NULL THEN rr.id ELSE r.id END AS resume_parent_run_id
+      FROM code_review_jobs j
+      JOIN runs r ON r.id = j.source_run_id
+      LEFT JOIN runs rr ON rr.id = j.remediation_run_id
+      WHERE j.task_id = ? AND j.source_agent_id = ? AND j.status = 'findings'
+      ORDER BY j.created_at DESC LIMIT 1
+    `).get(task.id, agent.id) as { job_id: string; source_run_id: string; remediation_goal_id: string | null; provider_session_id: string | null; resume_parent_run_id: string } | undefined;
+    const remediationGoalRow = reviewResumeRow?.remediation_goal_id
+      ? db.prepare("SELECT * FROM task_goals WHERE id = ?").get(reviewResumeRow.remediation_goal_id)
+      : null;
+    const executionGoal = remediationGoalRow ? mapTaskGoal(remediationGoalRow) : currentGoal;
+    const executionTask = executionGoal ? {
       ...freshTask,
-      title: `${freshTask.title}: ${currentGoal.title}`,
-      description: currentGoal.description || freshTask.description,
-      acceptanceCriteria: currentGoal.acceptanceCriteria || freshTask.acceptanceCriteria
+      title: `${freshTask.title}: ${executionGoal.title}`,
+      description: executionGoal.description || freshTask.description,
+      acceptanceCriteria: executionGoal.acceptanceCriteria || freshTask.acceptanceCriteria
     } : freshTask;
     const execution = withProviderCommand(agent, executionTask, settings);
     const executionAgent = execution.agent;
@@ -1210,13 +1231,17 @@ async function executeTask(
       agentSnapshot.schemaVersion,
       agentSnapshot.content,
       providerEventContext.correlationId,
-      resumeContext?.parentRunId || null,
+      resumeContext?.parentRunId || reviewResumeRow?.resume_parent_run_id || null,
       resumeContext?.interactionId || null
     );
     if (resumeContext) {
       db.prepare(`
         UPDATE interactions SET resumed_run_id = ?, resume_state = 'started' WHERE id = ? AND resume_state = 'pending'
       `).run(runId, resumeContext.interactionId);
+    }
+    if (reviewResumeRow) {
+      db.prepare("UPDATE code_review_jobs SET remediation_run_id = ?, session_resumed = ?, session_fallback = ?, updated_at = ? WHERE id = ?")
+        .run(runId, reviewResumeRow.provider_session_id ? 1 : 0, reviewResumeRow.provider_session_id ? 0 : 1, now(), reviewResumeRow.job_id);
     }
     const approvedWorkspaceFingerprint = workspaceResumeFingerprint(resumeContext?.checkpoint || null);
     const consumedWorkspaceExceptions = new Set<string>();
@@ -1318,6 +1343,8 @@ async function executeTask(
     const streamState: {
       terminal?: { payload: Record<string, unknown>; metadata?: { originalEventType?: string } };
     } = {};
+    let providerSessionId: string | null = null;
+    let providerSessionFallback = false;
     const projectSnapshot = selectedProvider.definition.capabilities.streaming
       ? null
       : captureProjectSnapshot(project.path);
@@ -1346,6 +1373,10 @@ async function executeTask(
             responsePayload: resumeContext.responsePayload,
             checkpoint: resumeContext.checkpoint
           } : undefined,
+          resumeSession: reviewResumeRow?.provider_session_id ? {
+            sessionId: reviewResumeRow.provider_session_id,
+            parentRunId: reviewResumeRow.resume_parent_run_id
+          } : undefined,
           workspaceProtection: {
             canonicalWorkspacePath: canonicalWorkspacePath(workspace.worktreePath),
             pushExceptionToken: approvedWorkspaceFingerprint &&
@@ -1357,6 +1388,10 @@ async function executeTask(
             const safeEvent = workspaceGuardToken
               ? { ...event, payload: redactExactValue(event.payload, workspaceGuardToken) }
               : event;
+            if (typeof safeEvent.payload.sessionId === "string" && safeEvent.payload.sessionId.trim()) {
+              providerSessionId = safeEvent.payload.sessionId.trim();
+            }
+            if (safeEvent.type === "decision" && safeEvent.payload.phase === "session_fallback") providerSessionFallback = true;
             if (event.type === "result" || event.type === "error") {
               streamState.terminal = { payload: safeEvent.payload, metadata: safeEvent.metadata };
               return;
@@ -1482,16 +1517,19 @@ async function executeTask(
           "harness.agent.id": agent.id
         }, () => providers.workspace().commitAll(
           workspace.worktreePath,
-          `Harness task ${task.id.slice(0, 8)}: ${task.title}`
+          implementationCommitMessage(task, runId)
         ))
-      : { committed: false, output: "", error: null };
+      : { committed: false, output: "", error: null, commitSha: null, parentSha: null };
 
-    db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, changed_files = ?, completed_at = ? WHERE id = ?").run(
+    db.prepare("UPDATE runs SET status = ?, output = ?, error = ?, changed_files = ?, completed_at = ?, commit_sha = ?, commit_parent_sha = ?, provider_session_id = ? WHERE id = ?").run(
       result.status,
       [safeOutput, redactCredentialMaterial(commitResult.output)].filter(Boolean).join("\n\n"),
       safeError,
       JSON.stringify(changedFiles),
       completedAt,
+      commitResult.commitSha,
+      commitResult.parentSha,
+      providerSessionId,
       runId
     );
     if (resumeContext) {
@@ -1499,6 +1537,9 @@ async function executeTask(
         result.status === "completed" ? "completed" : "failed",
         resumeContext.interactionId
       );
+    }
+    if (reviewResumeRow && providerSessionFallback) {
+      db.prepare("UPDATE code_review_jobs SET session_resumed = 0, session_fallback = 1, updated_at = ? WHERE id = ?").run(now(), reviewResumeRow.job_id);
     }
 
     try {
@@ -1534,6 +1575,14 @@ async function executeTask(
       message: `${agent.name} completed the run.`,
       metadata: { output: safeOutput, commit: { ...commitResult, output: redactCredentialMaterial(commitResult.output) } }
     });
+
+    if (commitResult.committed && commitResult.commitSha && commitResult.parentSha && enqueueCodeReviewForRun(project, {
+      runId,
+      taskId: task.id,
+      sourceAgentId: agent.id,
+      commitSha: commitResult.commitSha,
+      parentSha: commitResult.parentSha
+    })) return;
 
     await autoHandoff(project, db, task.id, agent);
   } catch (error) {
@@ -1691,6 +1740,17 @@ async function autoHandoff(project: ProjectRecord, db: DatabaseSync, taskId: str
 
   scheduleReadyDependents(project, db, task.id);
   });
+}
+
+async function finalizeReviewedTaskMutation(project: ProjectRecord, taskId: string, sourceAgentId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const task = getTask(db, taskId);
+    const sourceAgent = getAgent(db, sourceAgentId);
+    if (!task || !sourceAgent) return { ok: false, reason: "Reviewed task provenance is unavailable." };
+    await autoHandoff(project, db, taskId, sourceAgent);
+    return { ok: true };
+  } finally { db.close(); }
 }
 
 function performHandoff(
