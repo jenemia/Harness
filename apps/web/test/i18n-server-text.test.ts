@@ -160,6 +160,35 @@ test("workspace protection activity is localized", () => {
 
 test("handoff reasons shown in task details are localized", () => {
   assert.equal(
+    localizeServerText("Advanced to the next sequential goal.", "ko"),
+    "다음 순차 목표로 이동했습니다.",
+  );
+  assert.equal(
+    localizeServerText("The next goal has no assigned agent.", "ko"),
+    "다음 목표에 배정된 에이전트가 없습니다.",
+  );
+  assert.equal(
+    localizeServerText(
+      "PM handoff to Review Agent needs approval because signals were detected: risk, error-mentioned.",
+      "ko",
+    ),
+    "PM이 Review Agent(으)로 인계하려면 다음 신호가 감지되어 승인이 필요합니다: 위험, 오류 언급.",
+  );
+  assert.equal(
+    localizeServerText(
+      "PM handoff rule needs a reviewer agent, but none is available.",
+      "ko",
+    ),
+    "PM 인계 규칙에는 검토자 에이전트가 필요하지만 사용 가능한 에이전트가 없습니다.",
+  );
+  assert.equal(
+    localizeServerText(
+      "PM dynamic handoff selected reviewer, but no matching agent is available.",
+      "ko",
+    ),
+    "PM 동적 인계에서 검토자 역할을 선택했지만 일치하는 에이전트가 없습니다.",
+  );
+  assert.equal(
     localizeServerText(
       "PM auto-handoff rule: programmer -> reviewer. PM evaluated Programmer Agent's completion output. 2 changed file(s). Signals: risk, follow-up.",
       "ko",

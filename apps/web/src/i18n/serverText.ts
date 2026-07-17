@@ -105,6 +105,8 @@ const exactKoreanText: Record<string, string> = {
     "agent.md 정의에서 에이전트가 비활성화되어 있습니다.",
   "Agent instruction files changed.": "에이전트 지침 파일이 변경되었습니다.",
   "Agent run failed.": "에이전트 실행이 실패했습니다.",
+  "Advanced to the next sequential goal.":
+    "다음 순차 목표로 이동했습니다.",
   "Completion report generation failed; the run result remains valid.":
     "완료 보고서를 생성하지 못했지만 실행 결과는 유효합니다.",
   "Default PM, programmer, and review agents were created.":
@@ -172,6 +174,8 @@ const exactKoreanText: Record<string, string> = {
   "Task was returned to the backlog for PM reassignment.":
     "PM이 다시 배정할 수 있도록 일감을 백로그로 돌려보냈습니다.",
   "Task was updated.": "일감을 수정했습니다.",
+  "The next goal has no assigned agent.":
+    "다음 목표에 배정된 에이전트가 없습니다.",
   "All dependencies are complete. PM Agent queued this task for execution.":
     "모든 의존 일감이 완료되어 PM 에이전트가 이 일감을 실행 대기열에 등록했습니다.",
   "The task pre-push guard is missing, changed, non-executable, or no longer configured.":
@@ -239,6 +243,9 @@ function koreanHandoffReason(value: string) {
 
 const koreanPatterns: Array<[RegExp, (...values: string[]) => string]> = [
   [/^(PM (?:auto-handoff rule|dynamic handoff): .+)$/, koreanHandoffReason],
+  [/^PM handoff to (.+) needs approval because signals were detected: (.+)\.$/, (agent, signals) => `PM이 ${agent}(으)로 인계하려면 다음 신호가 감지되어 승인이 필요합니다: ${signals.split(", ").map((signal) => serverTokenLabel(signal, "ko")).join(", ")}.`],
+  [/^PM handoff rule needs a (.+) agent, but none is available\.$/, (role) => `PM 인계 규칙에는 ${serverTokenLabel(role, "ko")} 에이전트가 필요하지만 사용 가능한 에이전트가 없습니다.`],
+  [/^PM dynamic handoff selected (.+), but no matching agent is available\.$/, (role) => `PM 동적 인계에서 ${serverTokenLabel(role, "ko")} 역할을 선택했지만 일치하는 에이전트가 없습니다.`],
   [/^(.+)'s task changes need approval before merging\.$/, (agent) => `${agent}의 일감 변경 사항을 병합하려면 승인이 필요합니다.`],
   [/^(WARN|PAUSE|BLOCK) workspace policy: (.+)$/, (action, reason) => `${koreanTerm(action.toLowerCase())} 작업 공간 정책: ${localizeServerText(reason, "ko")}`],
   [/^Approved one-run workspace exception used: (.+)$/, (reason) => `승인된 일회성 작업 공간 예외를 사용했습니다: ${localizeServerText(reason, "ko")}`],
