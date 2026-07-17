@@ -7,7 +7,12 @@ import {
   asRecord,
   formatProviderCommandResolution,
 } from "../../shared/providerCommands";
-import { useI18n } from "../../i18n";
+import {
+  approvalKindMessageKey,
+  approvalStatusMessageKey,
+  localizeServerText,
+  useI18n,
+} from "../../i18n";
 export function ApprovalsPanel(props: {
   overview: Overview;
   runAction: (action: () => Promise<void>) => Promise<void>;
@@ -65,21 +70,24 @@ export function ApprovalsPanel(props: {
           value={kindFilter}
           onChange={(event) => setKindFilter(event.target.value)}
         >
-          <option value="">All kinds</option>
+          <option value="">{t("approvals.allKinds")}</option>
           {approvalKinds.map((kind) => (
             <option key={kind} value={kind}>
-              {kind.replace("_", " ")}
+              {t(approvalKindMessageKey(kind))}
             </option>
           ))}
         </select>
         <span className="panel-count">
-          {pending.length} pending / {filteredApprovals.length}
+          {t("approvals.pendingCount", {
+            pending: pending.length,
+            total: filteredApprovals.length,
+          })}
         </span>
       </div>
       <div className="approval-list">
         {pending.length === 0 && (
           <p className="provider-help">
-            No matching pending approval requests.
+            {t("approvals.noPending")}
           </p>
         )}
         {pending.map((approval) => {
@@ -109,21 +117,21 @@ export function ApprovalsPanel(props: {
               <div>
                 <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
                 <span>
-                  {agent?.name || (approval.kind === "preview" ? "Preview runtime" : "Unknown agent")} ·{" "}
-                  {approval.kind.replace("_", " ")}
-                  {targetAgent ? ` · to ${targetAgent.name}` : ""}
+                  {agent?.name || t(approval.kind === "preview" ? "approvals.previewRuntime" : "approvals.unknownAgent")} ·{" "}
+                  {t(approvalKindMessageKey(approval.kind))}
+                  {targetAgent ? ` · ${t("approvals.toAgent", { name: targetAgent.name })}` : ""}
                 </span>
               </div>
-              <p>{approval.reason}</p>
+              <p>{localizeServerText(approval.reason, locale)}</p>
               {providerResolution && <span>{providerResolution}</span>}
               {approval.commandPreview && approval.kind !== "handoff" && (
                 <code>{approval.commandPreview}</code>
               )}
               {reviewFiles.length > 0 && (
                 <div className="approval-review-files">
-                  <strong>Review first</strong>
+                  <strong>{t("approvals.reviewFirst")}</strong>
                   {reviewFiles.map((file) => (
-                    <span key={file.id}>#{file.recommendationOrder || "–"} {file.path} · {file.status}{file.recommendationReason ? ` — ${file.recommendationReason}` : ""}</span>
+                    <span key={file.id}>#{file.recommendationOrder || "–"} {file.path} · {t(file.status === "reviewed" ? "approvals.fileReviewed" : "approvals.fileUnreviewed")}{file.recommendationReason ? ` — ${localizeServerText(file.recommendationReason, locale)}` : ""}</span>
                   ))}
                 </div>
               )}
@@ -133,14 +141,14 @@ export function ApprovalsPanel(props: {
                   type="button"
                   onClick={() => void decide(approval, "reject")}
                 >
-                  Reject
+                  {t("approvals.reject")}
                 </button>
                 <button
                   className="primary-button"
                   type="button"
                   onClick={() => void decide(approval, "approve")}
                 >
-                  Approve
+                  {t("approvals.approve")}
                 </button>
               </div>
             </div>
@@ -160,7 +168,7 @@ export function ApprovalsPanel(props: {
             >
               <strong>{task?.title || approval.taskId.slice(0, 8)}</strong>
               <span>
-                {approval.kind.replace("_", " ")} · {approval.status} ·{" "}
+                {t(approvalKindMessageKey(approval.kind))} · {t(approvalStatusMessageKey(approval.status))} ·{" "}
                 {formatDate(approval.decidedAt || approval.createdAt, locale)}
               </span>
               {providerResolution && <span>{providerResolution}</span>}

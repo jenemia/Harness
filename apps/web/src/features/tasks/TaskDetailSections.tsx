@@ -30,7 +30,18 @@ import {
   asRecord,
   formatProviderCommandResolution,
 } from "../../shared/providerCommands";
-import { useI18n } from "../../i18n";
+import {
+  eventTypeLabel,
+  interactionKindMessageKey,
+  interactionResumeStateMessageKey,
+  interactionStatusMessageKey,
+  localizeServerText,
+  reviewChangeTypeMessageKey,
+  reviewCommentStatusMessageKey,
+  runStatusMessageKey,
+  serverTokenLabel,
+  useI18n,
+} from "../../i18n";
 
 export function DetailItem({ label, value }: { label: string; value: string }) {
   return (
@@ -95,6 +106,7 @@ export function TaskInteractions(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [responses, setResponses] = useState<Record<string, string>>({});
 
   async function respond(interaction: Interaction, action: "resolve" | "reject") {
@@ -114,21 +126,24 @@ export function TaskInteractions(props: {
 
   return (
     <section className="drawer-section interaction-section">
-      <h3>Interactions</h3>
+      <h3>{t("interactions.title")}</h3>
       <div className="interaction-list">
-        {props.interactions.length === 0 && <p className="drawer-copy">No interactions for this task.</p>}
+        {props.interactions.length === 0 && <p className="drawer-copy">{t("interactions.none")}</p>}
         {props.interactions.map((interaction) => {
+          const interactionKindLabel = t(
+            interactionKindMessageKey(interaction.kind),
+          );
           const prompt = typeof interaction.requestPayload.prompt === "string"
             ? interaction.requestPayload.prompt
             : typeof interaction.requestPayload.reason === "string"
               ? interaction.requestPayload.reason
-              : `${interaction.kind} response requested`;
+              : t("interactions.responseRequested", { kind: interactionKindLabel });
           return (
             <article className={`interaction-row ${interaction.status}`} key={interaction.id}>
-              <header><strong>{interaction.kind}</strong><span>{interaction.status}</span></header>
+              <header><strong>{interactionKindLabel}</strong><span>{t(interactionStatusMessageKey(interaction.status))}</span></header>
               <p>{prompt}</p>
               {typeof interaction.requestPayload.violationKind === "string" && (
-                <small>Risk: {interaction.requestPayload.violationKind}</small>
+                <small>{t("interactions.risk", { value: interaction.requestPayload.violationKind })}</small>
               )}
               {typeof interaction.requestPayload.targetPath === "string" && interaction.requestPayload.targetPath && (
                 <code>{interaction.requestPayload.targetPath}</code>
@@ -137,33 +152,35 @@ export function TaskInteractions(props: {
                 <code>{interaction.requestPayload.command}</code>
               )}
               {typeof interaction.requestPayload.scope === "string" && (
-                <small>Exception scope: {interaction.requestPayload.scope}</small>
+                <small>{t("interactions.exceptionScope", { value: interaction.requestPayload.scope })}</small>
               )}
               {interaction.status === "pending" && (
                 <>
                   {(interaction.kind === "question" || interaction.kind === "review") && (
                     <textarea
-                      aria-label={`Response for ${interaction.kind}`}
-                      placeholder="Enter a response"
+                      aria-label={t("interactions.responseAriaLabel", {
+                        kind: interactionKindLabel,
+                      })}
+                      placeholder={t("interactions.responsePlaceholder")}
                       value={responses[interaction.id] || ""}
                       onChange={(event) => setResponses((current) => ({ ...current, [interaction.id]: event.target.value }))}
                     />
                   )}
                   <div className="interaction-actions">
-                    <button className="secondary-button compact" type="button" onClick={() => void respond(interaction, "reject")}>Reject</button>
+                    <button className="secondary-button compact" type="button" onClick={() => void respond(interaction, "reject")}>{t("interactions.reject")}</button>
                     <button
                       className="primary-button compact"
                       disabled={(interaction.kind === "question" || interaction.kind === "review") && !(responses[interaction.id] || "").trim()}
                       type="button"
                       onClick={() => void respond(interaction, "resolve")}
                     >
-                      {interaction.runId ? "Respond & resume" : "Resolve"}
+                      {interaction.runId ? t("interactions.respondResume") : t("interactions.resolve")}
                     </button>
                   </div>
                 </>
               )}
-              {interaction.responsePayload && <small>Response: {String(interaction.responsePayload.text || interaction.responsePayload.decision || "recorded")}</small>}
-              {interaction.resumedRunId && <small>Resumed run {interaction.resumedRunId.slice(0, 8)} · {interaction.resumeState}</small>}
+              {interaction.responsePayload && <small>{t("interactions.response", { value: String(interaction.responsePayload.text || interaction.responsePayload.decision || t("interactions.recorded")) })}</small>}
+              {interaction.resumedRunId && <small>{t("interactions.resumedRun", { id: interaction.resumedRunId.slice(0, 8), state: t(interactionResumeStateMessageKey(interaction.resumeState)) })}</small>}
             </article>
           );
         })}
@@ -182,7 +199,7 @@ export function TaskRuns(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const runStartEvents = useMemo(() => {
     return new Map(
       props.events
@@ -216,9 +233,9 @@ export function TaskRuns(props: {
 
   return (
     <section className="drawer-section">
-      <h3>Runs</h3>
+      <h3>{t("panel.runs")}</h3>
       <div className="run-list">
-        {props.runs.length === 0 && <p className="drawer-copy">No runs yet.</p>}
+        {props.runs.length === 0 && <p className="drawer-copy">{t("runs.noneYet")}</p>}
         {props.runs.map((run) => {
           const startMetadata = asRecord(runStartEvents.get(run.id)?.metadata);
           const providerResolution =
@@ -246,23 +263,26 @@ export function TaskRuns(props: {
                   ) : (
                     <Activity size={14} />
                   )}
-                  {run.status}
+                  {t(runStatusMessageKey(run.status))}
                 </span>
                 <span>{formatDate(run.startedAt, locale)}</span>
               </div>
               {run.snapshotRef && (
                 <div className="snapshot-line">
                   <GitBranch size={14} />
-                  <span>snapshot {run.snapshotRef.slice(0, 12)}</span>
+                  <span>{t("runs.snapshot", { ref: run.snapshotRef.slice(0, 12) })}</span>
                 </div>
               )}
               {(run.modelBackend || run.providerId) && (
                 <div className="snapshot-line">
                   <Bot size={14} />
                   <span>
-                    {[run.modelBackend, run.providerId]
-                      .filter(Boolean)
-                      .join(" via ")}
+                    {run.modelBackend && run.providerId
+                      ? t("runs.via", {
+                          backend: run.modelBackend,
+                          provider: run.providerId,
+                        })
+                      : run.modelBackend || run.providerId}
                   </span>
                 </div>
               )}
@@ -277,10 +297,25 @@ export function TaskRuns(props: {
                   <GitFork size={14} />
                   <span>
                     {followUpEvent.type === "followups.created"
-                      ? `${followUpGoalIds.length} automatic follow-up goal${followUpGoalIds.length === 1 ? "" : "s"}`
-                      : "Automatic follow-up skipped"}
+                      ? t(
+                          followUpGoalIds.length === 1
+                            ? "runs.followUpCreated"
+                            : "runs.followUpCreated_plural",
+                          { count: followUpGoalIds.length },
+                        )
+                      : t(
+                          skippedTitles.length === 1
+                            ? "runs.followUpSkipped"
+                            : "runs.followUpSkipped_plural",
+                          { count: skippedTitles.length || 1 },
+                        )}
                     {skippedTitles.length
-                      ? ` · ${skippedTitles.length} duplicate${skippedTitles.length === 1 ? "" : "s"}`
+                      ? ` · ${t(
+                          skippedTitles.length === 1
+                            ? "runs.followUpDuplicate"
+                            : "runs.followUpDuplicate_plural",
+                          { count: skippedTitles.length },
+                        )}`
                       : ""}
                   </span>
                 </div>
@@ -318,7 +353,7 @@ export function TaskRuns(props: {
                   onClick={() => void createFollowUps(run)}
                 >
                   <Plus size={16} />
-                  <span>Follow-ups</span>
+                  <span>{t("runs.followUps")}</span>
                 </button>
               </div>
             </div>
@@ -338,6 +373,7 @@ function TaskCompletionReview(props: {
   runAction: (action: () => Promise<void>) => Promise<void>;
   onChanged: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [reportHtml, setReportHtml] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [diff, setDiff] = useState("");
@@ -421,22 +457,22 @@ function TaskCompletionReview(props: {
   return (
     <div className="completion-review">
       <div className="completion-summary">
-        <strong>Completion report r{props.report.revision}</strong>
-        <span>{props.report.metrics.files} files · +{props.report.metrics.additions} −{props.report.metrics.deletions}</span>
-        <button className="secondary-button compact" type="button" onClick={() => void openReport()}>{reportHtml ? "Hide report" : "Open report"}</button>
+        <strong>{t("review.reportTitle", { revision: props.report.revision })}</strong>
+        <span>{t("review.metrics", { files: props.report.metrics.files, additions: props.report.metrics.additions, deletions: props.report.metrics.deletions })}</span>
+        <button className="secondary-button compact" type="button" onClick={() => void openReport()}>{reportHtml ? t("review.hideReport") : t("review.openReport")}</button>
       </div>
       {props.report.warning && <p className="review-warning">{props.report.warning}</p>}
-      {reportHtml && <iframe className="completion-report-frame" sandbox="" srcDoc={reportHtml} title={`Completion report ${props.report.revision}`} />}
+      {reportHtml && <iframe className="completion-report-frame" sandbox="" srcDoc={reportHtml} title={t("review.reportTitle", { revision: props.report.revision })} />}
       <div className="review-file-list">
         {orderedFiles.map((file) => (
           <div className={`review-file ${file.status} ${file.risk}`} key={file.id}>
             <button type="button" onClick={() => void openDiff(file.path)}>{file.path}</button>
-            <span>{file.changeType} · +{file.additions} −{file.deletions}</span>
-            {file.recommendationOrder && <small>Review #{file.recommendationOrder}: {file.recommendationReason}</small>}
+            <span>{t(reviewChangeTypeMessageKey(file.changeType))} · +{file.additions} −{file.deletions}</span>
+            {file.recommendationOrder && <small>{t("review.recommendation", { order: file.recommendationOrder, reason: file.recommendationReason || "" })}</small>}
             <div className="review-file-actions">
               <button type="button" onClick={() => void moveRecommendation(file, -1)}>↑</button>
               <button type="button" onClick={() => void moveRecommendation(file, 1)}>↓</button>
-              <button type="button" onClick={() => void markReviewed(file)}>{file.status === "reviewed" ? "Reopen" : "Reviewed"}</button>
+              <button type="button" onClick={() => void markReviewed(file)}>{file.status === "reviewed" ? t("review.reopen") : t("review.reviewed")}</button>
             </div>
           </div>
         ))}
@@ -444,24 +480,24 @@ function TaskCompletionReview(props: {
       {selectedPath && (
         <div className="diff-side-panel">
           <header>
-            <button disabled={selectedIndex <= 0} type="button" onClick={() => void openDiff(orderedFiles[selectedIndex - 1]?.path)}>Previous</button>
+            <button disabled={selectedIndex <= 0} type="button" onClick={() => void openDiff(orderedFiles[selectedIndex - 1]?.path)}>{t("review.previous")}</button>
             <strong>{selectedPath}</strong>
-            <button disabled={selectedIndex < 0 || selectedIndex >= orderedFiles.length - 1} type="button" onClick={() => void openDiff(orderedFiles[selectedIndex + 1]?.path)}>Next</button>
+            <button disabled={selectedIndex < 0 || selectedIndex >= orderedFiles.length - 1} type="button" onClick={() => void openDiff(orderedFiles[selectedIndex + 1]?.path)}>{t("review.next")}</button>
           </header>
           <div className="diff-controls">
-            <label><input type="checkbox" checked={split} onChange={(event) => setSplit(event.target.checked)} /> Split</label>
-            <label><input type="checkbox" checked={ignoreWhitespace} onChange={(event) => void toggleWhitespace(event.target.checked)} /> Ignore whitespace</label>
-            <label><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} /> Wrap</label>
+            <label><input type="checkbox" checked={split} onChange={(event) => setSplit(event.target.checked)} /> {t("review.split")}</label>
+            <label><input type="checkbox" checked={ignoreWhitespace} onChange={(event) => void toggleWhitespace(event.target.checked)} /> {t("review.ignoreWhitespace")}</label>
+            <label><input type="checkbox" checked={wrap} onChange={(event) => setWrap(event.target.checked)} /> {t("review.wrap")}</label>
           </div>
           {diffReason ? <p>{diffReason}</p> : split ? (
             <div className="split-diff"><pre className={wrap ? "wrap" : ""}>{oldDiff}</pre><pre className={wrap ? "wrap" : ""}>{newDiff}</pre></div>
           ) : <pre className={wrap ? "wrap" : ""}>{diff}</pre>}
-          {nextOffset !== null && <button type="button" onClick={() => void openDiff(selectedPath, ignoreWhitespace, nextOffset, true)}>Load more</button>}
+          {nextOffset !== null && <button type="button" onClick={() => void openDiff(selectedPath, ignoreWhitespace, nextOffset, true)}>{t("review.loadMore")}</button>}
           <div className="inline-comment-form">
             <input min={1} type="number" value={commentLine} onChange={(event) => setCommentLine(Math.max(1, Number(event.target.value || 1)))} />
-            <select value={commentSide} onChange={(event) => setCommentSide(event.target.value as "old" | "new")}><option value="new">new</option><option value="old">old</option></select>
-            <input placeholder="Inline review comment" value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
-            <button disabled={!commentBody.trim()} type="button" onClick={() => void addInlineComment()}>Add comment</button>
+            <select value={commentSide} onChange={(event) => setCommentSide(event.target.value as "old" | "new")}><option value="new">{t("review.sideNew")}</option><option value="old">{t("review.sideOld")}</option></select>
+            <input placeholder={t("review.inlineComment")} value={commentBody} onChange={(event) => setCommentBody(event.target.value)} />
+            <button disabled={!commentBody.trim()} type="button" onClick={() => void addInlineComment()}>{t("review.addComment")}</button>
           </div>
         </div>
       )}
@@ -478,12 +514,12 @@ function TaskCompletionReview(props: {
                     const next = new Set(current); if (event.target.checked) next.add(comment.id); else next.delete(comment.id); return next;
                   })}
                 />
-                <span>{comment.filePath}:{comment.line} · {comment.status} — {comment.body}</span>
+                <span>{comment.filePath}:{comment.line} · {t(reviewCommentStatusMessageKey(comment.status))} — {comment.body}</span>
               </label>
-              {comment.status === "open" && <div><button type="button" onClick={() => void setCommentStatus(comment.id, "addressed")}>Addressed</button><button type="button" onClick={() => void setCommentStatus(comment.id, "dismissed")}>Dismiss</button></div>}
+              {comment.status === "open" && <div><button type="button" onClick={() => void setCommentStatus(comment.id, "addressed")}>{t("review.addressed")}</button><button type="button" onClick={() => void setCommentStatus(comment.id, "dismissed")}>{t("review.dismiss")}</button></div>}
             </div>
           ))}
-          <button className="secondary-button compact" disabled={!selectedComments.size} type="button" onClick={() => void createReviewFollowUp()}>Create review follow-up</button>
+          <button className="secondary-button compact" disabled={!selectedComments.size} type="button" onClick={() => void createReviewFollowUp()}>{t("review.createFollowUp")}</button>
         </div>
       )}
     </div>
@@ -499,7 +535,7 @@ export function TaskHandoffs({
   agents: Agent[];
   events: Event[];
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
   const handoffEvents = events.filter(
     (event) => event.type === "handoff.automatic",
@@ -507,10 +543,10 @@ export function TaskHandoffs({
 
   return (
     <section className="drawer-section">
-      <h3>Handoffs</h3>
+      <h3>{t("handoffs.title")}</h3>
       <div className="handoff-list">
         {handoffs.length === 0 && (
-          <p className="drawer-copy">No handoffs yet.</p>
+          <p className="drawer-copy">{t("handoffs.none")}</p>
         )}
         {handoffs.map((handoff) => {
           const from = handoff.fromAgentId
@@ -524,19 +560,22 @@ export function TaskHandoffs({
             <div className="handoff-row" key={handoff.id}>
               <div>
                 <strong>
-                  {from?.name || "PM Agent"} to {to?.name || "Unassigned"}
+                  {t("handoffs.route", {
+                    from: from?.name || t("handoffs.pmAgent"),
+                    to: to?.name || t("task.unassigned"),
+                  })}
                 </strong>
                 {decision && (
                   <div className="handoff-meta">
-                    <b>{decision.source}</b>
-                    {decision.toRole && <b>{decision.toRole}</b>}
-                    <b>{decision.changedFiles} files</b>
+                    <b>{serverTokenLabel(decision.source, locale)}</b>
+                    {decision.toRole && <b>{serverTokenLabel(decision.toRole, locale)}</b>}
+                    <b>{t("handoffs.files", { count: decision.changedFiles })}</b>
                     {decision.signals.map((signal) => (
-                      <b key={signal}>{signal}</b>
+                      <b key={signal}>{serverTokenLabel(signal, locale)}</b>
                     ))}
                   </div>
                 )}
-                <span>{handoff.reason}</span>
+                <span>{localizeServerText(handoff.reason, locale)}</span>
               </div>
               <small>{formatDate(handoff.createdAt, locale)}</small>
             </div>
@@ -587,20 +626,24 @@ export function TaskTimeline({
   providerEvents: ProviderEvent[];
   runs: Run[];
 }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const items = [
     ...events.map((event) => ({
       id: event.id,
       at: event.createdAt,
-      type: event.type,
-      message: event.message,
+      type: eventTypeLabel(event.type, locale),
+      message: localizeServerText(event.message, locale),
       detail: JSON.stringify(event.metadata, null, 2),
     })),
     ...providerEvents.map((event) => ({
       id: `${event.runId}-${event.sequence}`,
       at: event.timestamp,
       type: `provider.${event.type}`,
-      message: `${event.providerId} · run ${event.runId.slice(0, 8)} · #${event.sequence}`,
+      message: t("timeline.providerRun", {
+        provider: event.providerId,
+        runId: event.runId.slice(0, 8),
+        sequence: event.sequence,
+      }),
       detail: JSON.stringify(event.payload, null, 2),
     })),
     ...runs.map((run) => ({
@@ -610,7 +653,10 @@ export function TaskTimeline({
       message: run.branchName || run.id.slice(0, 8),
       detail: [
         run.modelBackend || run.providerId
-          ? `model: ${run.modelBackend || "-"} / provider: ${run.providerId || "-"}`
+          ? t("timeline.modelProvider", {
+              model: run.modelBackend || "-",
+              provider: run.providerId || "-",
+            })
           : "",
         run.error || "",
       ]
@@ -621,10 +667,10 @@ export function TaskTimeline({
 
   return (
     <section className="drawer-section">
-      <h3>Timeline</h3>
+      <h3>{t("timeline.title")}</h3>
       <div className="timeline-list">
         {items.length === 0 && (
-          <p className="drawer-copy">No timeline entries yet.</p>
+          <p className="drawer-copy">{t("timeline.none")}</p>
         )}
         {items.map((item) => (
           <div className="timeline-row" key={`${item.type}-${item.id}`}>

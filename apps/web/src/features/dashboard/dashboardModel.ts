@@ -4,8 +4,11 @@ import type {
   ProviderCatalog,
   Task,
 } from "../../api/contracts";
+import { statusMessageKey, type MessageKey } from "../../i18n";
 
-export function findSchedulerIssues(overview: Overview) {
+type Translate = (key: MessageKey, values?: Record<string, string | number>) => string;
+
+export function findSchedulerIssues(overview: Overview, t: Translate) {
   const tasksById = new Map(overview.tasks.map((task) => [task.id, task]));
   const agentsById = new Map(overview.agents.map((agent) => [agent.id, agent]));
   const agentLoads = new Map<string, number>();
@@ -36,12 +39,12 @@ export function findSchedulerIssues(overview: Overview) {
       issues.push({
         taskId: task.id,
         title: task.title,
-        reason: "Project has reached its parallel run limit.",
+        reason: t("scheduler.projectParallelLimit"),
       });
       continue;
     }
 
-    const dependencyBlocker = getDependencyBlocker(task, tasksById);
+    const dependencyBlocker = getDependencyBlocker(task, tasksById, t);
     if (dependencyBlocker) {
       issues.push({
         taskId: task.id,
@@ -56,6 +59,7 @@ export function findSchedulerIssues(overview: Overview) {
       agentsById,
       workerAgents,
       agentLoads,
+      t,
     );
     if (!agentResult.agent) {
       issues.push({
@@ -81,16 +85,17 @@ export function chooseSchedulableAgent(
   agentsById: Map<string, Agent>,
   workerAgents: Agent[],
   agentLoads: Map<string, number>,
+  t: Translate,
 ): { agent: Agent | null; reason: string } {
   if (task.assigneeAgentId) {
     const assigned = agentsById.get(task.assigneeAgentId);
     if (!assigned) {
-      return { agent: null, reason: "Assigned agent is missing." };
+      return { agent: null, reason: t("scheduler.assignedMissing") };
     }
     if ((agentLoads.get(assigned.id) || 0) >= assigned.maxParallel) {
       return {
         agent: null,
-        reason: "Assigned agent has reached its parallel run limit.",
+        reason: t("scheduler.assignedParallelLimit"),
       };
     }
     return { agent: assigned, reason: "" };
@@ -99,7 +104,7 @@ export function chooseSchedulableAgent(
   if (!workerAgents.length) {
     return {
       agent: null,
-      reason: "No worker agents are available for scheduling.",
+      reason: t("scheduler.noWorkerAgents"),
     };
   }
 
@@ -110,11 +115,15 @@ export function chooseSchedulableAgent(
     ) || null;
   return {
     agent,
-    reason: agent ? "" : "No agent has available execution capacity.",
+    reason: agent ? "" : t("scheduler.noAgentCapacity"),
   };
 }
 
-export function getDependencyBlocker(task: Task, tasksById: Map<string, Task>) {
+export function getDependencyBlocker(
+  task: Task,
+  tasksById: Map<string, Task>,
+  t: Translate,
+) {
   if (!task.dependencyTaskIds.length) {
     return null;
   }
@@ -149,10 +158,15 @@ export function getDependencyBlocker(task: Task, tasksById: Map<string, Task>) {
   }
 
   const blockedTitles = blocked.map(
-    (dependency) => `${dependency.title} (${dependency.status})`,
+    (dependency) =>
+      `${dependency.title} (${t(statusMessageKey(dependency.status))})`,
   );
-  const missing = missingIds.map((id) => `${id.slice(0, 8)} (missing)`);
-  return `Waiting on dependencies: ${[...blockedTitles, ...missing].join(", ")}`;
+  const missing = missingIds.map((id) =>
+    t("scheduler.missingDependency", { id: id.slice(0, 8) }),
+  );
+  return t("scheduler.waitingDependencies", {
+    items: [...blockedTitles, ...missing].join(", "),
+  });
 }
 
 export function findProviderCommandIssues(

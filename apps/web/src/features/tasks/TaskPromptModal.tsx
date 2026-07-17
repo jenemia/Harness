@@ -3,7 +3,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { DraftComment, DraftReviewRequest, DraftSnapshot } from "../../api/contracts";
 import { draftService } from "../../services/draftService";
 import { taskService } from "../../services/taskService";
-import { useI18n } from "../../i18n";
+import { useI18n, type MessageKey } from "../../i18n";
 import { formatDate } from "../../shared/format";
 import type { RunAction } from "../../app/types";
 
@@ -337,8 +337,8 @@ export function TaskPromptModal(props: {
             <h2 id="task-prompt-title">{t("modal.title")}</h2>
           </div>
           <div className="draft-save-state">
-            <span>{snapshot ? `revision ${snapshot.session.currentRevision}` : "opening draft"}</span>
-            <span>{isSaving ? "saving…" : "saved"}</span>
+            <span>{snapshot ? t("draft.revision", { revision: snapshot.session.currentRevision }) : t("draft.opening")}</span>
+            <span>{isSaving ? t("draft.saving") : t("draft.saved")}</span>
             <button aria-label={t("modal.close")} className="icon-button" disabled={isSubmitting} type="button" onClick={() => void close()}>
               <X size={18} />
             </button>
@@ -347,10 +347,10 @@ export function TaskPromptModal(props: {
 
         <div className="draft-mobile-tabs" role="tablist">
           <button className={mobilePane === "draft" ? "active" : ""} type="button" onClick={() => setMobilePane("draft")}>
-            <FileText size={15} /> Draft
+            <FileText size={15} /> {t("draft.tabDraft")}
           </button>
           <button className={mobilePane === "comments" ? "active" : ""} type="button" onClick={() => setMobilePane("comments")}>
-            <MessageSquare size={15} /> {locale === "ko" ? "일감 논의" : "Task discussion"} ({threads.length})
+            <MessageSquare size={15} /> {t("draft.tabDiscussion", { count: threads.length })}
           </button>
         </div>
 
@@ -383,12 +383,12 @@ export function TaskPromptModal(props: {
 
           <aside className={`draft-review-pane ${mobilePane === "comments" ? "mobile-active" : ""}`}>
             <div className="draft-review-heading">
-              <div><span className="modal-kicker">{locale === "ko" ? "일감 논의" : "Task discussion"}</span><h3>{locale === "ko" ? "기획 에이전트와 대화" : "Discuss with the planning agent"}</h3></div>
+              <div><span className="modal-kicker">{t("draft.discussion")}</span><h3>{t("draft.discussPlanner")}</h3></div>
               <div className="draft-review-heading-actions">
                 <button className="secondary-button compact" type="button" disabled={!latestPlannerComment} onClick={applyLatestPlan}>
-                  <GitCompare size={14} /> {locale === "ko" ? "내용 반영" : "Apply plan"}
+                  <GitCompare size={14} /> {t("draft.applyPlan")}
                 </button>
-                <button aria-label="Refresh draft" className="icon-button" type="button" onClick={() => void refreshDraft()}><RefreshCcw size={15} /></button>
+                <button aria-label={t("draft.refresh")} className="icon-button" type="button" onClick={() => void refreshDraft()}><RefreshCcw size={15} /></button>
               </div>
             </div>
             <div className="draft-reviewers">
@@ -397,13 +397,13 @@ export function TaskPromptModal(props: {
                   event.type === "draft.review.progress" && event.payload.requestId === request?.id)?.payload.message;
                 return (
                   <div className="draft-reviewer-state" key={reviewer.id}>
-                    <div><strong>@{reviewer.role}</strong><span>{request?.status || reviewer.status}</span></div>
+                    <div><strong>@{reviewer.role}</strong><span>{t(draftValueMessageKey(request?.status || reviewer.status))}</span></div>
                     {typeof progress === "string" && request?.status === "running" && <small>{progress}</small>}
                     {request?.status === "running" && (
-                      <button className="secondary-button compact" type="button" onClick={() => void reviewAction(request, "stop")}><Square size={13} /> Stop</button>
+                      <button className="secondary-button compact" type="button" onClick={() => void reviewAction(request, "stop")}><Square size={13} /> {t("draft.stop")}</button>
                     )}
                     {(request?.status === "cancelled" || request?.status === "failed") && request.revision === snapshot?.session.currentRevision && (
-                      <button className="secondary-button compact" type="button" onClick={() => void reviewAction(request, "retry")}><RefreshCcw size={13} /> Retry</button>
+                      <button className="secondary-button compact" type="button" onClick={() => void reviewAction(request, "retry")}><RefreshCcw size={13} /> {t("draft.retry")}</button>
                     )}
                   </div>
                 );
@@ -413,48 +413,48 @@ export function TaskPromptModal(props: {
               {activeApply?.result && (
                 <section className={`draft-apply-panel ${activeApply.status}`}>
                   <header>
-                    <div><span className="modal-kicker">Planning proposal</span><h4>원문과 변경 제안</h4></div>
-                    <span>r{activeApply.sourceRevision} · {activeApply.status}</span>
+                    <div><span className="modal-kicker">{t("draft.planningProposal")}</span><h4>{t("draft.originalProposal")}</h4></div>
+                    <span>r{activeApply.sourceRevision} · {t(draftValueMessageKey(activeApply.status))}</span>
                   </header>
                   {activeApply.result.changeSummary.length > 0 && (
                     <ul>{activeApply.result.changeSummary.map((item) => <li key={item}>{item}</li>)}</ul>
                   )}
                   {activeApply.result.unresolvedQuestions.length > 0 && (
                     <div className="draft-unresolved-questions">
-                      <strong>미결 질문</strong>
+                      <strong>{t("draft.unresolvedQuestions")}</strong>
                       {activeApply.result.unresolvedQuestions.map((question) => <p key={question.commentId}>{question.body}</p>)}
                     </div>
                   )}
                   <details open>
-                    <summary><GitCompare size={14} /> 원문 diff</summary>
-                    <pre className="draft-apply-diff">{activeApply.result.unifiedDiff || "변경할 본문이 없습니다."}</pre>
+                    <summary><GitCompare size={14} /> {t("draft.originalDiff")}</summary>
+                    <pre className="draft-apply-diff">{activeApply.result.unifiedDiff || t("draft.noChanges")}</pre>
                   </details>
                   <details>
-                    <summary>구조화된 기획 결과</summary>
-                    <PlanningList title="완료 조건" values={activeApply.result.completionCriteria} />
-                    <PlanningList title="의존성" values={activeApply.result.dependencies} />
-                    <PlanningList title="위험" values={activeApply.result.risks} />
+                    <summary>{t("draft.structuredResult")}</summary>
+                    <PlanningList title={t("draft.completionCriteria")} values={activeApply.result.completionCriteria} />
+                    <PlanningList title={t("draft.dependencies")} values={activeApply.result.dependencies} />
+                    <PlanningList title={t("draft.risks")} values={activeApply.result.risks} />
                   </details>
                   <div className="draft-apply-actions">
                     {activeApply.status === "pending" && (
                       <>
                         <button className="secondary-button compact" disabled={isApplying} type="button" onClick={() => void decideApply(activeApply.id, "rejected")}>
-                          <X size={13} /> 취소
+                          <X size={13} /> {t("modal.cancel")}
                         </button>
                         <button className="primary-button compact" disabled={isApplying || !activeApply.result.unifiedDiff || activeApply.sourceRevision !== snapshot?.session.currentRevision} type="button" onClick={() => void decideApply(activeApply.id, "approved")}>
-                          <Check size={13} /> 승인 후 반영
+                          <Check size={13} /> {t("draft.approveApply")}
                         </button>
                       </>
                     )}
                     {activeApply.status === "applied" && activeApply.targetRevision === snapshot?.session.currentRevision && (
                       <button className="secondary-button compact" disabled={isApplying} type="button" onClick={() => void undoApply(activeApply.id)}>
-                        <Undo2 size={13} /> 즉시 실행 취소
+                        <Undo2 size={13} /> {t("draft.undo")}
                       </button>
                     )}
                   </div>
                 </section>
               )}
-              {threads.length === 0 && <p className="drawer-copy">{locale === "ko" ? "일감 내용을 작성하면 기획 에이전트가 질문과 계획안을 제안합니다." : "Write the task and the planning agent will propose questions and a plan."}</p>}
+              {threads.length === 0 && <p className="drawer-copy">{t("draft.discussionEmpty")}</p>}
               {threads.map(({ comment, replies }) => {
                 const reviewer = snapshot?.reviewers.find((item) => item.id === comment.reviewerId);
                 const selectable = !comment.stale && comment.status !== "applied" && comment.revision === snapshot?.session.currentRevision;
@@ -463,7 +463,7 @@ export function TaskPromptModal(props: {
                     <header>
                       <label className="draft-comment-select">
                         <input
-                          aria-label={`Select comment from ${reviewer?.role || comment.author}`}
+                          aria-label={t("draft.selectComment", { author: reviewer?.role || comment.author })}
                           checked={selectedCommentIds.has(comment.id)}
                           disabled={!selectable}
                           type="checkbox"
@@ -476,36 +476,36 @@ export function TaskPromptModal(props: {
                         />
                         <strong>@{reviewer?.role || comment.author}</strong>
                       </label>
-                      <span>{comment.kind} · {comment.status} · r{comment.revision}{comment.stale ? " · stale" : ""} · {formatDate(comment.createdAt, locale)}</span>
+                      <span>{t(draftValueMessageKey(comment.kind))} · {t(draftValueMessageKey(comment.status))} · r{comment.revision}{comment.stale ? ` · ${t("draft.value.stale")}` : ""} · {formatDate(comment.createdAt, locale)}</span>
                     </header>
                     <p>{comment.body}</p>
                     {replies.map((reply) => <div className="draft-reply" key={reply.id}><strong>{reply.author}</strong><span>{reply.body}</span></div>)}
                     {!comment.stale && comment.status !== "applied" && (
                       <button className="text-button" type="button" onClick={() => void toggleCommentStatus(comment)}>
-                        {comment.status === "resolved" ? "Reopen" : "Resolve"}
+                        {comment.status === "resolved" ? t("draft.reopen") : t("draft.resolve")}
                       </button>
                     )}
                     {replyTargetId === comment.id ? (
                       <div className="draft-reply-form">
-                        <textarea value={replyBody} onChange={(event) => setReplyBody(event.target.value)} placeholder={`Reply to @${reviewer?.role || "reviewer"}`} />
-                        <button className="secondary-button compact" type="button" disabled={!replyBody.trim()} onClick={() => void sendReply(comment)}><Send size={13} /> Send</button>
+                        <textarea value={replyBody} onChange={(event) => setReplyBody(event.target.value)} placeholder={t("draft.replyTo", { reviewer: reviewer?.role || t("draft.reviewer") })} />
+                        <button className="secondary-button compact" type="button" disabled={!replyBody.trim()} onClick={() => void sendReply(comment)}><Send size={13} /> {t("draft.send")}</button>
                       </div>
                     ) : (
                       <button className="text-button" type="button" onClick={() => {
                         setReplyTargetId(comment.id);
-                        setReplyBody(`@${reviewer?.role || "reviewer"} `);
-                      }}>Reply</button>
+                        setReplyBody(`@${reviewer?.role || t("draft.reviewer")} `);
+                      }}>{t("draft.reply")}</button>
                     )}
                   </article>
                 );
               })}
               {snapshot && snapshot.revisions.length > 1 && (
                 <details className="draft-revision-history">
-                  <summary><RotateCcw size={14} /> 이전 revision 복원</summary>
+                  <summary><RotateCcw size={14} /> {t("draft.restorePrevious")}</summary>
                   <div>
                     {[...snapshot.revisions].reverse().filter((revision) => revision.revision !== snapshot.session.currentRevision).map((revision) => (
                       <button className="text-button" disabled={isApplying} key={revision.id} type="button" onClick={() => void restoreRevision(revision.revision)}>
-                        revision {revision.revision} 복원
+                        {t("draft.restoreRevision", { revision: revision.revision })}
                       </button>
                     ))}
                   </div>
@@ -520,10 +520,36 @@ export function TaskPromptModal(props: {
 }
 
 function PlanningList(props: { title: string; values: string[] }) {
+  const { t } = useI18n();
   return (
     <div className="draft-planning-list">
       <strong>{props.title}</strong>
-      {props.values.length ? <ul>{props.values.map((value) => <li key={value}>{value}</li>)}</ul> : <span>별도 항목 없음</span>}
+      {props.values.length ? <ul>{props.values.map((value) => <li key={value}>{value}</li>)}</ul> : <span>{t("draft.noItems")}</span>}
     </div>
   );
+}
+
+function draftValueMessageKey(value: string): MessageKey {
+  const keys: Record<string, MessageKey> = {
+    idle: "draft.value.idle",
+    debounced: "draft.value.debounced",
+    reviewing: "draft.value.reviewing",
+    "rate-limited": "draft.value.rateLimited",
+    pending: "draft.value.pending",
+    running: "draft.value.running",
+    completed: "draft.value.completed",
+    cancelled: "draft.value.cancelled",
+    stale: "draft.value.stale",
+    failed: "draft.value.failed",
+    suggestion: "draft.value.suggestion",
+    question: "draft.value.question",
+    risk: "draft.value.risk",
+    reply: "draft.value.reply",
+    resolved: "draft.value.resolved",
+    applied: "draft.value.applied",
+    open: "draft.value.open",
+    rejected: "draft.value.rejected",
+    undone: "draft.value.undone",
+  };
+  return keys[value] || "draft.value.pending";
 }

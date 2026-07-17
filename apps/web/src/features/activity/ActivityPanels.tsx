@@ -1,7 +1,12 @@
 import { Activity, CheckCircle2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Overview } from "../../api/contracts";
-import { useI18n } from "../../i18n";
+import {
+  eventTypeLabel,
+  localizeServerText,
+  runStatusMessageKey,
+  useI18n,
+} from "../../i18n";
 export function ActivityPanels({ overview }: { overview: Overview }) {
   return (
     <>
@@ -66,16 +71,16 @@ export function RunPanel({ overview }: { overview: Overview }) {
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value)}
         >
-          <option value="">All statuses</option>
-          <option value="running">Running</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
+          <option value="">{t("runs.allStatuses")}</option>
+          <option value="running">{t("runStatus.running")}</option>
+          <option value="completed">{t("runStatus.completed")}</option>
+          <option value="failed">{t("runStatus.failed")}</option>
         </select>
         <select
           value={agentFilter}
           onChange={(event) => setAgentFilter(event.target.value)}
         >
-          <option value="">All agents</option>
+          <option value="">{t("runs.allAgents")}</option>
           {overview.agents.map((agent) => (
             <option key={agent.id} value={agent.id}>
               {agent.name}
@@ -86,7 +91,7 @@ export function RunPanel({ overview }: { overview: Overview }) {
           value={providerFilter}
           onChange={(event) => setProviderFilter(event.target.value)}
         >
-          <option value="">All providers</option>
+          <option value="">{t("runs.allProviders")}</option>
           {providerIds.map((providerId) => (
             <option key={providerId} value={providerId}>
               {providerId}
@@ -97,7 +102,7 @@ export function RunPanel({ overview }: { overview: Overview }) {
           value={backendFilter}
           onChange={(event) => setBackendFilter(event.target.value)}
         >
-          <option value="">All backends</option>
+          <option value="">{t("runs.allBackends")}</option>
           {modelBackends.map((backend) => (
             <option key={backend} value={backend}>
               {backend}
@@ -117,7 +122,7 @@ export function RunPanel({ overview }: { overview: Overview }) {
               ) : (
                 <Activity size={14} />
               )}
-              {run.status}
+              {t(runStatusMessageKey(run.status))}
             </span>
             <span>{run.branchName || run.taskId.slice(0, 8)}</span>
             <span>
@@ -127,7 +132,7 @@ export function RunPanel({ overview }: { overview: Overview }) {
           </div>
         ))}
         {filteredRuns.length === 0 && (
-          <div className="compact-empty">No runs match</div>
+          <div className="compact-empty">{t("runs.noMatch")}</div>
         )}
       </div>
     </section>
@@ -135,7 +140,7 @@ export function RunPanel({ overview }: { overview: Overview }) {
 }
 
 export function EventPanel({ overview }: { overview: Overview }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   return (
     <section className="rail-panel">
       <div className="panel-header">
@@ -143,10 +148,13 @@ export function EventPanel({ overview }: { overview: Overview }) {
         <h2>{t("panel.activity")}</h2>
       </div>
       <div className="event-list">
+        {overview.events.length === 0 && (
+          <div className="compact-empty">{t("activity.none")}</div>
+        )}
         {overview.events.slice(0, 10).map((event) => (
           <div className="event-row" key={event.id}>
-            <strong>{event.type}</strong>
-            <span>{event.message}</span>
+            <strong>{eventTypeLabel(event.type, locale)}</strong>
+            <span>{localizeServerText(event.message, locale)}</span>
           </div>
         ))}
       </div>
