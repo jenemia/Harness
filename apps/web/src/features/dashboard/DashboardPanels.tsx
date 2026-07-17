@@ -19,6 +19,7 @@ import { taskService } from "../../services/taskService";
 import {
   approvalKindMessageKey,
   interactionKindMessageKey,
+  localizeServerText,
   useI18n,
 } from "../../i18n";
 import {
@@ -35,7 +36,7 @@ export function ProjectHealthPanel({
   healthReport: ProjectHealthReport | null;
   providerCatalog: ProviderCatalog | null;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const fallbackBlockedTasks = overview.tasks.filter(
     (task) => task.status === "Blocked",
   );
@@ -179,7 +180,7 @@ export function ProjectHealthPanel({
       )}
       {!providerCommandIssues[0] && schedulerIssues[0] && (
         <p className="provider-help">
-          {schedulerIssues[0].title}: {schedulerIssues[0].reason}
+          {localizeServerText(schedulerIssues[0].title, locale)}: {localizeServerText(schedulerIssues[0].reason, locale)}
         </p>
       )}
     </section>
@@ -190,7 +191,7 @@ export function AttentionPanel(props: {
   overview: Overview;
   onOpenTask: (taskId: string) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const tasksById = useMemo(
     () => new Map(props.overview.tasks.map((task) => [task.id, task])),
     [props.overview.tasks],
@@ -227,7 +228,7 @@ export function AttentionPanel(props: {
           tone: interaction.kind === "permission" ? "approval" : "neutral",
           kind: t(interactionKindMessageKey(interaction.kind)),
           title: task?.title || taskId.slice(0, 8),
-          meta: prompt,
+          meta: localizeServerText(prompt, locale),
           taskId,
         };
       });
@@ -240,7 +241,7 @@ export function AttentionPanel(props: {
           tone: "approval",
           kind: t(approvalKindMessageKey(approval.kind)),
           title: task?.title || approval.taskId.slice(0, 8),
-          meta: approval.reason,
+          meta: localizeServerText(approval.reason, locale),
           taskId: approval.taskId,
         };
       });
@@ -257,7 +258,9 @@ export function AttentionPanel(props: {
             ? t("attention.mergeConflict")
             : t("attention.mergePending"),
         title: task.title,
-        meta: task.mergeError || t("attention.mergeDecisionWaiting"),
+        meta: task.mergeError
+          ? localizeServerText(task.mergeError, locale)
+          : t("attention.mergeDecisionWaiting"),
         taskId: task.id,
       }));
     const failedRuns = props.overview.runs
@@ -274,7 +277,9 @@ export function AttentionPanel(props: {
           tone: "danger",
           kind: t("attention.failedRun"),
           title: task?.title || run.taskId.slice(0, 8),
-          meta: run.error || t("attention.runFailedWithoutError"),
+          meta: run.error
+            ? localizeServerText(run.error, locale)
+            : t("attention.runFailedWithoutError"),
           taskId: run.taskId,
         };
       });
@@ -285,7 +290,9 @@ export function AttentionPanel(props: {
         tone: "danger",
         kind: t("attention.blocked"),
         title: task.title,
-        meta: task.blockedReason || t("attention.noBlockerReason"),
+        meta: task.blockedReason
+          ? localizeServerText(task.blockedReason, locale)
+          : t("attention.noBlockerReason"),
         taskId: task.id,
       }));
     const followUps = props.overview.tasks
@@ -317,6 +324,7 @@ export function AttentionPanel(props: {
     props.overview.runFileReviews,
     props.overview.tasks,
     tasksById,
+    locale,
     t,
   ]);
 

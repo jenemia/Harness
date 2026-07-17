@@ -31,9 +31,11 @@ import {
   formatProviderCommandResolution,
 } from "../../shared/providerCommands";
 import {
+  eventTypeLabel,
   interactionKindMessageKey,
   interactionResumeStateMessageKey,
   interactionStatusMessageKey,
+  localizeServerText,
   reviewChangeTypeMessageKey,
   reviewCommentStatusMessageKey,
   runStatusMessageKey,
@@ -628,8 +630,8 @@ export function TaskTimeline({
     ...events.map((event) => ({
       id: event.id,
       at: event.createdAt,
-      type: event.type,
-      message: event.message,
+      type: eventTypeLabel(event.type, locale),
+      message: localizeServerText(event.message, locale),
       detail: JSON.stringify(event.metadata, null, 2),
     })),
     ...providerEvents.map((event) => ({

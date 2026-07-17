@@ -4,6 +4,7 @@ export {
   type SupportedLocale,
 } from "./messages";
 export { LanguageProvider, resolveSupportedLocale, useI18n } from "./provider";
+export { eventTypeLabel, localizeServerText } from "./serverText";
 export {
   approvalKindMessageKey,
   approvalStatusMessageKey,

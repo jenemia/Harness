@@ -1,7 +1,12 @@
 import { Activity, CheckCircle2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Overview } from "../../api/contracts";
-import { runStatusMessageKey, useI18n } from "../../i18n";
+import {
+  eventTypeLabel,
+  localizeServerText,
+  runStatusMessageKey,
+  useI18n,
+} from "../../i18n";
 export function ActivityPanels({ overview }: { overview: Overview }) {
   return (
     <>
@@ -135,7 +140,7 @@ export function RunPanel({ overview }: { overview: Overview }) {
 }
 
 export function EventPanel({ overview }: { overview: Overview }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   return (
     <section className="rail-panel">
       <div className="panel-header">
@@ -143,10 +148,13 @@ export function EventPanel({ overview }: { overview: Overview }) {
         <h2>{t("panel.activity")}</h2>
       </div>
       <div className="event-list">
+        {overview.events.length === 0 && (
+          <div className="compact-empty">{t("activity.none")}</div>
+        )}
         {overview.events.slice(0, 10).map((event) => (
           <div className="event-row" key={event.id}>
-            <strong>{event.type}</strong>
-            <span>{event.message}</span>
+            <strong>{eventTypeLabel(event.type, locale)}</strong>
+            <span>{localizeServerText(event.message, locale)}</span>
           </div>
         ))}
       </div>
