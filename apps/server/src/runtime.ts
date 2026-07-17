@@ -140,6 +140,7 @@ export async function probeRuntimeProvider(project: ProjectRecord | null, modelB
   try {
     const result = await providers.llm(modelBackend).run(agent, task, { kind: "harness", branchName: null, worktreePath: workspacePath }, {
       globalMemory: [], projectMemory: [], timeoutMs: 30_000,
+      skipGitRepoCheck: true,
       workspaceProtection: { canonicalWorkspacePath: workspacePath }
     });
     return { modelBackend, ok: result.ok, checkedAt, error: result.ok ? null : redactCredentialMaterial(result.error || "Provider did not return a successful response.") };

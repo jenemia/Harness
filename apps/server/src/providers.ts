@@ -30,6 +30,7 @@ export type MergeState = {
 export type LlmRunContext = {
   globalMemory: MemoryRecord[];
   projectMemory: MemoryRecord[];
+  skipGitRepoCheck?: boolean;
   taskComments?: CommentRecord[];
   taskRuns?: RunRecord[];
   agentDefinitionSnapshot?: string;
@@ -464,7 +465,12 @@ function createCodexCliProvider(
       const resumeCommand = context?.resumeSession
         ? ["codex exec resume --json", model ? `--model ${shellQuote(model)}` : "", shellQuote(sessionId), `- < \"$HARNESS_PROMPT_FILE\"`].filter(Boolean).join(" ")
         : null;
-      const freshCommand = ["codex exec --json --sandbox workspace-write", model ? `--model ${shellQuote(model)}` : "", `- < \"$HARNESS_PROMPT_FILE\"`].filter(Boolean).join(" ");
+      const freshCommand = [
+        "codex exec --json --sandbox workspace-write",
+        context?.skipGitRepoCheck ? "--skip-git-repo-check" : "",
+        model ? `--model ${shellQuote(model)}` : "",
+        `- < \"$HARNESS_PROMPT_FILE\"`
+      ].filter(Boolean).join(" ");
       const invoke = (command: string) => platformProvider.runShellLines(
           command, workspace.worktreePath, buildLlmEnvironment(input.id, agent, task, workspace, context), context?.timeoutMs,
           (line) => {
