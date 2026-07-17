@@ -438,8 +438,8 @@ function createCodexCliProviders(platformProvider: PlatformProvider) {
   }));
 }
 
-function codexCommand(model: string | null) {
-  return ["codex exec", model ? `--model ${model}` : "", "--sandbox workspace-write", "\"$HARNESS_PROMPT_FILE\""]
+export function codexCommand(model: string | null) {
+  return ["codex exec", model ? `--model ${model}` : "", "--sandbox workspace-write", "- < \"$HARNESS_PROMPT_FILE\""]
     .filter(Boolean)
     .join(" ");
 }

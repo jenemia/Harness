@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { detectCompletionSignals, parseAutomaticFollowUpCandidates } from "../src/runtime.js";
+import { codexCommand } from "../src/providers.js";
+
+test("Codex commands pipe prompt file contents with workspace write access", () => {
+  assert.equal(
+    codexCommand("gpt-5.6-codex-sol"),
+    'codex exec --model gpt-5.6-codex-sol --sandbox workspace-write - < "$HARNESS_PROMPT_FILE"',
+  );
+});
 
 test("automatic follow-ups require an explicit follow-up prefix", () => {
   const output = [

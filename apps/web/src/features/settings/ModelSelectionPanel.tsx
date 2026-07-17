@@ -33,7 +33,7 @@ function optionsFromCommand(command: string | undefined): CodexOptions {
   };
 }
 
-function codexCommand(modelBackend: string, options: CodexOptions) {
+export function codexCommand(modelBackend: string, options: CodexOptions) {
   const model = codexModelArguments[modelBackend];
   return [
     "codex exec",
@@ -41,7 +41,7 @@ function codexCommand(modelBackend: string, options: CodexOptions) {
     `--sandbox ${options.workspaceWrite ? "workspace-write" : "read-only"}`,
     options.persistSession ? "" : "--ephemeral",
     options.useProjectRules ? "" : "--ignore-rules",
-    "\"$HARNESS_PROMPT_FILE\"",
+    "- < \"$HARNESS_PROMPT_FILE\"",
   ].filter(Boolean).join(" ");
 }
 

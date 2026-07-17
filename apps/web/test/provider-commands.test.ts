@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProviderCatalog } from "../src/api/contracts.js";
 import { replaceProviderCommand, resolveConfiguredProviderCommand } from "../src/shared/providerCommands.js";
+import { codexCommand } from "../src/features/settings/ModelSelectionPanel.js";
 
 const catalog = {
   providerCommandKeys: {
@@ -13,6 +14,13 @@ const catalog = {
     }],
   },
 } as unknown as ProviderCatalog;
+
+test("model selection builds a writable Codex command that reads prompt contents", () => {
+  assert.equal(
+    codexCommand("codex", { workspaceWrite: true, persistSession: false, useProjectRules: true }),
+    'codex exec --sandbox workspace-write --ephemeral - < "$HARNESS_PROMPT_FILE"',
+  );
+});
 
 test("provider command replacement removes stale higher-precedence keys", () => {
   const commands = {
