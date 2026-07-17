@@ -16,7 +16,11 @@ import type {
   Task,
 } from "../../api/contracts";
 import { taskService } from "../../services/taskService";
-import { useI18n } from "../../i18n";
+import {
+  approvalKindMessageKey,
+  interactionKindMessageKey,
+  useI18n,
+} from "../../i18n";
 import {
   findProviderCommandIssues,
   findSchedulerIssues,
@@ -40,8 +44,8 @@ export function ProjectHealthPanel({
     [overview, providerCatalog],
   );
   const fallbackSchedulerIssues = useMemo(
-    () => findSchedulerIssues(overview),
-    [overview],
+    () => findSchedulerIssues(overview, t),
+    [overview, t],
   );
   const blockedTasks = healthReport?.blockedTasks || fallbackBlockedTasks;
   const pausedTasks =
@@ -88,26 +92,26 @@ export function ProjectHealthPanel({
     healthReport?.schedulerIssues || fallbackSchedulerIssues;
   const recommendation =
     providerCommandIssues.length > 0
-      ? "Configure provider commands"
+      ? t("health.recommend.configureProviderCommands")
       : reviewBacklogCards > 0
-        ? "Review completed changes"
+        ? t("health.recommend.reviewCompletedChanges")
       : pendingInteractions > 0
-        ? "Answer pending interactions"
+        ? t("health.recommend.answerPendingInteractions")
       : schedulerIssues.length > 0
-        ? "Fix ready task blockers"
+        ? t("health.recommend.fixReadyTaskBlockers")
         : pendingApprovals > 0
-          ? "Review approvals"
+          ? t("health.recommend.reviewApprovals")
           : pendingMerges > 0
-            ? "Resolve merges"
+            ? t("health.recommend.resolveMerges")
             : blockedTasks.length > 0
-              ? "Clear blockers"
+              ? t("health.recommend.clearBlockers")
               : failedRuns > 0
-                ? "Review failed runs"
+                ? t("health.recommend.reviewFailedRuns")
                 : followUpBacklogTasks > 0
-                  ? "Review follow-ups"
+                  ? t("health.recommend.reviewFollowUps")
                   : readyTasks > 0 && idleAgents > 0
-                    ? "Run ready tasks"
-                    : "No immediate blockers";
+                    ? t("health.recommend.runReadyTasks")
+                    : t("health.recommend.none");
 
   return (
     <section className="rail-panel">
@@ -118,57 +122,59 @@ export function ProjectHealthPanel({
       <div className="compact-list">
         <div className="compact-row">
           <strong>{readyTasks}</strong>
-          <span>ready</span>
+          <span>{t("health.ready")}</span>
         </div>
         <div className="compact-row">
           <strong>{blockedTasks.length}</strong>
-          <span>blocked</span>
+          <span>{t("health.blocked")}</span>
         </div>
         <div className="compact-row">
           <strong>{pausedTasks}</strong>
-          <span>paused</span>
+          <span>{t("health.paused")}</span>
         </div>
         <div className="compact-row">
           <strong>{pendingApprovals}</strong>
-          <span>approvals</span>
+          <span>{t("health.approvals")}</span>
         </div>
         <div className="compact-row">
           <strong>{pendingInteractions}</strong>
-          <span>interactions</span>
+          <span>{t("health.interactions")}</span>
         </div>
         <div className="compact-row">
           <strong>{reviewBacklogCards}</strong>
-          <span>review cards · {unreviewedDiffLines} lines</span>
+          <span>{t("health.reviewCardsLines", { lines: unreviewedDiffLines })}</span>
         </div>
         <div className="compact-row">
           <strong>{pendingMerges}</strong>
-          <span>merges</span>
+          <span>{t("health.merges")}</span>
         </div>
         <div className="compact-row">
           <strong>{unassignedTasks}</strong>
-          <span>unassigned</span>
+          <span>{t("health.unassigned")}</span>
         </div>
         <div className="compact-row">
           <strong>{followUpBacklogTasks}</strong>
-          <span>follow-ups</span>
+          <span>{t("health.followUps")}</span>
         </div>
         <div className="compact-row">
           <strong>{providerCommandIssues.length}</strong>
-          <span>provider commands</span>
+          <span>{t("health.providerCommands")}</span>
         </div>
         <div className="compact-row">
           <strong>{schedulerIssues.length}</strong>
-          <span>scheduler</span>
+          <span>{t("health.scheduler")}</span>
         </div>
         <div className="compact-row">
           <strong>{recommendation}</strong>
-          <span>next</span>
+          <span>{t("health.next")}</span>
         </div>
       </div>
       {providerCommandIssues[0] && (
         <p className="provider-help">
-          Set {providerCommandIssues[0].candidateKeys.join(", ")} for{" "}
-          {providerCommandIssues[0].modelBackend}.
+          {t("health.providerCommandHelp", {
+            keys: providerCommandIssues[0].candidateKeys.join(", "),
+            backend: providerCommandIssues[0].modelBackend,
+          })}
         </p>
       )}
       {!providerCommandIssues[0] && schedulerIssues[0] && (
@@ -197,9 +203,12 @@ export function AttentionPanel(props: {
         return {
           key: `review-${taskId}`,
           tone: "approval",
-          kind: "review",
+          kind: t("attention.review"),
           title: task?.title || taskId.slice(0, 8),
-          meta: `${files.length} files · ${files.reduce((sum, file) => sum + file.additions + file.deletions, 0)} unreviewed lines`,
+          meta: t("attention.filesLines", {
+            files: files.length,
+            lines: files.reduce((sum, file) => sum + file.additions + file.deletions, 0),
+          }),
           taskId,
         };
       });
@@ -212,11 +221,11 @@ export function AttentionPanel(props: {
           ? interaction.requestPayload.prompt
           : typeof interaction.requestPayload.reason === "string"
             ? interaction.requestPayload.reason
-            : "Response is waiting.";
+            : t("attention.responseWaiting");
         return {
           key: `interaction-${interaction.id}`,
           tone: interaction.kind === "permission" ? "approval" : "neutral",
-          kind: interaction.kind,
+          kind: t(interactionKindMessageKey(interaction.kind)),
           title: task?.title || taskId.slice(0, 8),
           meta: prompt,
           taskId,
@@ -229,7 +238,7 @@ export function AttentionPanel(props: {
         return {
           key: `approval-${approval.id}`,
           tone: "approval",
-          kind: approval.kind.replace("_", " "),
+          kind: t(approvalKindMessageKey(approval.kind)),
           title: task?.title || approval.taskId.slice(0, 8),
           meta: approval.reason,
           taskId: approval.taskId,
@@ -243,9 +252,12 @@ export function AttentionPanel(props: {
       .map((task) => ({
         key: `merge-${task.id}`,
         tone: task.mergeStatus === "conflict" ? "danger" : "approval",
-        kind: `merge ${task.mergeStatus}`,
+        kind:
+          task.mergeStatus === "conflict"
+            ? t("attention.mergeConflict")
+            : t("attention.mergePending"),
         title: task.title,
-        meta: task.mergeError || "Merge decision is waiting.",
+        meta: task.mergeError || t("attention.mergeDecisionWaiting"),
         taskId: task.id,
       }));
     const failedRuns = props.overview.runs
@@ -260,9 +272,9 @@ export function AttentionPanel(props: {
         return {
           key: `failed-${run.id}`,
           tone: "danger",
-          kind: "failed run",
+          kind: t("attention.failedRun"),
           title: task?.title || run.taskId.slice(0, 8),
-          meta: run.error || "Run failed without an error message.",
+          meta: run.error || t("attention.runFailedWithoutError"),
           taskId: run.taskId,
         };
       });
@@ -271,9 +283,9 @@ export function AttentionPanel(props: {
       .map((task) => ({
         key: `blocked-${task.id}`,
         tone: "danger",
-        kind: "blocked",
+        kind: t("attention.blocked"),
         title: task.title,
-        meta: task.blockedReason || "No blocker reason recorded.",
+        meta: task.blockedReason || t("attention.noBlockerReason"),
         taskId: task.id,
       }));
     const followUps = props.overview.tasks
@@ -284,9 +296,9 @@ export function AttentionPanel(props: {
       .map((task) => ({
         key: `followup-${task.id}`,
         tone: "neutral",
-        kind: "follow-up",
+        kind: t("attention.followUp"),
         title: task.title,
-        meta: "Backlog follow-up is waiting for selection.",
+        meta: t("attention.followUpWaiting"),
         taskId: task.id,
       }));
     return [
@@ -305,6 +317,7 @@ export function AttentionPanel(props: {
     props.overview.runFileReviews,
     props.overview.tasks,
     tasksById,
+    t,
   ]);
 
   return (
@@ -315,7 +328,7 @@ export function AttentionPanel(props: {
       </div>
       <div className="attention-list">
         {items.length === 0 && (
-          <p className="provider-help">No attention items.</p>
+          <p className="provider-help">{t("attention.noItems")}</p>
         )}
         {items.map((item) => (
           <div className={`attention-item ${item.tone}`} key={item.key}>
@@ -326,7 +339,7 @@ export function AttentionPanel(props: {
             </div>
             <button
               className="icon-button"
-              title="Open task"
+              title={t("attention.openTask")}
               type="button"
               onClick={() => props.onOpenTask(item.taskId)}
             >
@@ -387,9 +400,9 @@ export function BacklogPanel(props: {
       </div>
       <div className="backlog-summary">
         <b>{backlogTasks.length}</b>
-        <span>backlog</span>
+        <span>{t("backlog.backlog")}</span>
         <b>{selectedTasks}</b>
-        <span>selected</span>
+        <span>{t("backlog.selected")}</span>
       </div>
       <div className="backlog-list">
         {backlogTasks.slice(0, 6).map((task) => {
@@ -410,9 +423,14 @@ export function BacklogPanel(props: {
                 {task.title}
               </button>
               <span className="queue-line">
-                {assignee?.name || "Unassigned"}
+                {assignee?.name || t("task.unassigned")}
                 {task.dependencyTaskIds.length
-                  ? ` · ${task.dependencyTaskIds.length} dependency`
+                  ? ` · ${t(
+                      task.dependencyTaskIds.length === 1
+                        ? "backlog.dependency"
+                        : "backlog.dependency_plural",
+                      { count: task.dependencyTaskIds.length },
+                    )}`
                   : ""}
               </span>
               <div className="backlog-actions">
@@ -424,11 +442,11 @@ export function BacklogPanel(props: {
                   }
                 >
                   <Play size={15} />
-                  <span>Select</span>
+                  <span>{t("backlog.select")}</span>
                 </button>
                 <button
                   className="icon-button"
-                  title="Move up"
+                  title={t("backlog.moveUp")}
                   type="button"
                   onClick={() => void moveTask(task.id, "up")}
                 >
@@ -436,7 +454,7 @@ export function BacklogPanel(props: {
                 </button>
                 <button
                   className="icon-button"
-                  title="Move down"
+                  title={t("backlog.moveDown")}
                   type="button"
                   onClick={() => void moveTask(task.id, "down")}
                 >
@@ -447,11 +465,11 @@ export function BacklogPanel(props: {
           );
         })}
         {backlogTasks.length === 0 && (
-          <div className="column-empty">No backlog tasks</div>
+          <div className="column-empty">{t("backlog.none")}</div>
         )}
         {backlogTasks.length > 6 && (
           <span className="panel-count">
-            {backlogTasks.length - 6} more backlog tasks on the board
+            {t("backlog.more", { count: backlogTasks.length - 6 })}
           </span>
         )}
       </div>

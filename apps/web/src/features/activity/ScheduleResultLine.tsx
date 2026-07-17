@@ -1,12 +1,14 @@
 import { Activity, X } from "lucide-react";
 import { useMemo } from "react";
 import type { ScheduleResult, Task } from "../../api/contracts";
+import { useI18n } from "../../i18n";
 
 export function ScheduleResultLine(props: {
   result: ScheduleResult;
   tasks: Task[];
   onDismiss: () => void;
 }) {
+  const { t } = useI18n();
   const tasksById = useMemo(
     () => new Map(props.tasks.map((task) => [task.id, task])),
     [props.tasks],
@@ -23,11 +25,22 @@ export function ScheduleResultLine(props: {
     >
       <Activity size={16} />
       <span>
-        Scheduler started {props.result.started.length} task
-        {props.result.started.length === 1 ? "" : "s"}
-        {props.result.skipped.length > 0
-          ? `, skipped ${props.result.skipped.length}: ${skippedTask?.title || firstSkipped?.taskId.slice(0, 8)} - ${firstSkipped?.reason}`
-          : "."}
+        {t("schedule.summary", {
+          tasks: t(
+            props.result.started.length === 1
+              ? "schedule.tasksLabel"
+              : "schedule.tasksLabel_plural",
+            { count: props.result.started.length },
+          ),
+          skippedClause:
+            props.result.skipped.length > 0
+              ? t("schedule.skippedClause", {
+                  count: props.result.skipped.length,
+                  title: skippedTask?.title || firstSkipped?.taskId.slice(0, 8) || "",
+                  reason: firstSkipped?.reason || "",
+                })
+              : ".",
+        })}
       </span>
       <button
         className="icon-button small"
