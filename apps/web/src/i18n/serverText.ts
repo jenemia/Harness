@@ -8,6 +8,7 @@ const koreanEventTerms: Record<string, string> = {
   archived: "보관됨",
   automatic: "자동",
   blocked: "차단됨",
+  block: "차단",
   changes_requested: "변경 요청",
   cloned: "복제됨",
   comment: "댓글",
@@ -21,6 +22,7 @@ const koreanEventTerms: Record<string, string> = {
   development: "개발",
   document: "문서",
   evaluated: "평가됨",
+  exception: "예외",
   expired: "만료됨",
   failed: "실패",
   file: "파일",
@@ -38,6 +40,7 @@ const koreanEventTerms: Record<string, string> = {
   plan: "계획",
   pm: "PM",
   policy: "정책",
+  pause: "일시 중지",
   preview: "미리보기",
   project: "프로젝트",
   queued: "대기열 등록",
@@ -68,7 +71,31 @@ const koreanEventTerms: Record<string, string> = {
   tool: "도구",
   unblocked: "차단 해제됨",
   updated: "수정됨",
+  used: "사용됨",
+  warn: "경고",
   workspace: "작업 공간",
+};
+
+const koreanServerTokens: Record<string, string> = {
+  analyst: "분석가",
+  approved: "승인됨",
+  automatic: "자동",
+  configured: "설정됨",
+  dynamic: "동적",
+  editor: "편집자",
+  editing: "편집",
+  "error-mentioned": "오류 언급",
+  "follow-up": "후속 작업",
+  "no-file-changes": "파일 변경 없음",
+  programmer: "프로그래머",
+  "project-manager": "프로젝트 관리자",
+  qa: "QA",
+  quality: "품질",
+  researcher: "연구자",
+  reviewer: "검토자",
+  risk: "위험",
+  "verification-mentioned": "검증 언급",
+  writer: "작성자",
 };
 
 const exactKoreanText: Record<string, string> = {
@@ -89,6 +116,18 @@ const exactKoreanText: Record<string, string> = {
     "Harness가 기준 커밋으로 프로젝트 Git 저장소를 초기화했습니다.",
   "Harness reset this interrupted task so it can be run again.":
     "중단된 일감을 다시 실행할 수 있도록 Harness가 초기화했습니다.",
+  "Human approved command execution for this task.":
+    "사용자가 이 일감의 명령 실행을 승인했습니다.",
+  "Human approved merging this task into the main checkout.":
+    "사용자가 이 일감을 기본 체크아웃에 병합하도록 승인했습니다.",
+  "Human approved the PM handoff decision.":
+    "사용자가 PM의 인계 결정을 승인했습니다.",
+  "Human rejected command execution for this task.":
+    "사용자가 이 일감의 명령 실행을 거절했습니다.",
+  "Human rejected the PM handoff decision.":
+    "사용자가 PM의 인계 결정을 거절했습니다.",
+  "Human requested changes before merging this task.":
+    "사용자가 이 일감을 병합하기 전에 변경을 요청했습니다.",
   "Interaction expired before the response was accepted.":
     "응답을 수락하기 전에 상호작용이 만료되었습니다.",
   "Interaction expired while Harness was offline.":
@@ -106,7 +145,11 @@ const exactKoreanText: Record<string, string> = {
     "PM 에이전트가 개발 완료로 표시했습니다. 사용자의 확인이 필요합니다.",
   "PM skipped automatic follow-up creation because matching goals already exist.":
     "일치하는 목표가 이미 있어 PM이 자동 후속 일감 생성을 건너뛰었습니다.",
+  "PM approved handoff. Human approved the PM handoff decision.":
+    "PM이 인계를 승인했습니다. 사용자가 PM의 인계 결정을 승인했습니다.",
   "Risky command policy requires approval.": "위험 명령 정책에 따라 승인이 필요합니다.",
+  "A non-streaming provider changed the project checkout outside its task workspace.":
+    "비스트리밍 공급자가 일감 작업 공간 밖의 프로젝트 체크아웃을 변경했습니다.",
   "Assigned agent is missing.": "배정된 에이전트를 찾을 수 없습니다.",
   "Assigned agent has reached its parallel run limit.":
     "배정된 에이전트가 병렬 실행 제한에 도달했습니다.",
@@ -117,6 +160,12 @@ const exactKoreanText: Record<string, string> = {
   "Project has reached its parallel run limit.":
     "프로젝트가 병렬 실행 제한에 도달했습니다.",
   "Command execution approval was rejected.": "명령 실행 승인이 거절되었습니다.",
+  "Direct git push must be approved by Harness.":
+    "직접 git push를 실행하려면 Harness의 승인이 필요합니다.",
+  "Merge, rebase, or package installation must use an explicit Harness approval.":
+    "병합, 리베이스 또는 패키지 설치에는 Harness의 명시적 승인이 필요합니다.",
+  "Shell command references a path outside the task workspace.":
+    "셸 명령이 일감 작업 공간 밖의 경로를 참조합니다.",
   "Task is already running.": "일감이 이미 실행 중입니다.",
   "Task changes are waiting for human merge approval.":
     "일감 변경 사항이 사용자의 병합 승인을 기다리고 있습니다.",
@@ -125,6 +174,8 @@ const exactKoreanText: Record<string, string> = {
   "Task was updated.": "일감을 수정했습니다.",
   "All dependencies are complete. PM Agent queued this task for execution.":
     "모든 의존 일감이 완료되어 PM 에이전트가 이 일감을 실행 대기열에 등록했습니다.",
+  "The task pre-push guard is missing, changed, non-executable, or no longer configured.":
+    "일감의 pre-push 보호 장치가 없거나 변경되었거나 실행할 수 없거나 더 이상 설정되어 있지 않습니다.",
 };
 
 function koreanTerm(value: string) {
@@ -175,7 +226,23 @@ function koreanRiskItems(value: string) {
     .join(", ");
 }
 
+function koreanHandoffReason(value: string) {
+  return value
+    .replace(/^PM auto-handoff rule: ([^.]+) -> ([^.]+)\./, (_match, from, to) => `PM 자동 인계 규칙: ${serverTokenLabel(from, "ko")} → ${serverTokenLabel(to, "ko")}.`)
+    .replace(/^PM dynamic handoff: ([^.]+) -> ([^.]+)\./, (_match, from, to) => `PM 동적 인계: ${serverTokenLabel(from, "ko")} → ${serverTokenLabel(to, "ko")}.`)
+    .replace(/ PM evaluated (.+)'s completion output\./, " PM이 $1의 완료 출력을 평가했습니다.")
+    .replace(/ (\d+) changed file\(s\)\./, " 변경된 파일 $1개.")
+    .replace(/ No changed files recorded\./, " 변경된 파일이 기록되지 않았습니다.")
+    .replace(/ Signals: (.+)\./, (_match, signals) => ` 감지된 신호: ${signals.split(", ").map((signal: string) => serverTokenLabel(signal, "ko")).join(", ")}.`)
+    .replace(/ No follow-up signals detected\./, " 후속 신호가 감지되지 않았습니다.");
+}
+
 const koreanPatterns: Array<[RegExp, (...values: string[]) => string]> = [
+  [/^(PM (?:auto-handoff rule|dynamic handoff): .+)$/, koreanHandoffReason],
+  [/^(.+)'s task changes need approval before merging\.$/, (agent) => `${agent}의 일감 변경 사항을 병합하려면 승인이 필요합니다.`],
+  [/^(WARN|PAUSE|BLOCK) workspace policy: (.+)$/, (action, reason) => `${koreanTerm(action.toLowerCase())} 작업 공간 정책: ${localizeServerText(reason, "ko")}`],
+  [/^Approved one-run workspace exception used: (.+)$/, (reason) => `승인된 일회성 작업 공간 예외를 사용했습니다: ${localizeServerText(reason, "ko")}`],
+  [/^Write tool (.+) targets a path outside the task workspace\.$/, (tool) => `쓰기 도구 ${tool}이(가) 일감 작업 공간 밖의 경로를 대상으로 합니다.`],
   [/^Review backlog limit reached \((\d+) cards \/ (\d+) unreviewed lines\)\.$/, (cards, lines) => `검토 백로그 제한에 도달했습니다(카드 ${cards}개 / 미검토 변경 ${lines}줄).`],
   [/^Waiting on dependencies: (.+)$/, (items) => `의존 일감을 기다리는 중: ${koreanDependencyItems(items)}`],
   [/^Agent definition is invalid: (.+)$/, (error) => `에이전트 정의가 유효하지 않습니다: ${koreanAgentDefinitionError(error)}`],
@@ -231,6 +298,11 @@ export function eventTypeLabel(type: string, locale: SupportedLocale) {
     .split(/[.-]/)
     .map(koreanTerm)
     .join(" · ");
+}
+
+export function serverTokenLabel(value: string, locale: SupportedLocale) {
+  if (locale !== "ko") return value;
+  return koreanServerTokens[value] || koreanTerm(value);
 }
 
 export function localizeServerText(text: string, locale: SupportedLocale) {

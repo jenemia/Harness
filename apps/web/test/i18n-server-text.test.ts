@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { eventTypeLabel, localizeServerText } from "../src/i18n/serverText";
+import { eventTypeLabel, localizeServerText, serverTokenLabel } from "../src/i18n/serverText";
 
 test("event types follow the selected locale", () => {
   assert.equal(eventTypeLabel("run.completed", "en"), "run.completed");
@@ -110,4 +110,76 @@ test("common activity messages are localized", () => {
   );
   assert.equal(eventTypeLabel("project.template.applied", "ko"), "프로젝트 · 템플릿 · 적용됨");
   assert.equal(eventTypeLabel("mcp.tool.succeeded", "ko"), "MCP · 도구 · 성공");
+});
+
+test("approval decisions and merge approval reasons are localized", () => {
+  assert.equal(
+    localizeServerText("Human approved merging this task into the main checkout.", "ko"),
+    "사용자가 이 일감을 기본 체크아웃에 병합하도록 승인했습니다.",
+  );
+  assert.equal(
+    localizeServerText("Human rejected command execution for this task.", "ko"),
+    "사용자가 이 일감의 명령 실행을 거절했습니다.",
+  );
+  assert.equal(
+    localizeServerText("Human requested changes before merging this task.", "ko"),
+    "사용자가 이 일감을 병합하기 전에 변경을 요청했습니다.",
+  );
+  assert.equal(
+    localizeServerText("Programmer Agent's task changes need approval before merging.", "ko"),
+    "Programmer Agent의 일감 변경 사항을 병합하려면 승인이 필요합니다.",
+  );
+  assert.equal(
+    localizeServerText("Human approved the PM handoff decision.", "en"),
+    "Human approved the PM handoff decision.",
+  );
+});
+
+test("workspace protection activity is localized", () => {
+  assert.equal(eventTypeLabel("workspace.warn", "ko"), "작업 공간 · 경고");
+  assert.equal(eventTypeLabel("workspace.block", "ko"), "작업 공간 · 차단");
+  assert.equal(
+    eventTypeLabel("workspace.exception.used", "ko"),
+    "작업 공간 · 예외 · 사용됨",
+  );
+  assert.equal(
+    localizeServerText(
+      "WARN workspace policy: Write tool apply_patch targets a path outside the task workspace.",
+      "ko",
+    ),
+    "경고 작업 공간 정책: 쓰기 도구 apply_patch이(가) 일감 작업 공간 밖의 경로를 대상으로 합니다.",
+  );
+  assert.equal(
+    localizeServerText(
+      "Approved one-run workspace exception used: Direct git push must be approved by Harness.",
+      "ko",
+    ),
+    "승인된 일회성 작업 공간 예외를 사용했습니다: 직접 git push를 실행하려면 Harness의 승인이 필요합니다.",
+  );
+});
+
+test("handoff reasons shown in task details are localized", () => {
+  assert.equal(
+    localizeServerText(
+      "PM auto-handoff rule: programmer -> reviewer. PM evaluated Programmer Agent's completion output. 2 changed file(s). Signals: risk, follow-up.",
+      "ko",
+    ),
+    "PM 자동 인계 규칙: 프로그래머 → 검토자. PM이 Programmer Agent의 완료 출력을 평가했습니다. 변경된 파일 2개. 감지된 신호: 위험, 후속 작업.",
+  );
+  assert.equal(
+    localizeServerText(
+      "PM dynamic handoff: programmer -> reviewer. PM evaluated Programmer Agent's completion output. No changed files recorded. No follow-up signals detected.",
+      "ko",
+    ),
+    "PM 동적 인계: 프로그래머 → 검토자. PM이 Programmer Agent의 완료 출력을 평가했습니다. 변경된 파일이 기록되지 않았습니다. 후속 신호가 감지되지 않았습니다.",
+  );
+  assert.equal(
+    localizeServerText(
+      "PM approved handoff. Human approved the PM handoff decision.",
+      "ko",
+    ),
+    "PM이 인계를 승인했습니다. 사용자가 PM의 인계 결정을 승인했습니다.",
+  );
+  assert.equal(serverTokenLabel("error-mentioned", "ko"), "오류 언급");
+  assert.equal(serverTokenLabel("reviewer", "en"), "reviewer");
 });

@@ -39,6 +39,7 @@ import {
   reviewChangeTypeMessageKey,
   reviewCommentStatusMessageKey,
   runStatusMessageKey,
+  serverTokenLabel,
   useI18n,
 } from "../../i18n";
 
@@ -566,15 +567,15 @@ export function TaskHandoffs({
                 </strong>
                 {decision && (
                   <div className="handoff-meta">
-                    <b>{decision.source === "automatic" ? t("handoffs.automatic") : decision.source}</b>
-                    {decision.toRole && <b>{decision.toRole}</b>}
+                    <b>{serverTokenLabel(decision.source, locale)}</b>
+                    {decision.toRole && <b>{serverTokenLabel(decision.toRole, locale)}</b>}
                     <b>{t("handoffs.files", { count: decision.changedFiles })}</b>
                     {decision.signals.map((signal) => (
-                      <b key={signal}>{signal}</b>
+                      <b key={signal}>{serverTokenLabel(signal, locale)}</b>
                     ))}
                   </div>
                 )}
-                <span>{handoff.reason}</span>
+                <span>{localizeServerText(handoff.reason, locale)}</span>
               </div>
               <small>{formatDate(handoff.createdAt, locale)}</small>
             </div>
