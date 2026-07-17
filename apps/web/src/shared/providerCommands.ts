@@ -64,6 +64,29 @@ export function getProviderCommandExample(
   );
 }
 
+export function resolveConfiguredProviderCommand(
+  commands: Record<string, string>,
+  providerCatalog: ProviderCatalog | null,
+  modelBackend: string,
+) {
+  const keys = getProviderCommandExample(providerCatalog, modelBackend)?.keys || [modelBackend];
+  const key = keys.find((candidate) => commands[candidate]?.trim());
+  return key ? commands[key] : undefined;
+}
+
+export function replaceProviderCommand(
+  commands: Record<string, string>,
+  providerCatalog: ProviderCatalog | null,
+  modelBackend: string,
+  command: string,
+) {
+  const next = { ...commands };
+  const keys = getProviderCommandExample(providerCatalog, modelBackend)?.keys || [modelBackend];
+  for (const key of keys) delete next[key];
+  next[modelBackend] = command;
+  return next;
+}
+
 export function mergeProviderCommandText(
   value: string,
   providerCatalog: ProviderCatalog | null,

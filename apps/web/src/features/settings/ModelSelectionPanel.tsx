@@ -5,6 +5,7 @@ import { useI18n } from "../../i18n";
 import { mcpService, type McpDiagnostics } from "../../services/mcpService";
 import { projectService } from "../../services/projectService";
 import { settingsService } from "../../services/settingsService";
+import { replaceProviderCommand, resolveConfiguredProviderCommand } from "../../shared/providerCommands";
 
 type CodexOptions = {
   workspaceWrite: boolean;
@@ -78,9 +79,13 @@ export function ModelSelectionPanel(props: {
   useEffect(() => {
     setGlobalModel(props.settings?.defaultModelBackend || "mock");
     setCommands(props.settings?.providerCommands || {});
-    setCodexOptions(optionsFromCommand(props.settings?.providerCommands?.[props.settings?.defaultModelBackend || "mock"]));
+    setCodexOptions(optionsFromCommand(resolveConfiguredProviderCommand(
+      props.settings?.providerCommands || {},
+      props.providerCatalog,
+      props.settings?.defaultModelBackend || "mock",
+    )));
     setVerified(null);
-  }, [props.settings]);
+  }, [props.settings, props.providerCatalog]);
 
   useEffect(() => {
     void mcpService.diagnose().then(setMcp).catch(() => undefined);
@@ -90,7 +95,7 @@ export function ModelSelectionPanel(props: {
 
   function selectModel(modelBackend: string) {
     setGlobalModel(modelBackend);
-    setCodexOptions(optionsFromCommand(commands[modelBackend]));
+    setCodexOptions(optionsFromCommand(resolveConfiguredProviderCommand(commands, props.providerCatalog, modelBackend)));
     setVerified(null);
   }
 
@@ -108,7 +113,12 @@ export function ModelSelectionPanel(props: {
     const settings = props.settings;
     if (!settings || !verified?.ok) return;
     const providerCommands = selectedProvider && isCodexModel(selectedProvider.id)
-      ? { ...commands, [selectedProvider.id]: codexCommand(selectedProvider.id, codexOptions) }
+      ? replaceProviderCommand(
+          commands,
+          props.providerCatalog,
+          selectedProvider.id,
+          codexCommand(selectedProvider.id, codexOptions),
+        )
       : commands;
     await props.runAction(async () => {
       const response = await settingsService.updateGlobal({
@@ -126,6 +136,7 @@ export function ModelSelectionPanel(props: {
         await settingsService.updateProject(props.overview.project.id, {
           ...props.overview.settings,
           defaultModelBackend: globalModel,
+          providerCommands,
         });
         await props.onProjectChanged();
       }

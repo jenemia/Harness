@@ -1906,19 +1906,15 @@ function createAutomaticFollowUps(
   return goals;
 }
 
-function parseAutomaticFollowUpCandidates(output: string, sourceTitle: string) {
+export function parseAutomaticFollowUpCandidates(output: string, sourceTitle: string) {
   const lines = output
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
   const candidates = lines
-    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^(todo|follow[- ]?up|next(?: step)?|action item)\s*:\s*/i, "").trim())
-    .filter((line) => line.length >= 8 && /todo|follow|next|fix|add|implement|review|test|update|create|document|action item/i.test(line))
+    .map(explicitFollowUpText)
+    .filter((line): line is string => Boolean(line && line.length >= 8))
     .slice(0, 5);
-
-  if (candidates.length === 0 && output.trim()) {
-    candidates.push(`Review follow-up from ${sourceTitle}`);
-  }
 
   const seen = new Set<string>();
   return candidates
@@ -1986,10 +1982,10 @@ function inferDynamicHandoffRole(
   return null;
 }
 
-function detectCompletionSignals(output: string, changedFiles: string[]) {
+export function detectCompletionSignals(output: string, changedFiles: string[]) {
   const signals = new Set<string>();
   const text = output.toLowerCase();
-  if (/todo|follow[- ]?up|next step|needs?/i.test(output)) {
+  if (output.split(/\r?\n/).some((line) => explicitFollowUpText(line.trim()))) {
     signals.add("follow-up");
   }
   if (/risk|blocker|blocked|uncertain|assumption/i.test(output)) {
@@ -2005,6 +2001,11 @@ function detectCompletionSignals(output: string, changedFiles: string[]) {
     signals.add("error-mentioned");
   }
   return Array.from(signals);
+}
+
+function explicitFollowUpText(line: string) {
+  const match = line.match(/^(?:[-*]\s*)?(?:todo|follow[- ]?up|next(?: step)?|action item)\s*:\s*(.+)$/i);
+  return match?.[1]?.trim() || null;
 }
 
 function unique(values: string[]) {
