@@ -2,7 +2,7 @@ import { Bot, FileText, Plus, UsersRound, X } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Agent, AgentTemplate, Overview, ProviderCatalog } from "../../api/contracts";
 import { agentService, type AgentDocumentBundle } from "../../services/agentService";
-import { useI18n } from "../../i18n";
+import { serverTokenLabel, useI18n } from "../../i18n";
 import { AgentMarkdownEditor } from "./AgentMarkdownEditor";
 import { connectedAgentModels } from "./agentModelOptions";
 
@@ -15,7 +15,7 @@ export function AgentPanel(props: {
   onChanged: () => Promise<void>;
   onOpenTask: (taskId: string) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const activeAgents = props.overview.agents.filter((agent) => !agent.archivedAt);
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [editorBundle, setEditorBundle] = useState<AgentDocumentBundle | null>(null);
@@ -119,7 +119,7 @@ export function AgentPanel(props: {
             const currentTask = props.overview.tasks.find((task) => task.id === agent.currentTaskId) || null;
             return <button className={`agent-selection-row ${selectedAgentId === agent.id && !creating ? "active" : ""}`} type="button" key={agent.id} onClick={() => void selectAgent(agent)}>
               <span className={`agent-avatar tone-${index % 5}`}>{agent.name.slice(0, 1).toUpperCase()}</span>
-              <span className="agent-selection-copy"><strong>{agent.name}</strong><small>{currentTask?.title || agent.role}</small></span>
+              <span className="agent-selection-copy"><strong>{agent.name}</strong><small>{currentTask?.title || serverTokenLabel(agent.role, locale)}</small></span>
               <span className={`agent-status-pill ${agent.status}`}><i />{t(`agents.status.${agent.status}`)}</span>
             </button>;
           })}
@@ -131,11 +131,11 @@ export function AgentPanel(props: {
         <button className="agent-mobile-back secondary-button compact" type="button" onClick={() => setMobileDetail(false)}>← {t("agents.list")}</button>
         {creating ? <form className="agent-create-form" onSubmit={submitCreate}>
           <header><div><span className="modal-kicker">{t("agents.new")}</span><h2>{t("agents.createTitle")}</h2></div><button className="icon-button" type="button" onClick={() => { setCreating(false); setMobileDetail(false); }}><X size={16} /></button></header>
-          <select value="" onChange={(event) => applyTemplate(event.target.value)}><option value="">{t("agents.applyTemplate")}</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {template.role}</option>)}</select>
-          <div className="agent-form-grid"><input required value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.name")} /><select value={role} onChange={(event) => setRole(event.target.value)}><option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="code-reviewer">code-reviewer</option><option value="project-manager">project-manager</option></select></div>
+          <select value="" onChange={(event) => applyTemplate(event.target.value)}><option value="">{t("agents.applyTemplate")}</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {serverTokenLabel(template.role, locale)}</option>)}</select>
+          <div className="agent-form-grid"><input required value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.name")} /><select value={role} onChange={(event) => setRole(event.target.value)}><option value="worker">{serverTokenLabel("worker", locale)}</option><option value="programmer">{serverTokenLabel("programmer", locale)}</option><option value="reviewer">{serverTokenLabel("reviewer", locale)}</option><option value="code-reviewer">{serverTokenLabel("code-reviewer", locale)}</option><option value="project-manager">{serverTokenLabel("project-manager", locale)}</option></select></div>
           <select value={modelBackend} onChange={(event) => setModelBackend(event.target.value)}>{connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
           <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.persona")} />
-          <details><summary>{t("agents.advanced")}</summary><div className="stack-form"><input type="number" min={1} max={8} value={maxParallel} onChange={(event) => setMaxParallel(Math.max(1, Number(event.target.value || 1)))} /><label className="checkbox-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>{t("agents.enabled")}</span></label><input value={capabilitiesText} onChange={(event) => setCapabilitiesText(event.target.value)} placeholder="Capabilities" /><input value={allowedToolsText} onChange={(event) => setAllowedToolsText(event.target.value)} placeholder="Allowed tools" /><textarea value={boundaries} onChange={(event) => setBoundaries(event.target.value)} placeholder="Boundaries" /><input value={cliCommand} onChange={(event) => setCliCommand(event.target.value)} placeholder="CLI command" /></div></details>
+          <details><summary>{t("agents.advanced")}</summary><div className="stack-form"><input aria-label={t("agents.maxParallel")} type="number" min={1} max={8} value={maxParallel} onChange={(event) => setMaxParallel(Math.max(1, Number(event.target.value || 1)))} /><label className="checkbox-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>{t("agents.enabled")}</span></label><input value={capabilitiesText} onChange={(event) => setCapabilitiesText(event.target.value)} placeholder={t("agents.capabilities")} /><input value={allowedToolsText} onChange={(event) => setAllowedToolsText(event.target.value)} placeholder={t("agents.allowedTools")} /><textarea value={boundaries} onChange={(event) => setBoundaries(event.target.value)} placeholder={t("agents.boundaries")} /><input value={cliCommand} onChange={(event) => setCliCommand(event.target.value)} placeholder={t("agents.cliCommand")} /></div></details>
           <div className="agent-create-actions"><button className="secondary-button" type="button" disabled={!name.trim()} onClick={() => void saveTemplate()}><FileText size={16} />{t("agents.saveTemplate")}</button><button className="primary-button" type="submit" disabled={!name.trim() || !connectedModels.length}><Plus size={16} />{t("agents.create")}</button></div>
         </form> : editorBundle ? <AgentMarkdownEditor overview={props.overview} providerCatalog={props.providerCatalog} bundle={editorBundle} runAction={props.runAction} onBundleChanged={setEditorBundle} onClose={() => setMobileDetail(false)} onProjectChanged={props.onChanged} onOpenTask={props.onOpenTask} onDirtyChange={setEditorDirty} /> : <div className="agent-empty-detail"><Bot size={34} /><span>{activeAgents.length ? t("agents.loading") : t("agents.selectOrCreate")}</span></div>}
       </main>

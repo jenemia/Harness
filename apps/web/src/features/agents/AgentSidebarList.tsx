@@ -1,5 +1,5 @@
 import type { Agent, Task } from "../../api/contracts";
-import { useI18n } from "../../i18n";
+import { serverTokenLabel, useI18n } from "../../i18n";
 
 const avatarTones = ["rose", "amber", "violet", "sky", "mint"];
 
@@ -10,7 +10,7 @@ export function AgentSidebarList({
   agents: Agent[];
   tasks: Task[];
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   return (
     <section className="agent-sidebar-section">
       <div className="context-section-header">
@@ -31,10 +31,10 @@ export function AgentSidebarList({
               </span>
               <div>
                 <strong>{agent.name}</strong>
-                <span>{currentTask?.title || agent.role}</span>
+                <span>{currentTask?.title || serverTokenLabel(agent.role, locale)}</span>
               </div>
               <span className={`agent-presence ${agent.status}`}>
-                {agent.status}
+                {t(`agents.status.${agent.status}`)}
               </span>
             </div>
           );

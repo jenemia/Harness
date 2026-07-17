@@ -81,6 +81,7 @@ const koreanServerTokens: Record<string, string> = {
   approved: "승인됨",
   automatic: "자동",
   configured: "설정됨",
+  "code-reviewer": "코드 검토자",
   dynamic: "동적",
   editor: "편집자",
   editing: "편집",
@@ -96,6 +97,7 @@ const koreanServerTokens: Record<string, string> = {
   risk: "위험",
   "verification-mentioned": "검증 언급",
   writer: "작성자",
+  worker: "작업자",
 };
 
 const exactKoreanText: Record<string, string> = {

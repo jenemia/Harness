@@ -1,6 +1,7 @@
 import { Archive, ArrowDown, ArrowUp, Copy, Eye, FolderOpen, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Agent, Overview, ProviderCatalog } from "../../api/contracts";
+import { serverTokenLabel, statusMessageKey, useI18n, type MessageKey } from "../../i18n";
 import { agentService, type AgentDocumentBundle, type AgentInstructionDocument } from "../../services/agentService";
 import { buildLineDiff, parseAgentMarkdownDraft, type ParsedAgentMarkdownDraft, updateAgentMarkdownDraft } from "./agentMarkdownDraft";
 import { connectedAgentModels, modelIsConnected } from "./agentModelOptions";
@@ -17,6 +18,7 @@ export function AgentMarkdownEditor(props: {
   onOpenTask: (taskId: string) => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
+  const { locale, t } = useI18n();
   const projectId = props.overview.project.id;
   const agentId = props.bundle.agent.id;
   const initialSource = props.bundle.source;
@@ -24,8 +26,8 @@ export function AgentMarkdownEditor(props: {
   const [baseHash, setBaseHash] = useState(initialSource?.hash || "");
   const [draftRaw, setDraftRaw] = useState(initialSource?.raw || "");
   const [validation, setValidation] = useState<ValidationState>(() => props.bundle.validation.valid
-    ? { status: "valid", message: "Markdown and instruction references are valid." }
-    : { status: "invalid", message: props.bundle.validation.error || "Agent Markdown is invalid." });
+    ? { status: "valid", message: t("agents.validationValidMessage") }
+    : { status: "invalid", message: props.bundle.validation.error || t("agents.validationInvalidMessage") });
   const [selectedInstructionPath, setSelectedInstructionPath] = useState(props.bundle.instructions[0]?.path || "");
   const [instructionContent, setInstructionContent] = useState(props.bundle.instructions[0]?.content || "");
   const [instructionName, setInstructionName] = useState("");
@@ -64,9 +66,9 @@ export function AgentMarkdownEditor(props: {
     acceptedExternalVersion.current = "";
     setExternalBundle(null);
     setValidation(props.bundle.validation.valid
-      ? { status: "valid", message: "Markdown and instruction references are valid." }
-      : { status: "invalid", message: props.bundle.validation.error || "Agent Markdown is invalid." });
-  }, [props.bundle.agent.id, props.bundle.source?.hash]);
+      ? { status: "valid", message: t("agents.validationValidMessage") }
+      : { status: "invalid", message: props.bundle.validation.error || t("agents.validationInvalidMessage") });
+  }, [props.bundle.agent.id, props.bundle.source?.hash, t]);
 
   useEffect(() => {
     const selected = props.bundle.instructions.find((item) => item.path === selectedInstructionPath) || props.bundle.instructions[0] || null;
@@ -105,19 +107,19 @@ export function AgentMarkdownEditor(props: {
     if (!initialSource) return;
     if (!dirty) {
       setValidation(props.bundle.validation.valid
-        ? { status: "valid", message: "Markdown and instruction references are valid." }
-        : { status: "invalid", message: props.bundle.validation.error || "Agent Markdown is invalid." });
+        ? { status: "valid", message: t("agents.validationValidMessage") }
+        : { status: "invalid", message: props.bundle.validation.error || t("agents.validationInvalidMessage") });
       return;
     }
     if (parsed.error) {
       setValidation({ status: "invalid", message: parsed.error });
       return;
     }
-    setValidation({ status: "pending", message: "Validating Markdown and instruction references…" });
+    setValidation({ status: "pending", message: t("agents.validationPendingMessage") });
     let active = true;
     const timeout = window.setTimeout(() => {
       void agentService.previewRaw(projectId, agentId, draftRaw).then(() => {
-        if (active) setValidation({ status: "valid", message: "Markdown and instruction references are valid." });
+        if (active) setValidation({ status: "valid", message: t("agents.validationValidMessage") });
       }).catch((error) => {
         if (active) setValidation({ status: "invalid", message: error instanceof Error ? error.message : String(error) });
       });
@@ -126,7 +128,7 @@ export function AgentMarkdownEditor(props: {
       active = false;
       window.clearTimeout(timeout);
     };
-  }, [agentId, draftRaw, dirty, initialSource, parsed.error, projectId, props.bundle.validation.error, props.bundle.validation.valid]);
+  }, [agentId, draftRaw, dirty, initialSource, parsed.error, projectId, props.bundle.validation.error, props.bundle.validation.valid, t]);
 
   function updateStructured(patch: Partial<ParsedAgentMarkdownDraft>) {
     try {
@@ -182,7 +184,7 @@ export function AgentMarkdownEditor(props: {
     setBaseHash(externalHash);
     setDraftRaw(`<<<<<<< LOCAL\n${localRaw.trimEnd()}\n=======\n${externalRaw.trimEnd()}\n>>>>>>> EXTERNAL\n`);
     setExternalBundle(null);
-    setValidation({ status: "invalid", message: "Resolve every merge marker in raw Markdown before saving." });
+    setValidation({ status: "invalid", message: t("agents.resolveMergeMarkers") });
   }
 
   async function resetDraft() {
@@ -192,8 +194,8 @@ export function AgentMarkdownEditor(props: {
     setBaseHash(bundle.source?.hash || "");
     setDraftRaw(bundle.source?.raw || "");
     setValidation(bundle.validation.valid
-      ? { status: "valid", message: "Markdown and instruction references are valid." }
-      : { status: "invalid", message: bundle.validation.error || "Agent Markdown is invalid." });
+      ? { status: "valid", message: t("agents.validationValidMessage") }
+      : { status: "invalid", message: bundle.validation.error || t("agents.validationInvalidMessage") });
   }
 
   async function saveInstruction() {
@@ -264,7 +266,7 @@ export function AgentMarkdownEditor(props: {
 
   async function cloneAgent() {
     await props.runAction(async () => {
-      await agentService.clone(projectId, agentId, { name: `${parsed.value?.name || props.bundle.agent.name} Copy`, enabled: false });
+      await agentService.clone(projectId, agentId, { name: `${parsed.value?.name || props.bundle.agent.name} ${t("agents.copySuffix")}`, enabled: false });
       await props.onProjectChanged();
     });
   }
@@ -273,7 +275,7 @@ export function AgentMarkdownEditor(props: {
     await props.runAction(async () => {
       const payload: { expectedHash: string; reassignToAgentId?: string | null } = { expectedHash: baseHash };
       if (assignedOpenTasks.length > 0) {
-        if (!archiveReplacement) throw new Error("Choose a replacement agent or explicitly unassign open tasks.");
+        if (!archiveReplacement) throw new Error(t("agents.chooseReplacementError"));
         payload.reassignToAgentId = archiveReplacement === "__unassign__" ? null : archiveReplacement;
       }
       await agentService.archive(projectId, agentId, payload);
@@ -293,10 +295,10 @@ export function AgentMarkdownEditor(props: {
       <div className="agent-editor-card archived">
         <div className="agent-editor-toolbar">
           <strong>{props.bundle.agent.name}</strong>
-          <button className="mini-button" type="button" onClick={props.onClose}><X size={14} /> Close</button>
+          <button className="mini-button" type="button" onClick={props.onClose}><X size={14} /> {t("agents.close")}</button>
         </div>
-        <p>This agent is archived at {props.bundle.agent.archivePath || props.bundle.folderPath || "the project archive"}.</p>
-        <button className="secondary-button" type="button" onClick={() => void openFolder()}><FolderOpen size={15} /> Open archive folder</button>
+        <p>{t("agents.archivedAt", { path: props.bundle.agent.archivePath || props.bundle.folderPath || t("agents.projectArchive") })}</p>
+        <button className="secondary-button" type="button" onClick={() => void openFolder()}><FolderOpen size={15} /> {t("agents.openArchiveFolder")}</button>
       </div>
     );
   }
@@ -306,148 +308,148 @@ export function AgentMarkdownEditor(props: {
       <header className="agent-detail-header">
         <div className="agent-detail-identity">
           <span className="agent-detail-avatar">{props.bundle.agent.name.slice(0, 1).toUpperCase()}</span>
-          <div><span className="modal-kicker">{props.bundle.agent.role}</span><h2>{parsed.value?.name || props.bundle.agent.name}</h2></div>
+          <div><span className="modal-kicker">{serverTokenLabel(props.bundle.agent.role, locale)}</span><h2>{parsed.value?.name || props.bundle.agent.name}</h2></div>
         </div>
         <div className="agent-detail-badges">
-          <span className={`agent-status-pill ${liveAgent.status}`}><i />{liveAgent.status}</span>
-          <span className={`agent-enabled-pill ${parsed.value?.enabled ? "enabled" : "disabled"}`}>{parsed.value?.enabled ? "Enabled" : "Disabled"}</span>
+          <span className={`agent-status-pill ${liveAgent.status}`}><i />{t(`agents.status.${liveAgent.status}`)}</span>
+          <span className={`agent-enabled-pill ${parsed.value?.enabled ? "enabled" : "disabled"}`}>{parsed.value?.enabled ? t("agents.enabledState") : t("agents.disabledState")}</span>
         </div>
       </header>
 
       <section className="agent-primary-editor">
-        <label><span>Model</span><select aria-label="Agent connected model" value={parsed.value?.modelBackend || props.bundle.agent.modelBackend} disabled={!parsed.value || connectedModels.length === 0} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>
-          {!currentModelConnected && <option value={parsed.value?.modelBackend || props.bundle.agent.modelBackend}>{parsed.value?.modelBackend || props.bundle.agent.modelBackend} · disconnected</option>}
+        <label><span>{t("agents.model")}</span><select aria-label={t("agents.connectedModel")} value={parsed.value?.modelBackend || props.bundle.agent.modelBackend} disabled={!parsed.value || connectedModels.length === 0} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>
+          {!currentModelConnected && <option value={parsed.value?.modelBackend || props.bundle.agent.modelBackend}>{parsed.value?.modelBackend || props.bundle.agent.modelBackend} · {t("agents.disconnected")}</option>}
           {connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-        </select>{!currentModelConnected && <small className="agent-model-warning">Current model is disconnected. Choose a connected model before saving.</small>}</label>
-        <label><span>Persona</span><textarea className="agent-main-textarea" aria-label="Agent editor persona" value={parsed.value?.persona || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ persona: event.target.value })} placeholder="Describe the agent persona in Markdown" /></label>
-        <label><span>Instructions</span><textarea className="agent-main-textarea" aria-label="Agent editor instructions" value={parsed.value?.instructions || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ instructions: event.target.value })} placeholder="Write the agent's default instructions in Markdown" /></label>
+        </select>{!currentModelConnected && <small className="agent-model-warning">{t("agents.disconnectedModelWarning")}</small>}</label>
+        <label><span>{t("agents.personaLabel")}</span><textarea className="agent-main-textarea" aria-label={t("agents.personaEditor")} value={parsed.value?.persona || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ persona: event.target.value })} placeholder={t("agents.personaPlaceholder")} /></label>
+        <label><span>{t("agents.instructions")}</span><textarea className="agent-main-textarea" aria-label={t("agents.instructionsEditor")} value={parsed.value?.instructions || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ instructions: event.target.value })} placeholder={t("agents.instructionsPlaceholder")} /></label>
       </section>
 
       <section className="agent-assigned-tasks">
-        <header><div><h3>Assigned tasks</h3><span>Open work currently owned by this agent</span></div><b>{assignedOpenTasks.length}</b></header>
+        <header><div><h3>{t("agents.assignedTasks")}</h3><span>{t("agents.assignedTasksHelp")}</span></div><b>{assignedOpenTasks.length}</b></header>
         <div className="agent-task-list">
-          {assignedOpenTasks.map((task) => <button type="button" key={task.id} onClick={() => props.onOpenTask(task.id)}><span><strong>{task.title}</strong><small>{task.id.slice(0, 8)}</small></span><span className={`task-status-chip status-${task.status.toLowerCase().replaceAll(" ", "-")}`}>{task.status}</span><span className={`priority-pill priority-${task.priority.toLowerCase()}`}>{task.priority}</span></button>)}
-          {assignedOpenTasks.length === 0 && <div className="agent-no-tasks">No assigned open tasks.</div>}
+          {assignedOpenTasks.map((task) => <button type="button" key={task.id} onClick={() => props.onOpenTask(task.id)}><span><strong>{task.title}</strong><small>{task.id.slice(0, 8)}</small></span><span className={`task-status-chip status-${task.status.toLowerCase().replaceAll(" ", "-")}`}>{t(statusMessageKey(task.status))}</span><span className={`priority-pill priority-${task.priority.toLowerCase()}`}>{t(`task.priority.${task.priority.toLowerCase()}` as MessageKey)}</span></button>)}
+          {assignedOpenTasks.length === 0 && <div className="agent-no-tasks">{t("agents.noAssignedTasks")}</div>}
         </div>
       </section>
 
       <div className={`agent-validation ${validation.status}`} role="status">
-        <strong>{validation.status === "valid" ? "Valid" : validation.status === "pending" ? "Validating" : "Validation error"}</strong>
+        <strong>{validation.status === "valid" ? t("agents.validationValid") : validation.status === "pending" ? t("agents.validationPending") : t("agents.validationError")}</strong>
         <span>{validation.message}</span>
       </div>
 
       <div className="agent-editor-actions primary-actions">
-        <button className="secondary-button" type="button" disabled={!dirty} onClick={() => void resetDraft()}><RefreshCw size={15} /> Reload</button>
-        <button className="primary-button" type="button" disabled={!dirty || validation.status !== "valid" || !currentModelConnected} onClick={() => void saveRaw()}><Save size={15} /> Save changes</button>
+        <button className="secondary-button" type="button" disabled={!dirty} onClick={() => void resetDraft()}><RefreshCw size={15} /> {t("agents.reload")}</button>
+        <button className="primary-button" type="button" disabled={!dirty || validation.status !== "valid" || !currentModelConnected} onClick={() => void saveRaw()}><Save size={15} /> {t("agents.saveChanges")}</button>
       </div>
 
       <details className="agent-advanced-settings">
-        <summary>Advanced settings</summary>
+        <summary>{t("agents.advanced")}</summary>
       <div className="agent-editor-toolbar">
         <div>
           <strong>{parsed.value?.name || props.bundle.agent.name}</strong>
           <span>{props.bundle.source.relativePath} · {baseHash.slice(0, 10)}</span>
         </div>
         <div className="inline-actions">
-          <button className="mini-button" type="button" onClick={() => void openFolder()}><FolderOpen size={14} /> Folder</button>
-          <button className="mini-button" type="button" onClick={() => void cloneAgent()}><Copy size={14} /> Clone</button>
-          <button className="mini-button" type="button" onClick={props.onClose}><X size={14} /> Close</button>
+          <button className="mini-button" type="button" onClick={() => void openFolder()}><FolderOpen size={14} /> {t("agents.folder")}</button>
+          <button className="mini-button" type="button" onClick={() => void cloneAgent()}><Copy size={14} /> {t("agents.clone")}</button>
+          <button className="mini-button" type="button" onClick={props.onClose}><X size={14} /> {t("agents.close")}</button>
         </div>
       </div>
 
       <div className="agent-editor-grid">
         <section className="agent-structured-editor">
-          <h3>Structured form</h3>
-          <input aria-label="Agent editor name" value={parsed.value?.name || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ name: event.target.value })} />
-          <select aria-label="Agent editor role" value={parsed.value?.role || "worker"} disabled={!parsed.value} onChange={(event) => updateStructured({ role: event.target.value })}>
-            <option value="worker">worker</option><option value="programmer">programmer</option><option value="reviewer">reviewer</option><option value="code-reviewer">code-reviewer</option><option value="project-manager">project-manager</option>
+          <h3>{t("agents.structuredForm")}</h3>
+          <input aria-label={t("agents.editorName")} value={parsed.value?.name || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ name: event.target.value })} />
+          <select aria-label={t("agents.editorRole")} value={parsed.value?.role || "worker"} disabled={!parsed.value} onChange={(event) => updateStructured({ role: event.target.value })}>
+            <option value="worker">{serverTokenLabel("worker", locale)}</option><option value="programmer">{serverTokenLabel("programmer", locale)}</option><option value="reviewer">{serverTokenLabel("reviewer", locale)}</option><option value="code-reviewer">{serverTokenLabel("code-reviewer", locale)}</option><option value="project-manager">{serverTokenLabel("project-manager", locale)}</option>
           </select>
-          <select aria-label="Agent editor provider" value={parsed.value?.modelBackend || "mock"} disabled={!parsed.value} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>{!currentModelConnected && <option value={parsed.value?.modelBackend || "mock"}>{parsed.value?.modelBackend || "mock"} · disconnected</option>}{connectedModels.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select>
-          <input aria-label="Agent editor max parallel" type="number" min={1} max={8} value={parsed.value?.maxParallel || 1} disabled={!parsed.value} onChange={(event) => updateStructured({ maxParallel: Math.max(1, Number(event.target.value || 1)) })} />
-          <label className="checkbox-row"><input type="checkbox" checked={parsed.value?.enabled || false} disabled={!parsed.value} onChange={(event) => updateStructured({ enabled: event.target.checked })} /><span>Enabled for new runs</span></label>
+          <select aria-label={t("agents.editorProvider")} value={parsed.value?.modelBackend || "mock"} disabled={!parsed.value} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>{!currentModelConnected && <option value={parsed.value?.modelBackend || "mock"}>{parsed.value?.modelBackend || "mock"} · {t("agents.disconnected")}</option>}{connectedModels.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select>
+          <input aria-label={t("agents.maxParallel")} type="number" min={1} max={8} value={parsed.value?.maxParallel || 1} disabled={!parsed.value} onChange={(event) => updateStructured({ maxParallel: Math.max(1, Number(event.target.value || 1)) })} />
+          <label className="checkbox-row"><input type="checkbox" checked={parsed.value?.enabled || false} disabled={!parsed.value} onChange={(event) => updateStructured({ enabled: event.target.checked })} /><span>{t("agents.enabled")}</span></label>
           {(parsed.value?.role === "code-reviewer" || parsed.value?.capabilities.includes("autoreview")) && (() => {
             const schedule = parsed.value?.reviewSchedule || { enabled: true, trigger: "on-commit" as const, intervalMinutes: null, dailyAt: null, timezone: null };
             const updateSchedule = (next: Partial<typeof schedule>) => updateStructured({ reviewSchedule: { ...schedule, ...next } });
             return <div className="agent-review-schedule">
-              <label className="checkbox-row"><input aria-label="Automatic review enabled" type="checkbox" checked={schedule.enabled} onChange={(event) => updateSchedule({ enabled: event.target.checked })} /><span>Automatic commit review</span></label>
-              <select aria-label="Review schedule trigger" value={schedule.trigger} onChange={(event) => updateSchedule({ trigger: event.target.value as typeof schedule.trigger })}>
-                <option value="on-commit">on-commit</option><option value="interval">interval</option><option value="daily">daily</option>
+              <label className="checkbox-row"><input aria-label={t("agents.automaticCommitReview")} type="checkbox" checked={schedule.enabled} onChange={(event) => updateSchedule({ enabled: event.target.checked })} /><span>{t("agents.automaticCommitReview")}</span></label>
+              <select aria-label={t("agents.reviewScheduleTrigger")} value={schedule.trigger} onChange={(event) => updateSchedule({ trigger: event.target.value as typeof schedule.trigger })}>
+                <option value="on-commit">{t("agents.triggerOnCommit")}</option><option value="interval">{t("agents.triggerInterval")}</option><option value="daily">{t("agents.triggerDaily")}</option>
               </select>
-              {schedule.trigger === "interval" && <input aria-label="Review interval minutes" type="number" min={15} value={schedule.intervalMinutes ?? 15} onChange={(event) => updateSchedule({ intervalMinutes: Number(event.target.value) })} />}
-              {schedule.trigger === "daily" && <><input aria-label="Daily review time" type="time" value={schedule.dailyAt ?? "09:00"} onChange={(event) => updateSchedule({ dailyAt: event.target.value })} /><input aria-label="Review timezone" value={schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone} onChange={(event) => updateSchedule({ timezone: event.target.value })} placeholder="Asia/Seoul" /></>}
+              {schedule.trigger === "interval" && <input aria-label={t("agents.reviewIntervalMinutes")} type="number" min={15} value={schedule.intervalMinutes ?? 15} onChange={(event) => updateSchedule({ intervalMinutes: Number(event.target.value) })} />}
+              {schedule.trigger === "daily" && <><input aria-label={t("agents.dailyReviewTime")} type="time" value={schedule.dailyAt ?? "09:00"} onChange={(event) => updateSchedule({ dailyAt: event.target.value })} /><input aria-label={t("agents.reviewTimezone")} value={schedule.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone} onChange={(event) => updateSchedule({ timezone: event.target.value })} placeholder="Asia/Seoul" /></>}
             </div>;
           })()}
-          <input aria-label="Agent editor capabilities" value={(parsed.value?.capabilities || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ capabilities: parseList(event.target.value) })} placeholder="Capabilities" />
-          <input aria-label="Agent editor allowed tools" value={(parsed.value?.allowedTools || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ allowedTools: parseList(event.target.value) })} placeholder="Allowed tools" />
-          <textarea aria-label="Agent editor boundaries" value={parsed.value?.boundaries || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ boundaries: event.target.value })} placeholder="Boundaries" />
-          <input aria-label="Agent editor CLI command" value={parsed.value?.cliCommand || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ cliCommand: event.target.value })} placeholder="CLI command" />
+          <input aria-label={t("agents.capabilities")} value={(parsed.value?.capabilities || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ capabilities: parseList(event.target.value) })} placeholder={t("agents.capabilities")} />
+          <input aria-label={t("agents.allowedTools")} value={(parsed.value?.allowedTools || []).join(", ")} disabled={!parsed.value} onChange={(event) => updateStructured({ allowedTools: parseList(event.target.value) })} placeholder={t("agents.allowedTools")} />
+          <textarea aria-label={t("agents.boundaries")} value={parsed.value?.boundaries || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ boundaries: event.target.value })} placeholder={t("agents.boundaries")} />
+          <input aria-label={t("agents.cliCommand")} value={parsed.value?.cliCommand || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ cliCommand: event.target.value })} placeholder={t("agents.cliCommand")} />
         </section>
         <section className="agent-raw-editor">
-          <h3>Raw agent.md</h3>
-          <textarea aria-label="Raw agent Markdown" value={draftRaw} onChange={(event) => setDraftRaw(event.target.value)} spellCheck={false} />
+          <h3>{t("agents.rawAgent")}</h3>
+          <textarea aria-label={t("agents.rawAgentLabel")} value={draftRaw} onChange={(event) => setDraftRaw(event.target.value)} spellCheck={false} />
         </section>
       </div>
 
       {externalBundle && <div className="agent-external-conflict" role="alert">
         <div>
-          <strong>External edit detected</strong>
-          <span>agent.md or an instruction changed while this draft had unsaved edits. Choose how to resolve it.</span>
+          <strong>{t("agents.externalEdit")}</strong>
+          <span>{t("agents.externalEditHelp")}</span>
         </div>
         <div className="inline-actions">
-          <button className="mini-button danger" type="button" onClick={() => void overwriteExternal()}>Overwrite external</button>
-          <button className="mini-button" type="button" onClick={reloadExternal}>Reload external</button>
-          <button className="mini-button" type="button" onClick={startManualMerge}>Manual merge</button>
+          <button className="mini-button danger" type="button" onClick={() => void overwriteExternal()}>{t("agents.overwriteExternal")}</button>
+          <button className="mini-button" type="button" onClick={reloadExternal}>{t("agents.reloadExternal")}</button>
+          <button className="mini-button" type="button" onClick={startManualMerge}>{t("agents.manualMerge")}</button>
         </div>
       </div>}
 
       <div className="agent-result-grid">
         <section>
-          <h3>Change result</h3>
-          <pre className="agent-diff" aria-label="Agent Markdown diff">{diff.map((line, index) => <span className={`diff-${line.kind}`} key={`${index}-${line.text}`}>{line.kind === "add" ? "+ " : line.kind === "remove" ? "- " : "  "}{line.text}{"\n"}</span>)}</pre>
+          <h3>{t("agents.changeResult")}</h3>
+          <pre className="agent-diff" aria-label={t("agents.diffLabel")}>{diff.map((line, index) => <span className={`diff-${line.kind}`} key={`${index}-${line.text}`}>{line.kind === "add" ? "+ " : line.kind === "remove" ? "- " : "  "}{line.text}{"\n"}</span>)}</pre>
         </section>
         <section>
-          <h3><Eye size={14} /> Persona preview</h3>
-          <div className="markdown-preview">{parsed.value?.persona || "No valid Persona section to preview."}</div>
-          <h3>Instruction preview</h3>
-          <div className="markdown-preview">{selectedInstruction?.content || "Select or create an instruction file."}</div>
+          <h3><Eye size={14} /> {t("agents.personaPreview")}</h3>
+          <div className="markdown-preview">{parsed.value?.persona || t("agents.noPersonaPreview")}</div>
+          <h3>{t("agents.instructionPreview")}</h3>
+          <div className="markdown-preview">{selectedInstruction?.content || t("agents.noInstructionPreview")}</div>
         </section>
       </div>
 
       <section className="agent-instruction-editor">
-        <h3>Instruction files</h3>
+        <h3>{t("agents.instructionFiles")}</h3>
         <div className="instruction-controls">
-          <select aria-label="Instruction file" value={selectedInstructionPath} onChange={(event) => {
+          <select aria-label={t("agents.instructionFile")} value={selectedInstructionPath} onChange={(event) => {
             const selected = props.bundle.instructions.find((item) => item.path === event.target.value) || null;
             setSelectedInstructionPath(selected?.path || "");
             setInstructionContent(selected?.content || "");
           }}>
-            <option value="">New instruction</option>
+            <option value="">{t("agents.newInstruction")}</option>
             {props.bundle.instructions.map((item) => <option key={item.path} value={item.path}>{item.path}</option>)}
           </select>
-          {!selectedInstruction && <input aria-label="New instruction name" value={instructionName} onChange={(event) => setInstructionName(event.target.value)} placeholder="instruction-name" />}
-          <textarea aria-label="Instruction Markdown" value={instructionContent} onChange={(event) => setInstructionContent(event.target.value)} placeholder="Instruction Markdown" />
+          {!selectedInstruction && <input aria-label={t("agents.newInstructionName")} value={instructionName} onChange={(event) => setInstructionName(event.target.value)} placeholder="instruction-name" />}
+          <textarea aria-label={t("agents.instructionMarkdown")} value={instructionContent} onChange={(event) => setInstructionContent(event.target.value)} placeholder={t("agents.instructionMarkdown")} />
           <div className="inline-actions">
-            <button className="mini-button" type="button" disabled={dirty || (!selectedInstruction && !instructionName.trim())} onClick={() => void saveInstruction()}><Save size={14} /> Save</button>
-            <button className="mini-button" type="button" disabled={dirty || !selectedInstruction} onClick={() => void moveInstruction(-1)}><ArrowUp size={14} /> Up</button>
-            <button className="mini-button" type="button" disabled={dirty || !selectedInstruction} onClick={() => void moveInstruction(1)}><ArrowDown size={14} /> Down</button>
+            <button className="mini-button" type="button" disabled={dirty || (!selectedInstruction && !instructionName.trim())} onClick={() => void saveInstruction()}><Save size={14} /> {t("agents.save")}</button>
+            <button className="mini-button" type="button" disabled={dirty || !selectedInstruction} onClick={() => void moveInstruction(-1)}><ArrowUp size={14} /> {t("agents.up")}</button>
+            <button className="mini-button" type="button" disabled={dirty || !selectedInstruction} onClick={() => void moveInstruction(1)}><ArrowDown size={14} /> {t("agents.down")}</button>
           </div>
           {selectedInstruction && <div className="instruction-rename-row">
-            <input aria-label="Rename instruction" value={renameInstructionName} onChange={(event) => setRenameInstructionName(event.target.value)} placeholder="new-name" />
-            <button className="mini-button" type="button" disabled={dirty || !renameInstructionName.trim()} onClick={() => void renameInstruction()}>Rename</button>
-            <button className="mini-button danger" type="button" disabled={dirty} onClick={() => void removeInstruction()}><Trash2 size={14} /> Remove</button>
+            <input aria-label={t("agents.renameInstruction")} value={renameInstructionName} onChange={(event) => setRenameInstructionName(event.target.value)} placeholder="new-name" />
+            <button className="mini-button" type="button" disabled={dirty || !renameInstructionName.trim()} onClick={() => void renameInstruction()}>{t("agents.rename")}</button>
+            <button className="mini-button danger" type="button" disabled={dirty} onClick={() => void removeInstruction()}><Trash2 size={14} /> {t("agents.remove")}</button>
           </div>}
         </div>
       </section>
 
       <section className="agent-archive-controls">
-        <h3>Archive agent</h3>
-        {assignedOpenTasks.length > 0 && <select aria-label="Archive replacement agent" value={archiveReplacement} onChange={(event) => setArchiveReplacement(event.target.value)}>
-          <option value="">Choose reassignment</option>
-          <option value="__unassign__">Explicitly unassign open tasks</option>
+        <h3>{t("agents.archiveAgent")}</h3>
+        {assignedOpenTasks.length > 0 && <select aria-label={t("agents.archiveReplacement")} value={archiveReplacement} onChange={(event) => setArchiveReplacement(event.target.value)}>
+          <option value="">{t("agents.chooseReassignment")}</option>
+          <option value="__unassign__">{t("agents.unassignOpenTasks")}</option>
           {replacementAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
         </select>}
-        <span>{assignedOpenTasks.length} open assigned task(s); active runs are always blocked by the service.</span>
-        <button className="secondary-button danger" type="button" disabled={dirty || (assignedOpenTasks.length > 0 && !archiveReplacement)} onClick={() => void archiveAgent()}><Archive size={15} /> Archive</button>
+        <span>{t("agents.archiveSummary", { count: assignedOpenTasks.length })}</span>
+        <button className="secondary-button danger" type="button" disabled={dirty || (assignedOpenTasks.length > 0 && !archiveReplacement)} onClick={() => void archiveAgent()}><Archive size={15} /> {t("agents.archive")}</button>
       </section>
       </details>
     </div>

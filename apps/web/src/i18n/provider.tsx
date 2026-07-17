@@ -14,6 +14,7 @@ import {
 } from "./messages";
 
 const localeStorageKey = "harness.interface-locale";
+export const defaultLocale: SupportedLocale = "ko";
 
 export function resolveSupportedLocale(
   languages: readonly string[],
@@ -24,7 +25,7 @@ export function resolveSupportedLocale(
       return baseLanguage as SupportedLocale;
     }
   }
-  return "en";
+  return defaultLocale;
 }
 
 function readInitialLocale(): SupportedLocale {
@@ -36,11 +37,7 @@ function readInitialLocale(): SupportedLocale {
   } catch {
     // Local storage can be unavailable in hardened browser contexts.
   }
-  return resolveSupportedLocale(
-    window.navigator.languages?.length
-      ? window.navigator.languages
-      : [window.navigator.language],
-  );
+  return defaultLocale;
 }
 
 function interpolate(

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildLineDiff, parseAgentMarkdownDraft, updateAgentMarkdownDraft } from "../src/features/agents/agentMarkdownDraft.js";
 import { connectedAgentModels } from "../src/features/agents/agentModelOptions.js";
 import type { Overview, ProviderCatalog } from "../src/api/contracts.js";
+import { messages } from "../src/i18n/messages.js";
+import { defaultLocale, resolveSupportedLocale } from "../src/i18n/provider.js";
 
 const raw = `---
 schemaVersion: 1
@@ -97,4 +100,20 @@ test("connected model options include authenticated or configured providers only
 test("invalid raw Markdown reports a structured parse location instead of mutating the form", () => {
   assert.throws(() => parseAgentMarkdownDraft("not frontmatter"), /frontmatter/);
   assert.throws(() => parseAgentMarkdownDraft("---\nname: [\n---\n"));
+});
+
+test("Korean is the default locale and agent management copy is localized", () => {
+  assert.equal(defaultLocale, "ko");
+  assert.equal(resolveSupportedLocale(["fr-FR"]), "ko");
+  assert.equal(messages.ko["agents.assignedTasks"], "배정된 일감");
+  assert.equal(messages.ko["agents.archiveAgent"], "에이전트 보관");
+  assert.equal(messages.ko["agents.validationValid"], "유효함");
+
+  const editor = readFileSync(new URL("../src/features/agents/AgentMarkdownEditor.tsx", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("../src/features/agents/AgentPanel.tsx", import.meta.url), "utf8");
+  assert.match(editor, /useI18n/);
+  assert.doesNotMatch(editor, />Assigned tasks</);
+  assert.doesNotMatch(editor, />Advanced settings</);
+  assert.doesNotMatch(editor, />Archive agent</);
+  assert.doesNotMatch(panel, /placeholder="Capabilities"/);
 });
