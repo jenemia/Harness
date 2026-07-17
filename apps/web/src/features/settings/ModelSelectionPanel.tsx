@@ -6,6 +6,44 @@ import { mcpService, type McpDiagnostics } from "../../services/mcpService";
 import { projectService } from "../../services/projectService";
 import { settingsService } from "../../services/settingsService";
 
+type CodexOptions = {
+  workspaceWrite: boolean;
+  persistSession: boolean;
+  useProjectRules: boolean;
+};
+
+const codexModelArguments: Record<string, string | null> = {
+  codex: null,
+  "codex-5.5": "gpt-5.5-codex",
+  "codex-5.6-sol": "gpt-5.6-codex-sol",
+  "codex-5.6-terra": "gpt-5.6-codex-terra",
+  "codex-5.6-luna": "gpt-5.6-codex-luna",
+};
+
+function isCodexModel(modelBackend: string) {
+  return modelBackend in codexModelArguments;
+}
+
+function optionsFromCommand(command: string | undefined): CodexOptions {
+  return {
+    workspaceWrite: !command?.includes("--sandbox read-only"),
+    persistSession: !command?.includes("--ephemeral"),
+    useProjectRules: !command?.includes("--ignore-rules"),
+  };
+}
+
+function codexCommand(modelBackend: string, options: CodexOptions) {
+  const model = codexModelArguments[modelBackend];
+  return [
+    "codex exec",
+    model ? `--model ${model}` : "",
+    `--sandbox ${options.workspaceWrite ? "workspace-write" : "read-only"}`,
+    options.persistSession ? "" : "--ephemeral",
+    options.useProjectRules ? "" : "--ignore-rules",
+    "\"$HARNESS_PROMPT_FILE\"",
+  ].filter(Boolean).join(" ");
+}
+
 export function ModelSelectionPanel(props: {
   overview: Overview | null;
   providerCatalog: ProviderCatalog | null;
@@ -21,18 +59,26 @@ export function ModelSelectionPanel(props: {
   const [commands, setCommands] = useState<Record<string, string>>({});
   const [verified, setVerified] = useState<ProviderProbeResult | null>(null);
   const [probing, setProbing] = useState(false);
+  const [codexOptions, setCodexOptions] = useState<CodexOptions>({ workspaceWrite: true, persistSession: true, useProjectRules: true });
   const [mcp, setMcp] = useState<McpDiagnostics | null>(null);
   const [clientId, setClientId] = useState("llm-client");
   const [oauthOpen, setOauthOpen] = useState(false);
   const providers = props.providerCatalog?.llmProviders || [];
-  const selectedProvider = providers.find((provider) => provider.id === globalModel) || null;
-  const commandKey = useMemo(() =>
-    props.providerCatalog?.providerCommandKeys.examples.find((item) => item.modelBackend === globalModel)?.keys[0] || globalModel,
-  [globalModel, props.providerCatalog]);
+  const providerFamilies = useMemo(() => {
+    const codexModels = providers.filter((provider) => isCodexModel(provider.id));
+    const nonCodexModels = providers.filter((provider) => !isCodexModel(provider.id));
+    return [
+      ...(codexModels.length ? [{ id: "codex", label: "Codex", models: codexModels }] : []),
+      ...nonCodexModels.map((provider) => ({ id: provider.id, label: provider.label, models: [provider] })),
+    ];
+  }, [providers]);
+  const selectedFamily = providerFamilies.find((family) => family.models.some((provider) => provider.id === globalModel)) || providerFamilies[0] || null;
+  const selectedProvider = selectedFamily?.models.find((provider) => provider.id === globalModel) || selectedFamily?.models[0] || null;
 
   useEffect(() => {
     setGlobalModel(props.settings?.defaultModelBackend || "mock");
     setCommands(props.settings?.providerCommands || {});
+    setCodexOptions(optionsFromCommand(props.settings?.providerCommands?.[props.settings?.defaultModelBackend || "mock"]));
     setVerified(null);
   }, [props.settings]);
 
@@ -40,10 +86,13 @@ export function ModelSelectionPanel(props: {
     void mcpService.diagnose().then(setMcp).catch(() => undefined);
   }, []);
 
-  useEffect(() => {
+  useEffect(() => { setOauthOpen(Boolean(selectedProvider?.directAuthentication)); }, [selectedProvider?.directAuthentication]);
+
+  function selectModel(modelBackend: string) {
+    setGlobalModel(modelBackend);
+    setCodexOptions(optionsFromCommand(commands[modelBackend]));
     setVerified(null);
-    setOauthOpen(Boolean(selectedProvider?.directAuthentication));
-  }, [globalModel, selectedProvider?.directAuthentication]);
+  }
 
   async function probe() {
     setProbing(true);
@@ -58,6 +107,9 @@ export function ModelSelectionPanel(props: {
   async function save() {
     const settings = props.settings;
     if (!settings || !verified?.ok) return;
+    const providerCommands = selectedProvider && isCodexModel(selectedProvider.id)
+      ? { ...commands, [selectedProvider.id]: codexCommand(selectedProvider.id, codexOptions) }
+      : commands;
     await props.runAction(async () => {
       const response = await settingsService.updateGlobal({
         defaultProjectRoot: settings.defaultProjectRoot,
@@ -66,8 +118,9 @@ export function ModelSelectionPanel(props: {
         autoStartPlans: settings.autoStartPlans,
         largePlanTaskThreshold: settings.largePlanTaskThreshold,
         maxRunSeconds: settings.maxRunSeconds,
-        providerCommands: commands,
+        providerCommands,
       });
+      setCommands(providerCommands);
       props.onChanged(response.settings);
       if (props.overview) {
         await settingsService.updateProject(props.overview.project.id, {
@@ -90,12 +143,20 @@ export function ModelSelectionPanel(props: {
   const status = selectedProvider?.authenticationStatus;
   return <section className="settings-card model-selection-panel">
     <div className="panel-header"><BrainCircuit size={17} /><h2>{ko ? "모델 선택" : "Model selection"}</h2></div>
-    <label className="model-select-field">
-      <strong>{ko ? "전역 기본 모델" : "Global default model"}</strong>
-      <select value={globalModel} onChange={(event) => setGlobalModel(event.target.value)}>
-        {providers.map((provider) => <option value={provider.id} key={provider.id}>{provider.label}</option>)}
-      </select>
-    </label>
+    <div className="model-picker-grid">
+      <label className="model-select-field">
+        <strong>{ko ? "전역 기본 모델 · LLM" : "Global default model · LLM"}</strong>
+        <select value={selectedFamily?.id || ""} onChange={(event) => selectModel(providerFamilies.find((family) => family.id === event.target.value)?.models[0]?.id || "mock")}>
+          {providerFamilies.map((family) => <option value={family.id} key={family.id}>{family.label}</option>)}
+        </select>
+      </label>
+      <label className="model-select-field">
+        <strong>{ko ? "모델" : "Model"}</strong>
+        <select value={selectedProvider?.id || ""} onChange={(event) => selectModel(event.target.value)}>
+          {(selectedFamily?.models || []).map((provider) => <option value={provider.id} key={provider.id}>{provider.label.replace(/^Codex · /, "")}</option>)}
+        </select>
+      </label>
+    </div>
 
     {selectedProvider && <div className="selected-model-settings">
       <div>
@@ -113,11 +174,15 @@ export function ModelSelectionPanel(props: {
       <div className="llm-connection-step">
         <strong>CLI</strong>
         {status && <small>{status.message}{status.version ? ` · ${status.version}` : ""}</small>}
-        <input aria-label={`${selectedProvider.label} CLI command`} value={commands[commandKey] || ""}
-          onChange={(event) => { setCommands((current) => ({ ...current, [commandKey]: event.target.value })); setVerified(null); }}
-          placeholder={selectedProvider.commandExample || commandKey} />
         {status && !status.authenticated && <code>{status.loginCommand}</code>}
       </div>
+
+      {isCodexModel(selectedProvider.id) && <div className="model-option-list" aria-label={ko ? "Codex 중요 옵션" : "Codex essential options"}>
+        <strong>{ko ? "중요 옵션" : "Essential options"}</strong>
+        <ModelToggle korean={ko} label={ko ? "작업 폴더 편집" : "Edit workspace"} help={ko ? "OFF이면 읽기 전용으로 실행합니다." : "OFF runs Codex in read-only mode."} checked={codexOptions.workspaceWrite} onChange={(workspaceWrite) => { setCodexOptions((current) => ({ ...current, workspaceWrite })); setVerified(null); }} />
+        <ModelToggle korean={ko} label={ko ? "세션 기록 보존" : "Keep session history"} help={ko ? "OFF이면 실행 후 세션을 디스크에 남기지 않습니다." : "OFF runs without saving the session to disk."} checked={codexOptions.persistSession} onChange={(persistSession) => { setCodexOptions((current) => ({ ...current, persistSession })); setVerified(null); }} />
+        <ModelToggle korean={ko} label={ko ? "프로젝트 규칙 적용" : "Apply project rules"} help={ko ? "OFF이면 Codex 규칙 파일을 무시합니다." : "OFF ignores Codex rule files."} checked={codexOptions.useProjectRules} onChange={(useProjectRules) => { setCodexOptions((current) => ({ ...current, useProjectRules })); setVerified(null); }} />
+      </div>}
 
       <details className="llm-connection-step oauth-fold" open={oauthOpen} onToggle={(event) => setOauthOpen(event.currentTarget.open)}>
         <summary>OAuth · {selectedProvider.directAuthentication ? (ko ? "연결 가능" : "Available") : (ko ? "필요 없음" : "Not required")}</summary>
@@ -150,4 +215,12 @@ export function ModelSelectionPanel(props: {
       </div>
     </div>}
   </section>;
+}
+
+function ModelToggle(props: { korean: boolean; label: string; help: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return <label className="model-toggle">
+    <span><strong>{props.label}</strong><small>{props.help}</small></span>
+    <span className={`model-toggle-state ${props.checked ? "on" : "off"}`}>{props.checked ? "ON" : "OFF"}</span>
+    <input type="checkbox" checked={props.checked} onChange={(event) => props.onChange(event.target.checked)} aria-label={props.label} />
+  </label>;
 }

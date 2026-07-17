@@ -382,18 +382,13 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
     createMockLlmProvider(),
     createShellLlmProvider(platformProvider),
     createCursorCliProvider(platformProvider),
-    createCliLlmProvider(platformProvider, {
-      id: "codex",
-      label: "Codex CLI",
-      description: "Runs Codex CLI with its existing user login session inside the task workspace.",
-      commandExample: "codex exec \"$HARNESS_PROMPT_FILE\"",
-      authentication: { strategy: "cli-session", executable: "codex", versionArgs: ["--version"], statusArgs: ["login", "status"], loginCommand: "codex login" }
-    }),
+    ...createCodexCliProviders(platformProvider),
     createCliLlmProvider(platformProvider, {
       id: "claude",
       label: "Claude Code CLI",
       description: "Runs Claude Code CLI with its existing user login session inside the task workspace.",
       commandExample: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\"",
+      defaultCommand: "claude -p \"$(cat $HARNESS_PROMPT_FILE)\"",
       authentication: { strategy: "cli-session", executable: "claude", versionArgs: ["--version"], statusArgs: ["auth", "status"], loginCommand: "claude login" }
     }),
     createCliLlmProvider(platformProvider, {
@@ -415,6 +410,38 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
       commandExample: "openrouter-cli run --prompt-file \"$HARNESS_PROMPT_FILE\""
     })
   ]);
+}
+
+function createCodexCliProviders(platformProvider: PlatformProvider) {
+  const authentication: CliAuthenticationDefinition = {
+    strategy: "cli-session",
+    executable: "codex",
+    versionArgs: ["--version"],
+    statusArgs: ["login", "status"],
+    loginCommand: "codex login"
+  };
+  const models = [
+    ["codex", "Codex CLI (default)", null],
+    ["codex-5.5", "Codex · GPT-5.5", "gpt-5.5-codex"],
+    ["codex-5.6-sol", "Codex · GPT-5.6 Sol", "gpt-5.6-codex-sol"],
+    ["codex-5.6-terra", "Codex · GPT-5.6 Terra", "gpt-5.6-codex-terra"],
+    ["codex-5.6-luna", "Codex · GPT-5.6 Luna", "gpt-5.6-codex-luna"]
+  ] as const;
+
+  return models.map(([id, label, model]) => createCliLlmProvider(platformProvider, {
+    id,
+    label,
+    description: "Runs Codex CLI with its existing user login session inside the task workspace.",
+    commandExample: codexCommand(model),
+    defaultCommand: codexCommand(model),
+    authentication
+  }));
+}
+
+function codexCommand(model: string | null) {
+  return ["codex exec", model ? `--model ${model}` : "", "--sandbox workspace-write", "\"$HARNESS_PROMPT_FILE\""]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function createLocalAgentPolicyProvider(): PolicyProvider {
