@@ -75,6 +75,8 @@ const exactKoreanText: Record<string, string> = {
   "Document was updated.": "문서를 수정했습니다.",
   "Harness could not finalize the merge resolution.":
     "Harness가 병합 충돌 해결을 완료하지 못했습니다.",
+  "Harness initialized the project Git repository with a baseline commit.":
+    "Harness가 기준 커밋으로 프로젝트 Git 저장소를 초기화했습니다.",
   "Harness reset this interrupted task so it can be run again.":
     "중단된 일감을 다시 실행할 수 있도록 Harness가 초기화했습니다.",
   "Interaction expired before the response was accepted.":
@@ -85,6 +87,7 @@ const exactKoreanText: Record<string, string> = {
   "Interaction was rejected by the user.": "사용자가 상호작용을 거절했습니다.",
   "Matching follow-up goals already exist.": "일치하는 후속 목표가 이미 있습니다.",
   "Memory was updated.": "프로젝트 메모리를 수정했습니다.",
+  "Project memory was updated.": "프로젝트 메모리를 수정했습니다.",
   "Merge approval hit a conflict. Resolve conflicts in the main checkout, then finalize the merge.":
     "병합 승인 중 충돌이 발생했습니다. 기본 체크아웃에서 충돌을 해결한 뒤 병합을 완료하세요.",
   "No available agent could be selected for this task.":
@@ -94,6 +97,15 @@ const exactKoreanText: Record<string, string> = {
   "PM skipped automatic follow-up creation because matching goals already exist.":
     "일치하는 목표가 이미 있어 PM이 자동 후속 일감 생성을 건너뛰었습니다.",
   "Risky command policy requires approval.": "위험 명령 정책에 따라 승인이 필요합니다.",
+  "Assigned agent is missing.": "배정된 에이전트를 찾을 수 없습니다.",
+  "Assigned agent has reached its parallel run limit.":
+    "배정된 에이전트가 병렬 실행 제한에 도달했습니다.",
+  "No agent has available execution capacity.":
+    "실행 가능한 여유가 있는 에이전트가 없습니다.",
+  "No worker agents are available for scheduling.":
+    "스케줄링 가능한 작업 에이전트가 없습니다.",
+  "Project has reached its parallel run limit.":
+    "프로젝트가 병렬 실행 제한에 도달했습니다.",
   "Task changes are waiting for human merge approval.":
     "일감 변경 사항이 사용자의 병합 승인을 기다리고 있습니다.",
   "Task was returned to the backlog for PM reassignment.":
@@ -107,7 +119,32 @@ function koreanTerm(value: string) {
   return koreanEventTerms[value] || value;
 }
 
+function koreanActorSubject(value: string) {
+  return value.toLowerCase() === "human" ? "사용자가" : `${value}이(가)`;
+}
+
+function koreanDependencyItems(value: string) {
+  return value
+    .replace(/ \(missing\)/g, " (없음)")
+    .replace(/ \((Backlog|Selected|Running|Review|Done|Blocked|Paused)\)/g, (_match, status: string) => {
+      const statuses: Record<string, string> = {
+        Backlog: "백로그",
+        Selected: "선택됨",
+        Running: "실행 중",
+        Review: "검토",
+        Done: "완료",
+        Blocked: "차단됨",
+        Paused: "일시 중지됨",
+      };
+      return ` (${statuses[status]})`;
+    });
+}
+
 const koreanPatterns: Array<[RegExp, (...values: string[]) => string]> = [
+  [/^Review backlog limit reached \((\d+) cards \/ (\d+) unreviewed lines\)\.$/, (cards, lines) => `검토 백로그 제한에 도달했습니다(카드 ${cards}개 / 미검토 변경 ${lines}줄).`],
+  [/^Waiting on dependencies: (.+)$/, (items) => `의존 일감을 기다리는 중: ${koreanDependencyItems(items)}`],
+  [/^(.+) commented on this task\.$/, (author) => `${koreanActorSubject(author)} 이 일감에 댓글을 남겼습니다.`],
+  [/^(.+) was added to project memory\.$/, (title) => `${title}을(를) 프로젝트 메모리에 추가했습니다.`],
   [/^(.+) was created\.$/, (name) => `${name}을(를) 생성했습니다.`],
   [/^(.+) was updated\.$/, (name) => `${name}을(를) 수정했습니다.`],
   [/^(.+) was archived\.$/, (name) => `${name}을(를) 보관 처리했습니다.`],
@@ -116,13 +153,20 @@ const koreanPatterns: Array<[RegExp, (...values: string[]) => string]> = [
   [/^(.+) preview is live\.$/, (label) => `${label} 미리보기가 실행 중입니다.`],
   [/^(.+) preview was stopped\.$/, (label) => `${label} 미리보기를 중지했습니다.`],
   [/^(.+) preview crashed\.$/, (label) => `${label} 미리보기가 비정상 종료되었습니다.`],
+  [/^(.+) preview was explicitly registered\.$/, (label) => `${label} 미리보기를 명시적으로 등록했습니다.`],
+  [/^(.+) preview registration was removed\.$/, (label) => `${label} 미리보기 등록을 삭제했습니다.`],
+  [/^(.+) orphan preview was stopped during recovery\.$/, (label) => `복구 중 ${label}의 연결이 끊긴 미리보기를 중지했습니다.`],
   [/^(.+) artifact is available\.$/, (label) => `${label} 결과물을 사용할 수 있습니다.`],
   [/^Interaction was (.+)\.$/, (status) => `상호작용이 ${koreanTerm(status)} 상태로 변경되었습니다.`],
   [/^Approval interaction was (.+)\.$/, (status) => `승인 상호작용이 ${koreanTerm(status)} 상태로 변경되었습니다.`],
   [/^Scheduler started (\d+) ready task\(s\)\.$/, (count) => `스케줄러가 준비된 일감 ${count}개를 시작했습니다.`],
   [/^(.+) completed the run\.$/, (agent) => `${agent}이(가) 실행을 완료했습니다.`],
   [/^Merged (.+) into the main project checkout\.$/, (branch) => `${branch} 브랜치를 기본 프로젝트 체크아웃에 병합했습니다.`],
+  [/^Resolved merge conflicts and finalized (.+)\.$/, (branch) => `병합 충돌을 해결하고 ${branch} 브랜치를 완료했습니다.`],
+  [/^(.+) started work in (.+)\.$/, (agent, path) => `${agent}이(가) ${path}에서 작업을 시작했습니다.`],
+  [/^(.+) resumed work from interaction (.+)\.$/, (agent, interaction) => `${agent}이(가) 상호작용 ${interaction}부터 작업을 재개했습니다.`],
   [/^Task handed from (.+) to (.+)\.$/, (from, to) => `일감을 ${from}에서 ${to}(으)로 인계했습니다.`],
+  [/^PM Agent handed the task from (.+) to (.+)\.$/, (from, to) => `PM 에이전트가 일감을 ${from}에서 ${to}(으)로 인계했습니다.`],
   [/^(\d+) follow-up goal\(s\) were added\.$/, (count) => `후속 목표 ${count}개를 추가했습니다.`],
   [/^Completion report revision (\d+) recorded (\d+) changed file\(s\)\.$/, (revision, files) => `완료 보고서 개정 ${revision}에 변경 파일 ${files}개를 기록했습니다.`],
   [/^(.+) marked (unreviewed|reviewed)\.$/, (path, status) => `${path}을(를) ${status === "reviewed" ? "검토됨" : "미검토"}으로 표시했습니다.`],

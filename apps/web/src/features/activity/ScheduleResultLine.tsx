@@ -1,14 +1,14 @@
 import { Activity, X } from "lucide-react";
 import { useMemo } from "react";
 import type { ScheduleResult, Task } from "../../api/contracts";
-import { useI18n } from "../../i18n";
+import { localizeServerText, useI18n } from "../../i18n";
 
 export function ScheduleResultLine(props: {
   result: ScheduleResult;
   tasks: Task[];
   onDismiss: () => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const tasksById = useMemo(
     () => new Map(props.tasks.map((task) => [task.id, task])),
     [props.tasks],
@@ -37,7 +37,7 @@ export function ScheduleResultLine(props: {
               ? t("schedule.skippedClause", {
                   count: props.result.skipped.length,
                   title: skippedTask?.title || firstSkipped?.taskId.slice(0, 8) || "",
-                  reason: firstSkipped?.reason || "",
+                  reason: localizeServerText(firstSkipped?.reason || "", locale),
                 })
               : ".",
         })}

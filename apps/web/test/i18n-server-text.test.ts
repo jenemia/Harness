@@ -26,3 +26,36 @@ test("known server messages are localized without changing dynamic values", () =
     "Scheduler started 3 ready task(s).",
   );
 });
+
+test("scheduler reasons shown by the dashboard and run result are localized", () => {
+  assert.equal(
+    localizeServerText("Project has reached its parallel run limit.", "ko"),
+    "프로젝트가 병렬 실행 제한에 도달했습니다.",
+  );
+  assert.equal(
+    localizeServerText(
+      "Review backlog limit reached (2 cards / 145 unreviewed lines).",
+      "ko",
+    ),
+    "검토 백로그 제한에 도달했습니다(카드 2개 / 미검토 변경 145줄).",
+  );
+  assert.equal(
+    localizeServerText("Waiting on dependencies: API (Selected), deadbeef (missing)", "ko"),
+    "의존 일감을 기다리는 중: API (선택됨), deadbeef (없음)",
+  );
+});
+
+test("common activity messages are localized", () => {
+  assert.equal(
+    localizeServerText("Project memory was updated.", "ko"),
+    "프로젝트 메모리를 수정했습니다.",
+  );
+  assert.equal(
+    localizeServerText("human commented on this task.", "ko"),
+    "사용자가 이 일감에 댓글을 남겼습니다.",
+  );
+  assert.equal(
+    localizeServerText("Release notes was added to project memory.", "ko"),
+    "Release notes을(를) 프로젝트 메모리에 추가했습니다.",
+  );
+});
