@@ -16,9 +16,9 @@ type CodexOptions = {
 const codexModelArguments: Record<string, string | null> = {
   codex: null,
   "codex-5.5": "gpt-5.5-codex",
-  "codex-5.6-sol": "gpt-5.6-codex-sol",
-  "codex-5.6-terra": "gpt-5.6-codex-terra",
-  "codex-5.6-luna": "gpt-5.6-codex-luna",
+  "codex-5.6-sol": "gpt-5.6-sol",
+  "codex-5.6-terra": "gpt-5.6-terra",
+  "codex-5.6-luna": "gpt-5.6-luna",
 };
 
 function isCodexModel(modelBackend: string) {

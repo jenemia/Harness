@@ -169,14 +169,14 @@ test("Cursor CLI provider uses login session, default stream command, timeout, a
     assert.match(codex.output, /Codex completed/);
     assert.deepEqual(codexDecisions, ["session_fallback", "session_initialized"]);
     const codexInvocations = readFileSync(codexArgumentLog, "utf8").trim().split("\n").filter((line) => line.startsWith("exec "));
-    assert.match(codexInvocations[0], /^exec resume --json --model gpt-5\.6-codex-sol thread-old -$/);
-    assert.match(codexInvocations[1], /^exec --json --sandbox workspace-write --model gpt-5\.6-codex-sol -$/);
+    assert.match(codexInvocations[0], /^exec resume --json --model gpt-5\.6-sol thread-old -$/);
+    assert.match(codexInvocations[1], /^exec --json --sandbox workspace-write --model gpt-5\.6-sol -$/);
     assert.doesNotMatch(codexInvocations[1], /--skip-git-repo-check/);
 
     const probe = await probeRuntimeProvider(null, "codex-5.6-sol");
     assert.equal(probe.ok, true);
     const probeInvocation = readFileSync(codexArgumentLog, "utf8").trim().split("\n").filter((line) => line.startsWith("exec ")).at(-1) || "";
-    assert.match(probeInvocation, /^exec --json --sandbox workspace-write --skip-git-repo-check --model gpt-5\.6-codex-sol -$/);
+    assert.match(probeInvocation, /^exec --json --sandbox workspace-write --skip-git-repo-check --model gpt-5\.6-sol -$/);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;

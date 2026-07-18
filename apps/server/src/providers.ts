@@ -495,9 +495,9 @@ function createCodexCliProviders(platformProvider: PlatformProvider) {
   const models = [
     ["codex", "Codex CLI (default)", null],
     ["codex-5.5", "Codex · GPT-5.5", "gpt-5.5-codex"],
-    ["codex-5.6-sol", "Codex · GPT-5.6 Sol", "gpt-5.6-codex-sol"],
-    ["codex-5.6-terra", "Codex · GPT-5.6 Terra", "gpt-5.6-codex-terra"],
-    ["codex-5.6-luna", "Codex · GPT-5.6 Luna", "gpt-5.6-codex-luna"]
+    ["codex-5.6-sol", "Codex · GPT-5.6 Sol", "gpt-5.6-sol"],
+    ["codex-5.6-terra", "Codex · GPT-5.6 Terra", "gpt-5.6-terra"],
+    ["codex-5.6-luna", "Codex · GPT-5.6 Luna", "gpt-5.6-luna"]
   ] as const;
 
   return models.map(([id, label, model]) => createCodexCliProvider(platformProvider, {
@@ -516,9 +516,9 @@ function createCodexCliProvider(
 ): LlmProvider {
   const modelById: Record<string, string> = {
     "codex-5.5": "gpt-5.5-codex",
-    "codex-5.6-sol": "gpt-5.6-codex-sol",
-    "codex-5.6-terra": "gpt-5.6-codex-terra",
-    "codex-5.6-luna": "gpt-5.6-codex-luna"
+    "codex-5.6-sol": "gpt-5.6-sol",
+    "codex-5.6-terra": "gpt-5.6-terra",
+    "codex-5.6-luna": "gpt-5.6-luna"
   };
   const model = modelById[input.id] || null;
   return {
