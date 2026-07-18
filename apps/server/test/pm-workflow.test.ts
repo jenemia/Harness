@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { updateProjectSettings } from "../src/db.js";
+import { getProjectSettings } from "../src/db.js";
 import { invokeApplicationCommand } from "../src/application.js";
 import { getProjectOverview } from "../src/overview-repository.js";
 import { registerProjectService } from "../src/services.js";
@@ -14,7 +14,9 @@ test("automatic work starts with PM and hands through programmer and reviewer wh
   process.env.HARNESS_HOME = path.join(root, "home");
   try {
     const { project, overview } = registerProjectService({ path: path.join(root, "project"), seedDefaults: true });
-    updateProjectSettings(project.path, { requireCommandApproval: false });
+    const settings = getProjectSettings(project.path);
+    assert.equal(settings.autoStartPlans, true);
+    assert.equal(settings.requireCommandApproval, false);
     const pm = overview.agents.find((agent) => agent.role === "project-manager");
     const programmer = overview.agents.find((agent) => agent.role === "programmer");
     const reviewer = overview.agents.find((agent) => agent.role === "reviewer");

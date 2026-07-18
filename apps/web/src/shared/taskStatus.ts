@@ -2,8 +2,8 @@ import type { TaskStatus } from "../api/contracts";
 
 export const taskStatuses: TaskStatus[] = [
   "Backlog",
-  "In Progress",
   "In Review",
+  "In Progress",
   "Development Complete",
   "Done",
 ];
