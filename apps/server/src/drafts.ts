@@ -93,7 +93,9 @@ export function createDraftSession(
         `).run(randomUUID(), draftId, reviewer.role, reviewer.agentId || null, "idle", null, null, null, null, timestamp, timestamp);
       }
       appendDraftEvent(db, draftId, "draft.created", { revision: 1 });
-      if (content.trim()) enqueueDraftReviews(db, project, draftId, 1, scheduling);
+      // Scheduling is an internal test/runtime hook. Product requests never pass it:
+      // normal draft creation must not spend Planner tokens.
+      if (scheduling.autoReview !== undefined && content.trim()) enqueueDraftReviews(db, project, draftId, 1, scheduling);
       return readDraftSnapshot(db, draftId);
     } finally {
       db.close();
@@ -134,7 +136,7 @@ export function updateDraftRevision(
         revision, timestamp, draftId
       );
       appendDraftEvent(db, draftId, "draft.revision.created", { revision, previousRevision: session.currentRevision });
-      enqueueDraftReviews(db, project, draftId, revision, scheduling);
+      if (scheduling.autoReview !== undefined) enqueueDraftReviews(db, project, draftId, revision, scheduling);
       return { snapshot: readDraftSnapshot(db, draftId), deduplicated: false };
     } finally {
       db.close();
@@ -142,6 +144,27 @@ export function updateDraftRevision(
   });
   if (!result.deduplicated) reviewRuntime?.cancel(project, draftId);
   cancelDraftReviewTimers(project.path, draftId);
+  armDraftReviewTimers(project, result.snapshot.requests, scheduling);
+  return result;
+}
+
+/** Explicitly starts a Planner review. Draft edits intentionally never call this. */
+export function requestDraftReview(project: ProjectRecord, draftId: string, scheduling: SchedulingOptions = {}) {
+  const result = withProjectWriterLock(project.path, () => {
+    const db = openProjectDb(project.path);
+    try {
+      const session = requiredDraftSession(db, draftId);
+      if (session.status !== "open") throw new Error("Only open drafts can be reviewed.");
+      const reviewers = db.prepare("SELECT * FROM draft_reviewers WHERE draft_id = ? AND role = 'planner'").all(draftId).map(mapDraftReviewer);
+      if (!reviewers.length) throw new Error("This draft has no Planner reviewer.");
+      const requests = reviewers.flatMap((reviewer) =>
+        enqueueReviewerRequest(db, draftId, reviewer.id, session.currentRevision, "manual", scheduling, "manual")
+      );
+      return { requests, snapshot: readDraftSnapshot(db, draftId) };
+    } finally {
+      db.close();
+    }
+  });
   armDraftReviewTimers(project, result.snapshot.requests, scheduling);
   return result;
 }
@@ -514,7 +537,6 @@ export function decideDraftApply(
         appliedCommentIds: history.result.appliedCommentIds,
         unresolvedQuestionIds: history.result.unresolvedQuestions.map((question) => question.commentId)
       });
-      enqueueDraftReviews(db, project, draftId, targetRevision, scheduling);
       return {
         history: requiredDraftApply(db, draftId, applyId),
         snapshot: readDraftSnapshot(db, draftId),
@@ -565,7 +587,6 @@ export function undoDraftApply(
       appendDraftEvent(db, draftId, "draft.apply.undone", {
         applyId: history.id, appliedRevision: history.targetRevision, restoredRevision
       });
-      enqueueDraftReviews(db, project, draftId, restoredRevision, scheduling);
       return {
         history: requiredDraftApply(db, draftId, applyId),
         snapshot: readDraftSnapshot(db, draftId),
@@ -727,7 +748,8 @@ function enqueueReviewerRequest(
   reviewerId: string,
   revision: number,
   triggerKey: string,
-  scheduling: SchedulingOptions
+  scheduling: SchedulingOptions,
+  trigger = "reply"
 ) {
   const reviewerRow = db.prepare("SELECT * FROM draft_reviewers WHERE id = ? AND draft_id = ?").get(reviewerId, draftId);
   if (!reviewerRow) return [];
@@ -749,7 +771,7 @@ function enqueueReviewerRequest(
   if (!request) return [];
   const mapped = mapDraftReviewRequest(request);
   appendDraftEvent(db, draftId, "draft.review.debounced", {
-    revision, reviewerId, trigger: "reply", requestId: mapped.id
+    revision, reviewerId, trigger, requestId: mapped.id
   });
   return [mapped];
 }

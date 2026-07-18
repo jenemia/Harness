@@ -25,6 +25,7 @@ export function TaskPromptModal(props: {
   const [mobilePane, setMobilePane] = useState<"draft" | "comments">("draft");
   const [selectedCommentIds, setSelectedCommentIds] = useState<Set<string>>(new Set());
   const [isApplying, setIsApplying] = useState(false);
+  const [isRequestingReview, setIsRequestingReview] = useState(false);
   const initializationRef = useRef<Promise<{ draft: DraftSnapshot }> | null>(null);
   const draftIdRef = useRef("");
   const revisionRef = useRef(0);
@@ -197,6 +198,21 @@ export function TaskPromptModal(props: {
       await refreshDraft();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  }
+
+  async function requestReview() {
+    if (!snapshot || isRequestingReview) return;
+    setError("");
+    setIsRequestingReview(true);
+    try {
+      await persistDraft(promptRef.current);
+      const response = await draftService.requestReview(props.projectId, snapshot.session.id);
+      applySnapshot(response.review.snapshot);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setIsRequestingReview(false);
     }
   }
 
@@ -385,6 +401,9 @@ export function TaskPromptModal(props: {
             <div className="draft-review-heading">
               <div><span className="modal-kicker">{t("draft.discussion")}</span><h3>{t("draft.discussPlanner")}</h3></div>
               <div className="draft-review-heading-actions">
+                <button className="primary-button compact" disabled={!snapshot || isRequestingReview} type="button" onClick={() => void requestReview()}>
+                  <Sparkles size={14} /> {t("draft.requestReview")}
+                </button>
                 <button className="secondary-button compact" type="button" disabled={!latestPlannerComment} onClick={applyLatestPlan}>
                   <GitCompare size={14} /> {t("draft.applyPlan")}
                 </button>

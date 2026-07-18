@@ -91,6 +91,7 @@ export type HarnessCommandInputs = {
   };
   "drafts:get": { projectId: string; draftId: string };
   "drafts:update": { projectId: string; draftId: string; expectedRevision: number; content: string };
+  "drafts:request-review": { projectId: string; draftId: string };
   "drafts:claim-review": { projectId: string; requestId: string };
   "drafts:stop-review": { projectId: string; requestId: string };
   "drafts:retry-review": { projectId: string; requestId: string };
@@ -295,6 +296,7 @@ export function isHarnessCommandPayload(command: HarnessCommand, payload: unknow
   if (command === "drafts:create") return isDraftCreatePayload(payload.payload);
   if (command === "drafts:get") return isText(payload.draftId);
   if (command === "drafts:update") return isText(payload.draftId) && isNonNegativeInteger(payload.expectedRevision) && typeof payload.content === "string";
+  if (command === "drafts:request-review") return isText(payload.draftId);
   if (command === "drafts:claim-review" || command === "drafts:stop-review" || command === "drafts:retry-review") return isText(payload.requestId);
   if (command === "drafts:submit-review") return isText(payload.requestId) && isDraftReviewPayload(payload.payload);
   if (command === "drafts:reply") return isText(payload.draftId) && isDraftReplyPayload(payload.payload);
@@ -331,7 +333,7 @@ const commandNames = new Set<HarnessCommand>([
   "interactions:list", "interactions:respond",
   "reviews:report", "reviews:diff", "reviews:file-update", "reviews:comment-create", "reviews:comment-update", "reviews:followup",
   "reviews:auto-list", "reviews:auto-retry", "reviews:auto-finding-update",
-  "drafts:create", "drafts:get", "drafts:update", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
+  "drafts:create", "drafts:get", "drafts:update", "drafts:request-review", "drafts:claim-review", "drafts:stop-review", "drafts:retry-review",
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",
   "drafts:events", "drafts:recover",

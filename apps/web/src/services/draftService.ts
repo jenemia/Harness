@@ -27,6 +27,12 @@ export const draftService = {
     }),
   ) as Promise<{ draft: { snapshot: DraftSnapshot; deduplicated: boolean } }>,
 
+  requestReview: (projectId: string, draftId: string) => desktopOrHttp(
+    "drafts:request-review",
+    { projectId, draftId },
+    () => api<{ review: { snapshot: DraftSnapshot } }>(`/api/projects/${projectId}/drafts/${draftId}/review`, { method: "POST" }),
+  ) as Promise<{ review: { snapshot: DraftSnapshot } }>,
+
   reply: (
     projectId: string,
     draftId: string,

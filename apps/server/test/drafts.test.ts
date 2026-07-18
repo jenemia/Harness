@@ -14,6 +14,7 @@ import {
   getDraftSnapshot,
   recordDraftApplyAttempt,
   recoverDraftReviewRequests,
+  requestDraftReview,
   replayDraftEvents,
   subscribeDraftEvents,
   submitDraftReview,
@@ -179,6 +180,37 @@ test("draft collaboration persists revisions, debounce, stale reviews, replies, 
       draftId: viaApplication.draft.session.id
     }) as { draft: { session: { id: string } } };
     assert.equal(fetched.draft.session.id, viaApplication.draft.session.id);
+  } finally {
+    if (projectPath) cancelDraftReviewTimers(projectPath, draftId || undefined);
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("draft edits do not start Planner reviews until explicitly requested", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-manual-draft-review-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  let projectPath = "";
+  let draftId = "";
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: false });
+    projectPath = project.path;
+    const created = createDraftSession(project, { content: "초안", reviewers: [{ role: "planner" }] });
+    draftId = created.session.id;
+    assert.equal(created.requests.length, 0);
+
+    const revised = updateDraftRevision(project, draftId, {
+      expectedRevision: 1,
+      content: "입력 중인 최신 초안"
+    });
+    assert.equal(revised.snapshot.requests.length, 0);
+
+    const requested = requestDraftReview(project, draftId, { debounceMs: 60_000 });
+    assert.equal(requested.requests.length, 1);
+    assert.equal(requested.requests[0].revision, 2);
+    assert.equal(requestDraftReview(project, draftId, { debounceMs: 60_000 }).requests[0].id, requested.requests[0].id);
   } finally {
     if (projectPath) cancelDraftReviewTimers(projectPath, draftId || undefined);
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
