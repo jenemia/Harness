@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { updateProjectSettings } from "../src/db.js";
+import { invokeApplicationCommand } from "../src/application.js";
 import { getProjectOverview } from "../src/overview-repository.js";
-import { startTask } from "../src/runtime.js";
-import { createTaskService, registerProjectService } from "../src/services.js";
+import { registerProjectService } from "../src/services.js";
 
 test("automatic work starts with PM and hands through programmer and reviewer while work stays in progress", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-pm-workflow-"));
@@ -20,15 +20,15 @@ test("automatic work starts with PM and hands through programmer and reviewer wh
     const reviewer = overview.agents.find((agent) => agent.role === "reviewer");
     assert.ok(pm && programmer && reviewer);
 
-    const task = createTaskService(project, {
+    const created = await invokeApplicationCommand("tasks:create", { projectId: project.id, payload: {
       title: "Implement through the PM workflow",
       assigneeAgentId: programmer.id,
       status: "Backlog",
       workspaceMode: "harness"
-    });
+    } }) as { task: { id: string; assigneeAgentId: string | null } };
+    const task = created.task;
     assert.equal(task.assigneeAgentId, pm.id);
 
-    assert.equal((await startTask(project, task.id)).accepted, true);
     const completed = await waitForOverview(project, (value) =>
       value.tasks.some((item) => item.id === task.id && item.status === "Development Complete")
     );

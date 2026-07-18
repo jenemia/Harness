@@ -14,3 +14,8 @@
 
 - After successfully merging a temporary worktree branch into `main`, stop processes running from that worktree, remove the worktree, and delete the merged local branch.
 - Only perform this cleanup after the merge and relevant verification checks succeed.
+
+## Runtime restart discipline
+
+- Do not restart the frontend, backend, desktop app, or development servers after a commit.
+- Restart runtime processes only when the user explicitly asks for a restart.

@@ -33,7 +33,7 @@ test("telemetry preserves trace lineage without collecting content and links SQL
     await withTelemetrySpan("application.command", { "harness.operation": "scenario" }, async () => {
       const context = currentTraceContext();
       assert.match(context?.traceId || "", /^[a-f0-9]{32}$/);
-      await invokeApplicationCommand("tasks:create-from-prompt", { projectId: project.id, prompt: privateMarker });
+      await invokeApplicationCommand("tasks:create-from-prompt", { projectId: project.id, prompt: privateMarker, autoAssign: false });
     });
     assert.throws(() => withTelemetrySpan("application.command", { "harness.operation": "failure" }, () => {
       throw new Error(`do not export ${privateMarker}`);

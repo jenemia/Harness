@@ -94,9 +94,12 @@ test("typed application commands reuse project, agent, and task services", async
     assert.match(missingProbe.error, /No CLI command/);
     assert.equal(existsSync(path.join(root, "project", ".harness", "agent-prompt.md")), false);
     const plan = await invokeApplicationCommand("tasks:create-from-prompt", { projectId, prompt: "Write release notes" }) as {
-      plan: { tasks: unknown[] };
+      plan: { tasks: Array<{ id: string }> };
+      overview: { tasks: Array<{ id: string }>; taskGoals: Array<{ taskId: string }> };
     };
-    assert.ok(plan.plan.tasks.length > 0);
+    assert.equal(plan.plan.tasks.length, 1);
+    assert.equal(plan.overview.tasks.filter((task) => task.id === plan.plan.tasks[0].id).length, 1);
+    assert.equal(plan.overview.taskGoals.filter((goal) => goal.taskId === plan.plan.tasks[0].id).length, 4);
     const listed = await invokeApplicationCommand("projects:list", {}) as { projects: unknown[] };
     assert.equal(listed.projects.length, 1);
   } finally {

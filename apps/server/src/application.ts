@@ -110,6 +110,17 @@ import { createChatSession, getChatSession, listChatSessions, sendChatMessage } 
 
 ensureDraftReviewAgentRuntime();
 
+async function startIdlePmTask(project: Parameters<typeof startTask>[0], taskId: string | undefined) {
+  if (!taskId) return;
+  const overview = getProjectOverview(project);
+  const task = overview.tasks.find((item) => item.id === taskId);
+  if (!task?.autoAssign || task.status !== "Backlog" || !task.assigneeAgentId) return;
+  const assignee = overview.agents.find((agent) => agent.id === task.assigneeAgentId);
+  if (assignee?.role === "project-manager" && assignee.status === "idle") {
+    await startTask(project, task.id);
+  }
+}
+
 export function subscribeApplicationProviderEvents(
   filter: HarnessEventFilters["provider:event"],
   listener: (event: ProviderEventEnvelope) => void
@@ -532,15 +543,18 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
         goal: value.prompt,
         mode: "auto",
         allowLargePlan: true,
-        largePlanTaskThreshold: settings.largePlanTaskThreshold
-        ,autoAssign: value.autoAssign
+        largePlanTaskThreshold: settings.largePlanTaskThreshold,
+        autoAssign: value.autoAssign
       });
+      await startIdlePmTask(project, plan.tasks[0]?.id);
       return { plan, overview: getProjectOverview(project) };
     }
     case "tasks:create": {
       const value = input(payload) as HarnessCommandInputs["tasks:create"];
       const project = requiredProject(value.projectId);
-      return { task: createTaskService(project, value.payload as Partial<TaskRecord>), overview: getProjectOverview(project) };
+      const task = createTaskService(project, value.payload as Partial<TaskRecord>);
+      await startIdlePmTask(project, task.id);
+      return { task, overview: getProjectOverview(project) };
     }
     case "tasks:update": {
       const value = input(payload) as HarnessCommandInputs["tasks:update"];

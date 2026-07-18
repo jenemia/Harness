@@ -592,7 +592,9 @@ export function TaskDetailDrawer(props: {
                 <PathLine
                   key={goal.id}
                   icon={goal.status === "completed" ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
-                  value={`${goal.goalOrder + 1}. ${goal.title} · ${goal.status}${
+                  value={`${goal.goalOrder + 1}. ${goal.title} · ${
+                    props.overview.agents.find((agent) => agent.id === goal.assigneeAgentId)?.name || (locale === "ko" ? "미지정" : "Unassigned")
+                  } · ${goal.status}${
                     goal.status === "completed" && goal.startedAt && goal.completedAt
                       ? ` · ${locale === "ko" ? "소요" : "Duration"} ${formatDuration(goal.startedAt, goal.completedAt, locale)} · ${locale === "ko" ? "완료" : "Finished"} ${formatDate(goal.completedAt, locale)}`
                       : ""

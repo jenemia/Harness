@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, nextTaskOrder, now, openProjectDb } from "./db.js";
 import { resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import { withProjectWriterLock } from "./project-store.js";
+import { activateNextTaskGoal, appendTaskGoals } from "./task-goals.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus, WorkflowTemplateRecord } from "./types.js";
 
 export type PlanningMode = "auto" | "sequential" | "parallel";
@@ -106,45 +107,58 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
     }
     const agents = db.prepare("SELECT * FROM agents WHERE archived_at IS NULL AND enabled = 1 ORDER BY created_at ASC").all().map(mapAgent);
     const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
-    const inserted: TaskRecord[] = [];
-
-    for (const item of preview.tasks) {
-      const dependencies = item.dependencyIndexes.map((index) => inserted[index]?.id).filter((id): id is string => Boolean(id));
-      const agent = item.assigneeAgentId ? agentsById.get(item.assigneeAgentId) || null : null;
-      const task = insertPlannedTask({
-        title: item.title,
-        description: item.description,
-        role: item.role,
-        acceptanceCriteria: item.acceptanceCriteria,
-        assigneeAgentId: agent?.id || null,
-        assigneeAgent: agent || null,
-        dependencyTaskIds: dependencies,
-        status: item.status
-      });
-      inserted.push(task);
-    }
-
     const pmAgent = agents.find((agent) => agent.role === "project-manager") || null;
-    const assignmentSummary = inserted.map((task) => ({
+    const plannedGoals = input.autoAssign !== false && pmAgent && preview.tasks[0]?.role !== "project-manager"
+      ? [{
+          title: `Analyze and route: ${summarizeGoal(preview.goal)}`,
+          role: "project-manager",
+          assigneeAgentId: pmAgent.id,
+          description: `Analyze the work, confirm the execution order, and hand the same task to the appropriate agents.\n\n${preview.goal}`,
+          acceptanceCriteria: "The work is analyzed and the next goal is ready for its assigned agent.",
+          dependencyIndexes: [],
+          status: "Backlog" as const
+        }, ...preview.tasks]
+      : preview.tasks;
+    const firstAssigneeId = plannedGoals[0]?.assigneeAgentId || null;
+    const roles = [...new Set(plannedGoals.map((item) => item.role))];
+    const task = insertPlannedTask({
+      title: summarizeGoal(preview.goal),
+      description: preview.goal,
+      acceptanceCriteria: "All planned goals are completed and each assigned agent reports verification evidence.",
+      assigneeAgentId: firstAssigneeId,
+      assigneeAgentName: firstAssigneeId ? agentsById.get(firstAssigneeId)?.name || null : null,
+      goalCount: plannedGoals.length,
+      roles
+    });
+    const goals = appendTaskGoals(db, task, plannedGoals.map((item) => ({
+      title: item.title,
+      description: item.description,
+      acceptanceCriteria: item.acceptanceCriteria,
+      assigneeAgentId: item.assigneeAgentId
+    })));
+    const activeGoal = activateNextTaskGoal(db, task.id, null).next;
+    const assignmentSummary = goals.map((goal, index) => ({
       taskId: task.id,
-      title: task.title,
-      role: task.labels.find((label) => label.startsWith("role:"))?.replace("role:", "") || "worker",
-      assigneeAgentId: task.assigneeAgentId,
-      assigneeAgentName: task.assigneeAgentId ? agentsById.get(task.assigneeAgentId)?.name || null : null,
-      dependencyTaskIds: task.dependencyTaskIds
+      goalId: goal.id,
+      title: goal.title,
+      role: plannedGoals[index]?.role || "worker",
+      assigneeAgentId: goal.assigneeAgentId,
+      assigneeAgentName: goal.assigneeAgentId ? agentsById.get(goal.assigneeAgentId)?.name || null : null,
+      goalOrder: goal.goalOrder
     }));
     insertEvent(db, {
-      taskId: null,
+      taskId: task.id,
       agentId: pmAgent?.id || null,
       type: "plan.created",
-      message: `PM Agent decomposed a goal into ${inserted.length} tasks.`,
+      message: `PM Agent organized ${goals.length} sequential goals in one task.`,
       metadata: {
         goal: preview.goal,
         mode: preview.mode,
         effectiveMode: preview.effectiveMode,
         sourceDocumentId: input.sourceDocumentId || null,
         workflowTemplateId: preview.workflowTemplateId,
-        taskIds: inserted.map((task) => task.id),
+        taskIds: [task.id],
+        goalIds: goals.map((goal) => goal.id),
         assignments: assignmentSummary,
         warnings: preview.warnings
       }
@@ -156,10 +170,10 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       effectiveMode: preview.effectiveMode,
       workflowTemplateId: preview.workflowTemplateId,
       warnings: preview.warnings,
-      tasks: inserted.map<PlannedTaskSummary>((task) => ({
+      tasks: [task].map<PlannedTaskSummary>((task) => ({
         id: task.id,
         title: task.title,
-        role: task.labels.find((label) => label.startsWith("role:"))?.replace("role:", "") || "worker",
+        role: activeGoal ? plannedGoals[activeGoal.goalOrder]?.role || "worker" : "worker",
         assigneeAgentId: task.assigneeAgentId,
         dependencyTaskIds: task.dependencyTaskIds
       }))
@@ -171,48 +185,45 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
   function insertPlannedTask(inputTask: {
     title: string;
     description: string;
-    role: string;
     acceptanceCriteria: string;
     assigneeAgentId: string | null;
-    assigneeAgent: AgentRecord | null;
-    dependencyTaskIds: string[];
-    status: TaskStatus;
+    assigneeAgentName: string | null;
+    goalCount: number;
+    roles: string[];
   }) {
     const timestamp = now();
     const task: TaskRecord = {
       id: randomUUID(),
       title: inputTask.title,
       description: inputTask.description,
-      status: inputTask.status,
+      status: "Backlog",
       priority: "Medium",
       modelBackend: null,
       assigneeAgentId: inputTask.assigneeAgentId,
       autoAssign: input.autoAssign !== false,
       reporter: "pm-agent",
       parentTaskId: null,
-      dependencyTaskIds: inputTask.dependencyTaskIds,
+      dependencyTaskIds: [],
       waivedDependencyTaskIds: [],
-      labels: ["pm-plan", `role:${inputTask.role}`],
+      labels: ["pm-plan", ...inputTask.roles.map((role) => `role:${role}`)],
       linkedFiles: [],
       acceptanceCriteria: inputTask.acceptanceCriteria,
       workspaceMode: resolveTaskWorkspaceMode({
         title: inputTask.title,
         description: inputTask.description,
         acceptanceCriteria: inputTask.acceptanceCriteria,
-        labels: ["pm-plan", `role:${inputTask.role}`],
-        agent: inputTask.assigneeAgent
+        labels: ["pm-plan", ...inputTask.roles.map((role) => `role:${role}`)],
+        agent: null
       }),
       useNewWorktree: resolveTaskWorkspaceMode({
         title: inputTask.title, description: inputTask.description,
-        acceptanceCriteria: inputTask.acceptanceCriteria, labels: ["pm-plan", `role:${inputTask.role}`],
-        agent: inputTask.assigneeAgent
+        acceptanceCriteria: inputTask.acceptanceCriteria, labels: ["pm-plan", ...inputTask.roles.map((role) => `role:${role}`)],
+        agent: null
       }) === "worktree",
       taskOrder: nextTaskOrder(db),
       branchName: null,
       worktreePath: null,
-      blockedReason: inputTask.dependencyTaskIds.length
-        ? `Waiting on dependencies: ${inputTask.dependencyTaskIds.map((id) => id.slice(0, 8)).join(", ")}`
-        : null,
+      blockedReason: null,
       mergeStatus: "none",
       mergeError: null,
       createdAt: timestamp,
@@ -259,10 +270,10 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       message: `${task.title} was created by PM planning.`,
       metadata: {
         status: task.status,
-        role: inputTask.role,
+        roles: inputTask.roles,
         assigneeAgentId: task.assigneeAgentId,
-        assigneeAgentName: inputTask.assigneeAgent?.name || null,
-        dependencyTaskIds: task.dependencyTaskIds
+        assigneeAgentName: inputTask.assigneeAgentName,
+        goalCount: inputTask.goalCount
       }
     });
 
