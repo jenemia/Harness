@@ -1,4 +1,4 @@
-import { FolderOpen, MessageCircle, Play, Plus, RefreshCcw, Wifi } from "lucide-react";
+import { BrainCircuit, FolderOpen, MessageCircle, Play, Plus, RefreshCcw, Wifi } from "lucide-react";
 import { lazy, startTransition, Suspense, useEffect, useState } from "react";
 import { ScheduleResultLine } from "../features/activity/ScheduleResultLine";
 import { AgentSidebarList } from "../features/agents/AgentSidebarList";
@@ -9,6 +9,7 @@ import { SettingsNavigation, type SettingsTab } from "../features/settings/Setti
 import { ModelSelectionPanel } from "../features/settings/ModelSelectionPanel";
 import { TaskCardSettingsPanel } from "../features/settings/TaskCardSettingsPanel";
 import { taskStatuses } from "../shared/taskStatus";
+import { formatActiveModelLabel } from "../shared/providerCommands";
 import { AppNavigation } from "./AppNavigation";
 import type { AppController } from "./useAppController";
 
@@ -98,6 +99,9 @@ export function AppView({ controller }: { controller: AppController }) {
     runs: t("nav.runs"),
     settings: t("nav.settings"),
   }[activeSection];
+  const activeModelLabel = overview
+    ? formatActiveModelLabel(overview.settings, providerCatalog)
+    : null;
 
   return (
     <div className="app-shell">
@@ -130,13 +134,22 @@ export function AppView({ controller }: { controller: AppController }) {
               <span title={overview.project.path}>{overview.project.path}</span>
             )}
           </div>
-          <div
-            className={
-              overview ? "connection-pill connected" : "connection-pill"
-            }
-          >
-            <Wifi size={14} />
-            <span>{overview ? t("top.connected") : t("top.offline")}</span>
+          <div className="workspace-status">
+            {activeModelLabel && (
+              <div className="active-model-pill" title={activeModelLabel}>
+                <BrainCircuit size={14} />
+                <span>{t("top.activeModel")}</span>
+                <strong>{activeModelLabel}</strong>
+              </div>
+            )}
+            <div
+              className={
+                overview ? "connection-pill connected" : "connection-pill"
+              }
+            >
+              <Wifi size={14} />
+              <span>{overview ? t("top.connected") : t("top.offline")}</span>
+            </div>
           </div>
         </header>
 

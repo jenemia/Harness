@@ -1,4 +1,4 @@
-import type { ProviderCatalog } from "../api/contracts";
+import type { ProjectSettings, ProviderCatalog } from "../api/contracts";
 import { parseStringMapText } from "./formParsing";
 
 export function asRecord(value: unknown): Record<string, unknown> {
@@ -72,6 +72,47 @@ export function resolveConfiguredProviderCommand(
   const keys = getProviderCommandExample(providerCatalog, modelBackend)?.keys || [modelBackend];
   const key = keys.find((candidate) => commands[candidate]?.trim());
   return key ? commands[key] : undefined;
+}
+
+function unquote(value: string) {
+  const first = value[0];
+  return (first === '"' || first === "'") && value.at(-1) === first
+    ? value.slice(1, -1)
+    : value;
+}
+
+export function parseProviderModelFromCommand(
+  modelBackend: string,
+  command: string | undefined,
+) {
+  if (!command) return "";
+  if (modelBackend === "ollama") {
+    const match = command.match(/(?:^|\s)ollama\s+run\s+("[^"]+"|'[^']+'|[^\s<]+)/);
+    return match ? unquote(match[1]) : "";
+  }
+  if (modelBackend.startsWith("codex")) {
+    const match = command.match(/(?:^|\s)(?:--model|-m)\s+("[^"]+"|'[^']+'|[^\s<]+)/);
+    return match ? unquote(match[1]) : "";
+  }
+  return "";
+}
+
+export function formatActiveModelLabel(
+  settings: Pick<ProjectSettings, "defaultModelBackend" | "providerCommands">,
+  providerCatalog: ProviderCatalog | null,
+) {
+  const backend = settings.defaultModelBackend;
+  const providerLabel =
+    providerCatalog?.llmProviders?.find((provider) => provider.id === backend)?.label || backend;
+  const command = resolveConfiguredProviderCommand(
+    settings.providerCommands,
+    providerCatalog,
+    backend,
+  );
+  const model = parseProviderModelFromCommand(backend, command);
+  return model && !providerLabel.toLowerCase().includes(model.toLowerCase())
+    ? `${providerLabel} · ${model}`
+    : providerLabel;
 }
 
 export function replaceProviderCommand(

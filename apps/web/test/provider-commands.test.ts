@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProviderCatalog } from "../src/api/contracts.js";
-import { replaceProviderCommand, resolveConfiguredProviderCommand } from "../src/shared/providerCommands.js";
+import {
+  formatActiveModelLabel,
+  parseProviderModelFromCommand,
+  replaceProviderCommand,
+  resolveConfiguredProviderCommand,
+} from "../src/shared/providerCommands.js";
 import { codexCommand, ollamaCommand, parseOllamaModelFromCommand } from "../src/features/settings/ModelSelectionPanel.js";
 
 const catalog = {
@@ -54,4 +59,32 @@ test("provider command resolution follows backend precedence", () => {
     codex: "low precedence",
     "node-darwin.codex": "high precedence",
   }, catalog, "codex"), "high precedence");
+});
+
+test("active model label includes the selected Ollama model", () => {
+  const ollamaCatalog = {
+    ...catalog,
+    llmProviders: [{ id: "ollama", label: "Ollama" }],
+  } as unknown as ProviderCatalog;
+  const command = 'ollama run "qwen3.5:9b" < "$HARNESS_PROMPT_FILE"';
+
+  assert.equal(parseProviderModelFromCommand("ollama", command), "qwen3.5:9b");
+  assert.equal(formatActiveModelLabel({
+    defaultModelBackend: "ollama",
+    providerCommands: { ollama: command },
+  }, ollamaCatalog), "Ollama · qwen3.5:9b");
+});
+
+test("active model label includes a Codex command model override", () => {
+  const codexCatalog = {
+    ...catalog,
+    llmProviders: [{ id: "codex", label: "Codex CLI" }],
+  } as unknown as ProviderCatalog;
+  const command = "codex exec -m gpt-5.4 -";
+
+  assert.equal(parseProviderModelFromCommand("codex", command), "gpt-5.4");
+  assert.equal(formatActiveModelLabel({
+    defaultModelBackend: "codex",
+    providerCommands: { codex: command },
+  }, codexCatalog), "Codex CLI · gpt-5.4");
 });

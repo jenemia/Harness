@@ -40,6 +40,14 @@
     padding: 0 16px;
   }
 
+  .active-model-pill span {
+    display: none;
+  }
+
+  .active-model-pill {
+    max-width: 260px;
+  }
+
   .board-filters {
     grid-template-columns: minmax(220px, 1fr) 150px;
   }

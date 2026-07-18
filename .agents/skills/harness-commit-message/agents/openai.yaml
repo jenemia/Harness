@@ -1,0 +1,4 @@
+interface:
+  display_name: "Harness Commit Message"
+  short_description: "일감 ID를 포함한 Harness 커밋 제목 형식을 적용합니다"
+  default_prompt: "Use $harness-commit-message to commit the current Harness task changes."
