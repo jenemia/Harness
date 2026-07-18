@@ -447,8 +447,7 @@ p {
 }
 
 .feature-page,
-.settings-page,
-.board-support-grid {
+.settings-page {
   min-width: 0;
 }
 

@@ -16,3 +16,11 @@ test("the first overview request has a dedicated loading state", () => {
   assert.match(appView, /!hasInitializedOverview/);
   assert.match(appView, /aria-busy="true"/);
 });
+
+test("the board hides internal dashboard support panels", () => {
+  assert.doesNotMatch(appView, /board-support-grid/);
+  assert.doesNotMatch(
+    appView,
+    /<(?:ProjectHealthPanel|AttentionPanel|BacklogPanel|ApprovalsPanel|DocumentsPanel|MemoryPanel)\b/,
+  );
+});

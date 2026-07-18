@@ -2,15 +2,7 @@ import { FolderOpen, MessageCircle, Play, Plus, RefreshCcw, Wifi } from "lucide-
 import { lazy, startTransition, Suspense, useEffect, useState } from "react";
 import { ScheduleResultLine } from "../features/activity/ScheduleResultLine";
 import { AgentSidebarList } from "../features/agents/AgentSidebarList";
-import { ApprovalsPanel } from "../features/approvals/ApprovalsPanel";
 import { BoardFilters, TaskCard } from "../features/board/BoardComponents";
-import {
-  AttentionPanel,
-  BacklogPanel,
-  ProjectHealthPanel,
-} from "../features/dashboard/DashboardPanels";
-import { DocumentsPanel } from "../features/documents/DocumentsPanel";
-import { MemoryPanel } from "../features/memory/MemoryPanel";
 import { ProjectSwitcher } from "../features/projects/ProjectSwitcher";
 import { statusMessageKey, useI18n } from "../i18n";
 import { SettingsNavigation, type SettingsTab } from "../features/settings/SettingsNavigation";
@@ -41,7 +33,6 @@ export function AppView({ controller }: { controller: AppController }) {
     selectedProjectId,
     setSelectedProjectId,
     overview,
-    healthReport,
     providerCatalog,
     agentTemplates,
     setAgentTemplates,
@@ -285,38 +276,6 @@ export function AppView({ controller }: { controller: AppController }) {
                     </div>
                   </section>
 
-                  <div className="board-support-grid">
-                    <ProjectHealthPanel
-                      overview={overview}
-                      healthReport={healthReport}
-                      providerCatalog={providerCatalog}
-                    />
-                    <AttentionPanel
-                      overview={overview}
-                      onOpenTask={setSelectedTaskId}
-                    />
-                    <BacklogPanel
-                      overview={overview}
-                      runAction={runAction}
-                      onOpenTask={setSelectedTaskId}
-                      onChanged={refreshOverview}
-                    />
-                    <ApprovalsPanel
-                      overview={overview}
-                      runAction={runAction}
-                      onChanged={refreshOverview}
-                    />
-                    <DocumentsPanel
-                      overview={overview}
-                      runAction={runAction}
-                      onChanged={refreshOverview}
-                    />
-                    <MemoryPanel
-                      overview={overview}
-                      runAction={runAction}
-                      onChanged={refreshOverview}
-                    />
-                  </div>
                 </div>
               )}
 

@@ -354,10 +354,3 @@ button:disabled {
   min-height: 30px;
   padding: 0 9px;
 }
-
-.board-support-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 18px;
-}
