@@ -101,7 +101,7 @@ test("interactions persist all kinds, suspend structured provider runs, recover,
     assert.equal(resumedRun.correlationId, run.correlationId);
     assert.equal(resumedInteraction.resumedRunId, resumedRun.id);
     assert.equal(resumedInteraction.resumeState, "completed");
-    assert.match(resumedRun.output || "", /Human response: \{"answer":"CSV"\}/);
+    assert.match(resumedRun.output || "", /사용자 응답: \{"answer":"CSV"\}/);
     assert.ok(resumed.events.some((event) =>
       event.type === "run.resumed" && event.metadata.interactionId === question.id
     ));

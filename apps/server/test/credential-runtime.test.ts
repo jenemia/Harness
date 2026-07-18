@@ -21,6 +21,10 @@ test("credentials cannot be stored in provider settings and provider output is r
   const previousHome = process.env.HARNESS_HOME;
   process.env.HARNESS_HOME = path.join(root, "home");
   try {
+    assert.equal(getGlobalSettings().interfaceLocale, "ko");
+    assert.equal(updateGlobalSettings({ interfaceLocale: "en" }).interfaceLocale, "en");
+    assert.equal(getGlobalSettings().interfaceLocale, "en");
+    updateGlobalSettings({ interfaceLocale: "ko" });
     assert.throws(
       () => updateGlobalSettings({ providerCommands: { codex: "codex --token supersecretvalue" } }),
       /existing login session/

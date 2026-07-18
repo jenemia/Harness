@@ -68,16 +68,17 @@ test("agent Markdown is the validated source of truth and run snapshot", async (
     assert.equal(started.accepted, true);
     const completed = await waitForCompletedRun(project.id, () => getProjectOverview(project));
     assert.equal(completed.status, "completed");
+    assert.match(completed.output || "", /모의 어댑터가 일감을 완료했습니다/);
     assert.equal(completed.agentDefinitionHash, snapshot.hash);
     assert.equal(completed.agentDefinitionSchemaVersion, 2);
     assert.match(completed.agentDefinitionSnapshot || "", /instructions\/review.md/);
     const providerEvents = getProjectOverview(project).providerEvents.filter((event) => event.runId === completed.id);
     assert.deepEqual(providerEvents.map((event) => event.type).sort(), ["result", "text_delta"]);
     assert.equal(providerEvents.find((event) => event.type === "text_delta")?.payload.fallback, true);
-    assert.match(
-      readFileSync(path.join(completed.worktreePath || "", ".harness", "agent-prompt.md"), "utf8"),
-      /Agent Definition Snapshot[\s\S]*Check changed files/
-    );
+    const runPrompt = readFileSync(path.join(completed.worktreePath || "", ".harness", "agent-prompt.md"), "utf8");
+    assert.match(runPrompt, /Agent Definition Snapshot[\s\S]*Check changed files/);
+    assert.match(runPrompt, /Completion Summary[\s\S]*Korean \(한국어\)/);
+    assert.match(runPrompt, /completed work, changed files or artifacts, verification performed, and remaining issues or blockers/);
 
     const beforeConflict = readAgentDefinition(project.path, originalPath);
     writeFileSync(beforeConflict.filePath, `${beforeConflict.raw}\n`, "utf8");

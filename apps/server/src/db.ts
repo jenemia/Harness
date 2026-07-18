@@ -525,6 +525,7 @@ function seedDefaultProjectTemplates(db: DatabaseSync) {
 
 export function defaultGlobalSettings(): GlobalSettings {
   return {
+    interfaceLocale: "ko",
     defaultProjectRoot: path.join(homedir(), "Documents"),
     defaultModelBackend: "mock",
     defaultAgentMaxParallel: 1,
@@ -550,6 +551,9 @@ export function getGlobalSettings(): GlobalSettings {
     for (const row of rows) {
       if (!updatedAt || row.updated_at > updatedAt) {
         updatedAt = row.updated_at;
+      }
+      if (row.key === "interfaceLocale") {
+        settings.interfaceLocale = row.value === "en" ? "en" : "ko";
       }
       if (row.key === "defaultProjectRoot") {
         settings.defaultProjectRoot = row.value;
@@ -586,6 +590,7 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
   try {
     if (input.providerCommands !== undefined) assertNoCredentialMaterial(input.providerCommands, "Provider commands");
     const next: GlobalSettings = {
+      interfaceLocale: input.interfaceLocale === "en" ? "en" : input.interfaceLocale === "ko" ? "ko" : current.interfaceLocale,
       defaultProjectRoot: input.defaultProjectRoot?.trim() || current.defaultProjectRoot,
       defaultModelBackend: input.defaultModelBackend?.trim() || current.defaultModelBackend,
       defaultAgentMaxParallel: Math.max(1, Number(input.defaultAgentMaxParallel || current.defaultAgentMaxParallel)),
@@ -597,6 +602,7 @@ export function updateGlobalSettings(input: Partial<GlobalSettings>): GlobalSett
     };
 
     const stmt = db.prepare("INSERT OR REPLACE INTO settings VALUES (?, ?, ?)");
+    stmt.run("interfaceLocale", next.interfaceLocale, next.updatedAt);
     stmt.run("defaultProjectRoot", next.defaultProjectRoot, next.updatedAt);
     stmt.run("defaultModelBackend", next.defaultModelBackend, next.updatedAt);
     stmt.run("defaultAgentMaxParallel", String(next.defaultAgentMaxParallel), next.updatedAt);

@@ -28,6 +28,7 @@ export type MergeState = {
 };
 
 export type LlmRunContext = {
+  responseLocale?: "ko" | "en";
   globalMemory: MemoryRecord[];
   projectMemory: MemoryRecord[];
   skipGitRepoCheck?: boolean;
@@ -1128,11 +1129,27 @@ function createMockLlmProvider(): LlmProvider {
       capabilities: { ...nonStreamingCapabilities, structuredDecision: true }
     },
     async run(agent, task, workspace, context) {
+      const korean = context?.responseLocale !== "en";
       const interactionKind = !context?.resume && !context?.taskRuns?.some((run) => run.status === "suspended") &&
         (["question", "approval", "permission", "review"] as const).find((kind) =>
           task.labels.includes(`mock-interaction-${kind}`)
         );
-      const output = [
+      const output = korean ? [
+        `에이전트: ${agent.name}`,
+        `역할: ${agent.role}`,
+        `일감: ${task.title}`,
+        `연결된 파일: ${task.linkedFiles.length}개`,
+        `일감 댓글: ${context?.taskComments?.length || 0}개`,
+        `이전 실행: ${context?.taskRuns?.length || 0}개`,
+        `전역 메모리: ${context?.globalMemory.length || 0}개`,
+        `프로젝트 메모리: ${context?.projectMemory.length || 0}개`,
+        ...(context?.resume ? [
+          `재개한 상호작용: ${context.resume.interactionId}`,
+          `사용자 응답: ${JSON.stringify(context.resume.responsePayload)}`
+        ] : []),
+        "",
+        "모의 어댑터가 일감을 완료했습니다. 실제 LLM CLI를 실행하려면 에이전트에 셸 CLI 명령을 설정하세요."
+      ].join("\n") : [
         `Agent: ${agent.name}`,
         `Role: ${agent.role}`,
         `Task: ${task.title}`,
@@ -1176,7 +1193,7 @@ function createMockLlmProvider(): LlmProvider {
         output,
         error: null,
         completion: {
-          summary: `Mock provider completed ${task.title}.`,
+          summary: korean ? `모의 공급자가 '${task.title}' 일감을 완료했습니다.` : `Mock provider completed ${task.title}.`,
           acceptanceCriteria: task.acceptanceCriteria.split(/\n|;/).map((criterion) => criterion.trim()).filter(Boolean).map((criterion) => ({
             criterion,
             met: true,
@@ -1344,6 +1361,7 @@ function buildLlmEnvironment(
   const files = writePromptFiles(providerId, agent, task, workspace, context);
   return {
     HARNESS_LLM_PROVIDER: providerId,
+    HARNESS_RESPONSE_LOCALE: context?.responseLocale === "en" ? "en" : "ko",
     HARNESS_PROMPT_FILE: files.promptFile,
     HARNESS_AGENT_DEFINITION_FILE: files.agentDefinitionFile,
     HARNESS_GLOBAL_MEMORY: files.globalMemoryText,
@@ -1390,6 +1408,8 @@ function writePromptFiles(
   const projectMemoryText = formatMemory(context?.projectMemory || []);
   const taskCommentsText = formatTaskComments(context?.taskComments || []);
   const taskRunSummaryText = formatTaskRuns(context?.taskRuns || []);
+  const responseLocale = context?.responseLocale === "en" ? "en" : "ko";
+  const responseLanguage = responseLocale === "ko" ? "Korean (한국어)" : "English";
   const workspaceInstruction =
     workspace.kind === "git-worktree"
       ? "Work only inside this task Git worktree. Report changed files, verification performed, and any blockers."
@@ -1455,7 +1475,12 @@ function writePromptFiles(
     `Branch: ${workspace.branchName || "none"}`,
     `Path: ${workspace.worktreePath}`,
     ``,
-    workspaceInstruction
+    workspaceInstruction,
+    ``,
+    `## Completion Summary`,
+    `When the work ends, write the final response as a concise summary in ${responseLanguage}.`,
+    `Include completed work, changed files or artifacts, verification performed, and remaining issues or blockers.`,
+    `Always provide this summary, including when no files changed.`
   ].join("\n");
   writeFileSync(promptFile, prompt, "utf8");
   return {

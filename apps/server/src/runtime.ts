@@ -6,6 +6,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   insertEvent,
   defaultProjectSettings,
+  getGlobalSettings,
   getProjectSettings,
   getProjectSettingsFromDb,
   listGlobalMemories,
@@ -1365,6 +1366,7 @@ async function executeTask(
         }, async (span) => {
           if (resumeContext) span.addEvent("interaction.resumed", { "harness.resume.count": 1 });
           const providerResult = await selectedProvider.run(executionAgent, executionTask, workspace, {
+          responseLocale: getGlobalSettings().interfaceLocale,
           globalMemory,
           projectMemory,
           taskComments,

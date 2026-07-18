@@ -96,6 +96,7 @@ export type ProjectImportResult = {
 };
 
 export type GlobalSettings = {
+  interfaceLocale: "ko" | "en";
   defaultProjectRoot: string;
   defaultModelBackend: string;
   defaultAgentMaxParallel: number;

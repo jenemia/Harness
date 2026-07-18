@@ -116,4 +116,7 @@ test("Korean is the default locale and agent management copy is localized", () =
   assert.doesNotMatch(editor, />Advanced settings</);
   assert.doesNotMatch(editor, />Archive agent</);
   assert.doesNotMatch(panel, /placeholder="Capabilities"/);
+
+  const languageProvider = readFileSync(new URL("../src/i18n/provider.tsx", import.meta.url), "utf8");
+  assert.match(languageProvider, /settingsService\.updateInterfaceLocale\(locale\)/);
 });

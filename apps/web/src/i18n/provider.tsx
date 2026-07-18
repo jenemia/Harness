@@ -12,6 +12,7 @@ import {
   type MessageKey,
   type SupportedLocale,
 } from "./messages";
+import { settingsService } from "../services/settingsService";
 
 const localeStorageKey = "harness.interface-locale";
 export const defaultLocale: SupportedLocale = "ko";
@@ -71,6 +72,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     } catch {
       // Keep the in-memory selection when persistence is unavailable.
     }
+    void settingsService.updateInterfaceLocale(locale).catch(() => {
+      // The interface remains usable while the local runtime is unavailable.
+    });
   }, [locale]);
 
   const value = useMemo<I18nContextValue>(
