@@ -13,6 +13,8 @@ export const taskService = {
       method: "POST",
       body: JSON.stringify(payload),
     })),
+  remove: (projectId: string, taskId: string) => desktopOrHttp("tasks:delete", { projectId, taskId }, () =>
+    api(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" })),
   update: (projectId: string, taskId: string, payload: Partial<Task>) => desktopOrHttp("tasks:update", { projectId, taskId, payload }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}`, {
       method: "PATCH",

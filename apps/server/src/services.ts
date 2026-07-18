@@ -594,6 +594,66 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
   }
 }
 
+function deleteTaskMutation(project: ProjectRecord, taskId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    if (!row) throw new Error("Task not found.");
+    const task = mapTask(row);
+    const activeRun = db.prepare("SELECT id FROM runs WHERE task_id = ? AND status IN ('running', 'suspended') LIMIT 1").get(taskId);
+    if (activeRun) throw new Error("Stop or finish the active task run before deleting the task.");
+    const pendingInteraction = db.prepare("SELECT id FROM interactions WHERE task_id = ? AND status = 'pending' LIMIT 1").get(taskId);
+    if (pendingInteraction) throw new Error("Resolve pending task interactions before deleting the task.");
+    const activeReview = db.prepare("SELECT id FROM code_review_jobs WHERE task_id = ? AND status IN ('queued', 'running') LIMIT 1").get(taskId);
+    if (activeReview) throw new Error("Finish the active code review before deleting the task.");
+    const activePreview = db.prepare("SELECT id FROM previews WHERE task_id = ? AND (status IN ('booting', 'live') OR pid IS NOT NULL) LIMIT 1").get(taskId);
+    if (activePreview) throw new Error("Stop active task previews before deleting the task.");
+    if (task.workspaceMode === "worktree" && task.worktreePath) {
+      throw new Error("Remove the task worktree before deleting the task.");
+    }
+
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      const otherTasks = db.prepare("SELECT * FROM tasks WHERE id != ?").all(taskId).map(mapTask);
+      const updateReferences = db.prepare(`
+        UPDATE tasks SET parent_task_id = ?, dependency_task_ids = ?, waived_dependency_task_ids = ?,
+          status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?
+      `);
+      for (const other of otherTasks) {
+        const parentTaskId = other.parentTaskId === taskId ? null : other.parentTaskId;
+        const dependencyTaskIds = other.dependencyTaskIds.filter((id) => id !== taskId);
+        const waivedDependencyTaskIds = other.waivedDependencyTaskIds.filter((id) => id !== taskId);
+        const dependencyRemoved = dependencyTaskIds.length !== other.dependencyTaskIds.length;
+        const status = dependencyRemoved && dependencyTaskIds.length === 0 && other.status === "Blocked" ? "Selected" : other.status;
+        const blockedReason = status === "Selected" ? null : other.blockedReason;
+        if (parentTaskId !== other.parentTaskId || dependencyTaskIds.length !== other.dependencyTaskIds.length ||
+            waivedDependencyTaskIds.length !== other.waivedDependencyTaskIds.length) {
+          updateReferences.run(parentTaskId, JSON.stringify(dependencyTaskIds), JSON.stringify(waivedDependencyTaskIds), status, blockedReason, now(), other.id);
+        }
+      }
+
+      db.prepare("UPDATE inline_review_comments SET follow_up_task_id = NULL, updated_at = ? WHERE follow_up_task_id = ? AND task_id != ?")
+        .run(now(), taskId, taskId);
+      db.prepare("UPDATE agents SET status = 'idle', current_task_id = NULL, updated_at = ? WHERE current_task_id = ?").run(now(), taskId);
+      for (const table of [
+        "workspace_policy_audits", "code_review_findings", "code_review_jobs", "inline_review_comments",
+        "run_file_reviews", "completion_reports", "interactions", "previews", "approvals", "task_goals",
+        "comments", "handoffs", "provider_events", "runs", "events"
+      ]) {
+        db.prepare(`DELETE FROM ${table} WHERE task_id = ?`).run(taskId);
+      }
+      db.prepare("DELETE FROM tasks WHERE id = ?").run(taskId);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    return { removed: true, taskId };
+  } finally {
+    db.close();
+  }
+}
+
 function createTaskCommentMutation(
   project: ProjectRecord,
   taskId: string,
@@ -796,6 +856,7 @@ export const reorderAgentInstructionsService = projectMutation(reorderAgentInstr
 export const cloneAgentService = projectMutation(cloneAgentMutation);
 export const archiveAgentService = projectMutation(archiveAgentMutation);
 export const createTaskService = projectMutation(createTaskMutation);
+export const deleteTaskService = projectMutation(deleteTaskMutation);
 export const updateTaskService = projectMutation(updateTaskMutation);
 export const createTaskCommentService = projectMutation(createTaskCommentMutation);
 export const decomposeTaskService = projectMutation(decomposeTaskMutation);

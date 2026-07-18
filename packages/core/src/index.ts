@@ -122,6 +122,7 @@ export type HarnessCommandInputs = {
   "drafts:recover": { projectId: string };
   "tasks:create-from-prompt": { projectId: string; prompt: string; autoAssign?: boolean };
   "tasks:create": { projectId: string; payload: Record<string, unknown> };
+  "tasks:delete": { projectId: string; taskId: string };
   "tasks:update": { projectId: string; taskId: string; payload: Record<string, unknown> };
   "tasks:start": { projectId: string; taskId: string };
   "tasks:pause": { projectId: string; taskId: string; reason?: string };
@@ -332,7 +333,7 @@ const commandNames = new Set<HarnessCommand>([
   "drafts:submit-review", "drafts:reply", "drafts:comment-status",
   "drafts:apply-request", "drafts:apply-decision", "drafts:apply-undo", "drafts:restore-revision",
   "drafts:events", "drafts:recover",
-  "tasks:create-from-prompt", "tasks:create", "tasks:update", "tasks:start", "tasks:pause", "tasks:resume", "tasks:move",
+  "tasks:create-from-prompt", "tasks:create", "tasks:delete", "tasks:update", "tasks:start", "tasks:pause", "tasks:resume", "tasks:move",
   "tasks:comment", "tasks:decompose", "tasks:merge", "tasks:completion-branches", "tasks:complete", "tasks:resolve-merge", "tasks:request-changes"
 ]);
 

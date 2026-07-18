@@ -39,6 +39,7 @@ import {
   listTaskCompletionBranches,
   decideApproval,
   initializeProjectWorkspace,
+  isTaskExecutionActive,
   listRuntimeProviders,
   probeRuntimeProvider,
   pauseTask,
@@ -60,6 +61,7 @@ import {
   createMemoryService,
   createTaskCommentService,
   createTaskService,
+  deleteTaskService,
   decomposeTaskService,
   getDocumentService,
   getAgentDocumentService,
@@ -555,6 +557,12 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const task = createTaskService(project, value.payload as Partial<TaskRecord>);
       await startIdlePmTask(project, task.id);
       return { task, overview: getProjectOverview(project) };
+    }
+    case "tasks:delete": {
+      const value = input(payload) as HarnessCommandInputs["tasks:delete"];
+      const project = requiredProject(value.projectId);
+      if (isTaskExecutionActive(value.taskId)) throw new Error("Stop or finish the active task run before deleting the task.");
+      return { result: deleteTaskService(project, value.taskId), overview: getProjectOverview(project) };
     }
     case "tasks:update": {
       const value = input(payload) as HarnessCommandInputs["tasks:update"];

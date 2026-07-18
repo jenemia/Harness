@@ -13,6 +13,7 @@ import {
   RefreshCcw,
   Settings,
   Tag,
+  Trash2,
   X,
 } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
@@ -170,6 +171,15 @@ export function TaskDetailDrawer(props: {
     });
   }
 
+  async function deleteTask() {
+    if (!window.confirm(t("task.deleteConfirm", { title: props.task.title }))) return;
+    await props.runAction(async () => {
+      await taskService.remove(props.overview.project.id, props.task.id);
+      props.onClose();
+      await props.onChanged();
+    });
+  }
+
   async function merge() {
     await props.runAction(async () => {
       await taskService.merge(props.overview.project.id, props.task.id);
@@ -318,6 +328,10 @@ export function TaskDetailDrawer(props: {
           >
             <ArrowDown size={16} />
             <span>{t("task.down")}</span>
+          </button>
+          <button className="delete-button" type="button" onClick={() => void deleteTask()}>
+            <Trash2 size={16} />
+            <span>{t("task.delete")}</span>
           </button>
           {(props.task.status === "Paused" || props.task.status === "In Review") && !hasPendingRunInteraction ? (
             <button

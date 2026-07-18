@@ -104,6 +104,10 @@ export function listRuntimeProviders() {
   };
 }
 
+export function isTaskExecutionActive(taskId: string) {
+  return runningTasks.has(taskId);
+}
+
 export async function probeRuntimeProvider(project: ProjectRecord | null, modelBackend: string) {
   const definition = providers.llmDefinitions().find((item) => item.id === modelBackend);
   const checkedAt = new Date().toISOString();

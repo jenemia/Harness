@@ -10,6 +10,7 @@ test("desktop window and IPC contract keep renderer privileges narrow", () => {
   assert.equal(options.webPreferences?.sandbox, true);
   assert.equal(harnessIpcVersion, 1);
   assert.equal(isHarnessCommand("tasks:create"), true);
+  assert.equal(isHarnessCommandPayload("tasks:delete", { projectId: "p", taskId: "t" }), true);
   assert.equal(isHarnessCommand("filesystem:read"), false);
   assert.equal(isHarnessCommandPayload("tasks:move", { projectId: "p", taskId: "t", direction: "up" }), true);
   assert.equal(isHarnessCommandPayload("tasks:move", { projectId: "p", taskId: "t", direction: "sideways" }), false);

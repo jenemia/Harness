@@ -564,6 +564,11 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        if (req.method === "DELETE" && !action) {
+          sendJson(res, await invokeApplicationCommand("tasks:delete", { projectId: project.id, taskId }));
+          return;
+        }
+
         if (req.method === "POST" && action === "start") {
           const response = await invokeApplicationCommand("tasks:start", { projectId: project.id, taskId }) as { result: { accepted: boolean } };
           sendJson(res, response, response.result.accepted ? 202 : 409);

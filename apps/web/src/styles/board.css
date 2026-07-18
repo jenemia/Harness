@@ -341,6 +341,20 @@ button:disabled {
   color: #3e424a;
 }
 
+.delete-button {
+  align-items: center;
+  background: #ae2a19;
+  border: 0;
+  border-radius: 6px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 10px;
+  gap: 5px;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 9px;
+}
+
 .board-support-grid {
   display: grid;
   gap: 12px;

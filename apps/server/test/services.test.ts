@@ -11,6 +11,7 @@ import {
   createMemoryService,
   createTaskCommentService,
   createTaskService,
+  deleteTaskService,
   decomposeTaskService,
   registerProjectService,
   unregisterProjectService,
@@ -112,6 +113,43 @@ test("application services apply the same validation and mutations for every tra
 
     unregisterProjectService(project.id);
     assert.equal(getProject(project.id), null);
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("task deletion removes task history and clears parent and dependency references", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-delete-task-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: false });
+    const target = createTaskService(project, { title: "Delete me", autoAssign: false, workspaceMode: "harness" });
+    const child = createTaskService(project, { title: "Child", parentTaskId: target.id, autoAssign: false, workspaceMode: "harness" });
+    const dependent = createTaskService(project, {
+      title: "Dependent",
+      dependencyTaskIds: [target.id],
+      waivedDependencyTaskIds: [target.id],
+      status: "Blocked",
+      autoAssign: false,
+      workspaceMode: "harness"
+    });
+    createTaskCommentService(project, target.id, { author: "human", body: "Delete this history too." });
+    decomposeTaskService(project, target.id, { text: "- First goal\n- Second goal", mode: "sequential" });
+
+    assert.deepEqual(deleteTaskService(project, target.id), { removed: true, taskId: target.id });
+    const overview = getProjectOverview(project);
+    assert.equal(overview.tasks.some((task) => task.id === target.id), false);
+    assert.equal(overview.comments.some((comment) => comment.taskId === target.id), false);
+    assert.equal(overview.taskGoals.some((goal) => goal.taskId === target.id), false);
+    assert.equal(overview.tasks.find((task) => task.id === child.id)?.parentTaskId, null);
+    assert.deepEqual(overview.tasks.find((task) => task.id === dependent.id)?.dependencyTaskIds, []);
+    assert.deepEqual(overview.tasks.find((task) => task.id === dependent.id)?.waivedDependencyTaskIds, []);
+    assert.equal(overview.tasks.find((task) => task.id === dependent.id)?.status, "Selected");
+    assert.equal(overview.tasks.find((task) => task.id === dependent.id)?.blockedReason, null);
+    assert.throws(() => deleteTaskService(project, target.id), /Task not found/);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;

@@ -55,7 +55,11 @@ test("CLI uses the active desktop bridge and offline fallback shares application
         body: JSON.stringify({ title: "HTTP task", workspaceMode: "harness" })
       });
       assert.equal(createdByHttp.status, 201);
-      assert.equal(((await createdByHttp.json()) as { task: { title: string } }).task.title, "HTTP task");
+      const httpTask = ((await createdByHttp.json()) as { task: { id: string; title: string } }).task;
+      assert.equal(httpTask.title, "HTTP task");
+      const deletedByHttp = await fetch(`${httpServer.origin}/api/projects/${created.project.id}/tasks/${httpTask.id}`, { method: "DELETE" });
+      assert.equal(deletedByHttp.status, 200);
+      assert.equal(((await deletedByHttp.json()) as { result: { removed: boolean } }).result.removed, true);
       const httpTaskId = ((await invokeApplicationCommand("tasks:create", { projectId: created.project.id, payload: { title: "HTTP preview task", workspaceMode: "harness" } })) as { task: { id: string } }).task.id;
       const previewByHttp = await fetch(`${httpServer.origin}/api/projects/${created.project.id}/previews`, {
         method: "POST",
@@ -78,7 +82,7 @@ test("CLI uses the active desktop bridge and offline fallback shares application
     } finally {
       await httpServer.stop();
     }
-    assert.equal(getProjectOverview(created.project).tasks.length, 4);
+    assert.equal(getProjectOverview(created.project).tasks.length, 3);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
