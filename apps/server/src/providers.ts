@@ -181,6 +181,75 @@ export function diagnoseCliAuthentication(authentication: CliAuthenticationDefin
   };
 }
 
+export type OllamaRuntimeStatus = {
+  installed: boolean;
+  running: boolean;
+  version: string | null;
+  models: Array<{ name: string; id: string | null; size: string | null; modifiedAt: string | null }>;
+  error: string | null;
+};
+
+export function parseOllamaListOutput(output: string): OllamaRuntimeStatus["models"] {
+  return output.trim().split(/\r?\n/).slice(1).map((line) => {
+    const [name, id, size, modifiedAt] = line.trim().split(/\s{2,}/);
+    return name ? { name, id: id || null, size: size || null, modifiedAt: modifiedAt || null } : null;
+  }).filter((model): model is OllamaRuntimeStatus["models"][number] => Boolean(model));
+}
+
+export function diagnoseOllamaRuntime(): OllamaRuntimeStatus {
+  const version = spawnSync("ollama", ["--version"], { encoding: "utf8", timeout: 3000 });
+  if (version.error && (version.error as NodeJS.ErrnoException).code === "ENOENT") {
+    return { installed: false, running: false, version: null, models: [], error: "Ollama is not installed or not on PATH." };
+  }
+  const list = spawnSync("ollama", ["list"], { encoding: "utf8", timeout: 5000 });
+  const installed = version.status === 0;
+  const running = list.status === 0;
+  return {
+    installed,
+    running,
+    version: installed ? (version.stdout || version.stderr).trim().split(/\r?\n/)[0] || null : null,
+    models: running ? parseOllamaListOutput(list.stdout) : [],
+    error: running ? null : (list.stderr || list.stdout || "Ollama service is not running. Run ollama serve, then retry.").trim()
+  };
+}
+
+export async function probeOllamaModel(model: string) {
+  const configuredHost = process.env.OLLAMA_HOST?.trim() || "http://127.0.0.1:11434";
+  const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `http://${configuredHost}`;
+  try {
+    const response = await fetch(new URL("/api/generate", host), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        prompt: "Reply exactly OK.",
+        stream: false,
+        think: false,
+        options: { num_predict: 8 }
+      }),
+      signal: AbortSignal.timeout(30_000)
+    });
+    const payload = await response.json() as { response?: unknown; error?: unknown };
+    if (!response.ok) {
+      return { ok: false, error: typeof payload.error === "string" ? payload.error : `Ollama returned HTTP ${response.status}.` };
+    }
+    return typeof payload.response === "string" && payload.response.trim()
+      ? { ok: true, error: null }
+      : { ok: false, error: "Ollama returned an empty model response." };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export function ollamaCommand(model: string) {
+  return `ollama run ${shellQuote(model)} < "$HARNESS_PROMPT_FILE"`;
+}
+
+export function parseOllamaModelFromCommand(command: string | null | undefined) {
+  const match = command?.match(/(?:^|\s)ollama\s+run\s+(?:'([^']+)'|"([^"]+)"|([^\s<]+))/);
+  return match?.[1] || match?.[2] || match?.[3] || null;
+}
+
 export type ProviderCommandResolution = {
   command: string | null;
   source: "agent" | "settings" | "provider" | "none";
@@ -403,7 +472,7 @@ export function createDefaultProviders(projectHarnessDir: (projectPath: string) 
     createCliLlmProvider(platformProvider, {
       id: "ollama",
       label: "Ollama",
-      description: "Runs a user-configured Ollama command inside the task workspace.",
+      description: "Runs an installed local Ollama model inside the task workspace.",
       commandExample: "ollama run llama3.1 \"$(cat $HARNESS_PROMPT_FILE)\""
     }),
     createCliLlmProvider(platformProvider, {

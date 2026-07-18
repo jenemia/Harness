@@ -22,7 +22,7 @@ import {
   openProjectDb,
   projectHarnessDir
 } from "./db.js";
-import { createDefaultProviders, diagnoseCliAuthentication, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand, type LlmRunResult } from "./providers.js";
+import { createDefaultProviders, diagnoseCliAuthentication, diagnoseOllamaRuntime, parseOllamaModelFromCommand, probeOllamaModel, providerCommandCandidateKeys, providerCommandMetadata, resolveProviderCommand, type LlmRunResult } from "./providers.js";
 import { getPlanningProviderDefinition } from "./planner.js";
 import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriterLock } from "./project-store.js";
 import { createAgentRunSnapshot } from "./agent-store.js";
@@ -68,6 +68,7 @@ type ResumeRunContext = {
 export function listRuntimeProviders() {
   const platform = providers.platform();
   const llmProviders = providers.llmDefinitions();
+  const ollamaStatus = diagnoseOllamaRuntime();
   return {
     platform: {
       id: platform.id,
@@ -100,7 +101,14 @@ export function listRuntimeProviders() {
     },
     llmProviders: llmProviders.map((provider) => ({
       ...provider,
-      authenticationStatus: provider.authentication ? diagnoseCliAuthentication(provider.authentication) : null
+      authenticationStatus: provider.id === "ollama" ? {
+        installed: ollamaStatus.installed,
+        authenticated: ollamaStatus.running,
+        version: ollamaStatus.version,
+        loginCommand: "ollama serve",
+        message: ollamaStatus.running ? "Ollama service is connected." : ollamaStatus.error || "Run ollama serve, then retry."
+      } : provider.authentication ? diagnoseCliAuthentication(provider.authentication) : null,
+      ollamaStatus: provider.id === "ollama" ? ollamaStatus : undefined
     }))
   };
 }
@@ -109,7 +117,7 @@ export function isTaskExecutionActive(taskId: string) {
   return runningTasks.has(taskId);
 }
 
-export async function probeRuntimeProvider(project: ProjectRecord | null, modelBackend: string) {
+export async function probeRuntimeProvider(project: ProjectRecord | null, modelBackend: string, providerModel?: string) {
   const definition = providers.llmDefinitions().find((item) => item.id === modelBackend);
   const checkedAt = new Date().toISOString();
   if (!definition || definition.kind === "mock") {
@@ -123,6 +131,21 @@ export async function probeRuntimeProvider(project: ProjectRecord | null, modelB
   }
   const settings = project ? getProjectSettings(project.path) : defaultProjectSettings();
   const resolution = resolveProviderCommand(providers.platform(), { cliCommand: null }, modelBackend, settings, definition.defaultCommand);
+  if (modelBackend === "ollama") {
+    const ollama = diagnoseOllamaRuntime();
+    if (!ollama.installed || !ollama.running) {
+      return { modelBackend, ok: false, checkedAt, error: ollama.error || "Ollama service is unavailable." };
+    }
+    const selectedModel = providerModel?.trim() || parseOllamaModelFromCommand(resolution.command) || ollama.models[0]?.name;
+    if (!selectedModel) {
+      return { modelBackend, ok: false, checkedAt, error: "No Ollama model is installed. Run ollama pull <model>, then retry." };
+    }
+    if (!ollama.models.some((model) => model.name === selectedModel)) {
+      return { modelBackend, ok: false, checkedAt, error: `Ollama model ${selectedModel} is not installed.` };
+    }
+    const probe = await probeOllamaModel(selectedModel);
+    return { modelBackend, ok: probe.ok, checkedAt, error: probe.ok ? null : redactCredentialMaterial(probe.error || "Ollama did not return a successful response.") };
+  }
   if (!resolution.command) {
     return { modelBackend, ok: false, checkedAt, error: `No CLI command is configured for ${definition.label}.` };
   }

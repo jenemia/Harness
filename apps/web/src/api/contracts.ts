@@ -657,6 +657,13 @@ export type ProviderCatalog = {
       gracefulStop: boolean;
     };
     authenticationStatus: CliAuthenticationStatus | null;
+    ollamaStatus?: {
+      installed: boolean;
+      running: boolean;
+      version: string | null;
+      models: Array<{ name: string; id: string | null; size: string | null; modifiedAt: string | null }>;
+      error: string | null;
+    };
     directAuthentication?: {
       providerId: string;
       label: string;

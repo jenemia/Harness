@@ -29,5 +29,8 @@ test("model selection exposes one global default and synchronizes the current pr
   assert.match(source, /MCP/);
   assert.match(source, /<details className="llm-connection-step model-mcp-settings">/);
   assert.match(source, /disabled={!props.settings \|\| !verified\?\.ok}/);
+  assert.match(source, /ollamaStatus\?\.models/);
+  assert.match(source, /현재 선택:/);
+  assert.match(source, /projectService\.probeProvider\(globalModel, props\.overview\?\.project\.id, globalModel === "ollama" \? ollamaModel : undefined\)/);
   assert.match(source, /open={oauthOpen}/);
 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProviderCatalog } from "../src/api/contracts.js";
 import { replaceProviderCommand, resolveConfiguredProviderCommand } from "../src/shared/providerCommands.js";
-import { codexCommand } from "../src/features/settings/ModelSelectionPanel.js";
+import { codexCommand, ollamaCommand, parseOllamaModelFromCommand } from "../src/features/settings/ModelSelectionPanel.js";
 
 const catalog = {
   providerCommandKeys: {
@@ -20,6 +20,12 @@ test("model selection builds a writable Codex command that reads prompt contents
     codexCommand("codex", { workspaceWrite: true, persistSession: false, useProjectRules: true }),
     'codex exec --sandbox workspace-write --ephemeral - < "$HARNESS_PROMPT_FILE"',
   );
+});
+
+test("Ollama model selection builds and restores the selected local model command", () => {
+  const command = ollamaCommand("qwen3.5:9b");
+  assert.equal(command, 'ollama run "qwen3.5:9b" < "$HARNESS_PROMPT_FILE"');
+  assert.equal(parseOllamaModelFromCommand(command), "qwen3.5:9b");
 });
 
 test("provider command replacement removes stale higher-precedence keys", () => {

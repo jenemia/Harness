@@ -58,7 +58,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === "POST /api/providers/probe") {
-      const body = await readBody<{ projectId?: string; modelBackend: string }>(req);
+      const body = await readBody<{ projectId?: string; modelBackend: string; providerModel?: string }>(req);
       sendJson(res, await invokeApplicationCommand("providers:probe", body));
       return;
     }

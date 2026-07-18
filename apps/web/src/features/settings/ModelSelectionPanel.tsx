@@ -45,6 +45,15 @@ export function codexCommand(modelBackend: string, options: CodexOptions) {
   ].filter(Boolean).join(" ");
 }
 
+export function ollamaCommand(model: string) {
+  return `ollama run ${JSON.stringify(model)} < "$HARNESS_PROMPT_FILE"`;
+}
+
+export function parseOllamaModelFromCommand(command: string | undefined) {
+  const match = command?.match(/(?:^|\s)ollama\s+run\s+(?:'([^']+)'|"([^"]+)"|([^\s<]+))/);
+  return match?.[1] || match?.[2] || match?.[3] || "";
+}
+
 export function ModelSelectionPanel(props: {
   overview: Overview | null;
   providerCatalog: ProviderCatalog | null;
@@ -61,6 +70,7 @@ export function ModelSelectionPanel(props: {
   const [verified, setVerified] = useState<ProviderProbeResult | null>(null);
   const [probing, setProbing] = useState(false);
   const [codexOptions, setCodexOptions] = useState<CodexOptions>({ workspaceWrite: true, persistSession: true, useProjectRules: true });
+  const [ollamaModel, setOllamaModel] = useState("");
   const [mcp, setMcp] = useState<McpDiagnostics | null>(null);
   const [clientId, setClientId] = useState("llm-client");
   const [oauthOpen, setOauthOpen] = useState(false);
@@ -75,10 +85,20 @@ export function ModelSelectionPanel(props: {
   }, [providers]);
   const selectedFamily = providerFamilies.find((family) => family.models.some((provider) => provider.id === globalModel)) || providerFamilies[0] || null;
   const selectedProvider = selectedFamily?.models.find((provider) => provider.id === globalModel) || selectedFamily?.models[0] || null;
+  const ollamaProvider = providers.find((provider) => provider.id === "ollama") || null;
+  const installedOllamaModels = ollamaProvider?.ollamaStatus?.models || [];
+  const ollamaModelOptions = ollamaModel && !installedOllamaModels.some((model) => model.name === ollamaModel)
+    ? [{ name: ollamaModel, id: null, size: null, modifiedAt: null }, ...installedOllamaModels]
+    : installedOllamaModels;
 
   useEffect(() => {
     setGlobalModel(props.settings?.defaultModelBackend || "mock");
     setCommands(props.settings?.providerCommands || {});
+    setOllamaModel(
+      parseOllamaModelFromCommand(resolveConfiguredProviderCommand(props.settings?.providerCommands || {}, props.providerCatalog, "ollama")) ||
+      props.providerCatalog?.llmProviders.find((provider) => provider.id === "ollama")?.ollamaStatus?.models[0]?.name ||
+      "",
+    );
     setCodexOptions(optionsFromCommand(resolveConfiguredProviderCommand(
       props.settings?.providerCommands || {},
       props.providerCatalog,
@@ -102,7 +122,7 @@ export function ModelSelectionPanel(props: {
   async function probe() {
     setProbing(true);
     try {
-      const result = await projectService.probeProvider(globalModel, props.overview?.project.id);
+      const result = await projectService.probeProvider(globalModel, props.overview?.project.id, globalModel === "ollama" ? ollamaModel : undefined);
       setVerified(result);
     } finally {
       setProbing(false);
@@ -119,7 +139,9 @@ export function ModelSelectionPanel(props: {
           selectedProvider.id,
           codexCommand(selectedProvider.id, codexOptions),
         )
-      : commands;
+      : selectedProvider?.id === "ollama" && ollamaModel
+        ? replaceProviderCommand(commands, props.providerCatalog, "ollama", ollamaCommand(ollamaModel))
+        : commands;
     await props.runAction(async () => {
       const response = await settingsService.updateGlobal({
         defaultProjectRoot: settings.defaultProjectRoot,
@@ -163,9 +185,12 @@ export function ModelSelectionPanel(props: {
       </label>
       <label className="model-select-field">
         <strong>{ko ? "모델" : "Model"}</strong>
-        <select value={selectedProvider?.id || ""} onChange={(event) => selectModel(event.target.value)}>
+        {selectedProvider?.id === "ollama" ? <select value={ollamaModel} onChange={(event) => { setOllamaModel(event.target.value); setVerified(null); }}>
+          {ollamaModelOptions.length === 0 && <option value="">{ko ? "설치된 모델 없음" : "No installed models"}</option>}
+          {ollamaModelOptions.map((model) => <option value={model.name} key={model.name}>{model.name}{model.size ? ` · ${model.size}` : ko ? " · 설치되지 않음" : " · not installed"}</option>)}
+        </select> : <select value={selectedProvider?.id || ""} onChange={(event) => selectModel(event.target.value)}>
           {(selectedFamily?.models || []).map((provider) => <option value={provider.id} key={provider.id}>{provider.label.replace(/^Codex · /, "")}</option>)}
-        </select>
+        </select>}
       </label>
     </div>
 
@@ -187,6 +212,15 @@ export function ModelSelectionPanel(props: {
         {status && <small>{status.message}{status.version ? ` · ${status.version}` : ""}</small>}
         {status && !status.authenticated && <code>{status.loginCommand}</code>}
       </div>
+
+      {selectedProvider.id === "ollama" && <div className="llm-connection-step ollama-runtime-status">
+        <strong>{ko ? "Ollama 로컬 모델" : "Ollama local model"}</strong>
+        <small>{ollamaProvider?.ollamaStatus?.running
+          ? (ko ? `연결됨 · 설치된 모델 ${installedOllamaModels.length}개` : `Connected · ${installedOllamaModels.length} installed model(s)`)
+          : (ko ? "Ollama 서비스에 연결되지 않았습니다." : "Ollama service is not connected.")}</small>
+        {ollamaModel && <code>{ko ? "현재 선택: " : "Selected: "}{ollamaModel}</code>}
+        {ollamaProvider?.ollamaStatus?.error && <small className="probe-result failed">{ollamaProvider.ollamaStatus.error}</small>}
+      </div>}
 
       {isCodexModel(selectedProvider.id) && <div className="model-option-list" aria-label={ko ? "Codex 중요 옵션" : "Codex essential options"}>
         <strong>{ko ? "중요 옵션" : "Essential options"}</strong>
@@ -221,7 +255,7 @@ export function ModelSelectionPanel(props: {
       </details>
 
       <div className="model-selection-actions">
-        <button className="secondary-button" type="button" disabled={probing} onClick={() => void props.runAction(probe)}><PlugZap size={14} />{probing ? (ko ? "확인 중…" : "Testing…") : (ko ? "연결 확인" : "Test connection")}</button>
+        <button className="secondary-button" type="button" disabled={probing || (globalModel === "ollama" && !ollamaModel)} onClick={() => void props.runAction(probe)}><PlugZap size={14} />{probing ? (ko ? "확인 중…" : "Testing…") : (ko ? "연결 확인" : "Test connection")}</button>
         <button className="primary-button" type="button" disabled={!props.settings || !verified?.ok} onClick={() => void save()}><Save size={16} />{ko ? "모델 저장" : "Save model"}</button>
       </div>
     </div>}

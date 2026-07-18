@@ -222,7 +222,7 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "providers:list": return listRuntimeProviders();
     case "providers:probe": {
       const value = input(payload) as HarnessCommandInputs["providers:probe"];
-      return probeRuntimeProvider(value.projectId ? requiredProject(value.projectId) : null, value.modelBackend);
+      return probeRuntimeProvider(value.projectId ? requiredProject(value.projectId) : null, value.modelBackend, value.providerModel);
     }
     case "chat:create": {
       const value = input(payload) as HarnessCommandInputs["chat:create"];

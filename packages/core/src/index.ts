@@ -16,7 +16,7 @@ export type HarnessCommandInputs = {
   "chat:get": { projectId: string; sessionId: string };
   "chat:send": { projectId: string; sessionId: string; content: string };
   "providers:list": Record<string, never>;
-  "providers:probe": { projectId?: string; modelBackend: string };
+  "providers:probe": { projectId?: string; modelBackend: string; providerModel?: string };
   "mcp:clients": Record<string, never>;
   "mcp:client-save": { payload: Record<string, unknown> };
   "mcp:diagnose": Record<string, never>;
@@ -226,7 +226,9 @@ export function isHarnessCommand(value: string): value is HarnessCommand {
 export function isHarnessCommandPayload(command: HarnessCommand, payload: unknown) {
   if (!isRecord(payload)) return false;
   if (command === "projects:create") return isText(payload.path);
-  if (command === "providers:probe") return isText(payload.modelBackend) && (payload.projectId === undefined || isText(payload.projectId));
+  if (command === "providers:probe") return isText(payload.modelBackend) &&
+    (payload.projectId === undefined || isText(payload.projectId)) &&
+    (payload.providerModel === undefined || isText(payload.providerModel));
   if (command === "system:select-folder") return payload.initialPath === undefined || typeof payload.initialPath === "string";
   if (command === "projects:list" || command === "providers:list" || command === "mcp:clients" || command === "mcp:diagnose" || command === "templates:agents" ||
       command === "templates:workflows" || command === "templates:projects" || command === "settings:get" || command === "global-memories:list") return true;

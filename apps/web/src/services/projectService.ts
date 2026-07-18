@@ -18,10 +18,10 @@ import { desktopOrHttp } from "../api/desktop";
 export const projectService = {
   list: () => desktopOrHttp("projects:list", {}, () => api<{ projects: ProjectListItem[] }>("/api/projects")),
   providers: () => desktopOrHttp("providers:list", {}, () => api<ProviderCatalog>("/api/providers")),
-  probeProvider: (modelBackend: string, projectId?: string) => desktopOrHttp(
+  probeProvider: (modelBackend: string, projectId?: string, providerModel?: string) => desktopOrHttp(
     "providers:probe",
-    { modelBackend, projectId },
-    () => api<ProviderProbeResult>("/api/providers/probe", { method: "POST", body: JSON.stringify({ modelBackend, projectId }) }),
+    { modelBackend, projectId, providerModel },
+    () => api<ProviderProbeResult>("/api/providers/probe", { method: "POST", body: JSON.stringify({ modelBackend, projectId, providerModel }) }),
   ),
   agentTemplates: () =>
     desktopOrHttp("templates:agents", {}, () => api<{ templates: AgentTemplate[] }>("/api/agent-templates")),
