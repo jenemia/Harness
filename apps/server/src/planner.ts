@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { getWorkflowTemplate, insertEvent, mapAgent, mapTask, nextTaskOrder, now, openProjectDb } from "./db.js";
+import { getProjectSettingsFromDb, getWorkflowTemplate, insertEvent, mapAgent, mapTask, nextTaskOrder, now, openProjectDb } from "./db.js";
 import { resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import { withProjectWriterLock } from "./project-store.js";
 import { activateNextTaskGoal, appendTaskGoals } from "./task-goals.js";
@@ -100,6 +100,7 @@ export function previewProjectPlan(project: ProjectRecord, input: PlanRequest): 
 function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
   const db = openProjectDb(project.path);
   try {
+    const settings = getProjectSettingsFromDb(db);
     const preview = previewPlanWithAssignments(db, input);
     const largePlanTaskThreshold = normalizeLargePlanTaskThreshold(input.largePlanTaskThreshold);
     if (preview.tasks.length >= largePlanTaskThreshold && !input.allowLargePlan) {
@@ -128,6 +129,7 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       assigneeAgentId: firstAssigneeId,
       assigneeAgentName: firstAssigneeId ? agentsById.get(firstAssigneeId)?.name || null : null,
       goalCount: plannedGoals.length,
+      modelBackend: settings.defaultModelBackend,
       roles
     });
     const goals = appendTaskGoals(db, task, plannedGoals.map((item) => ({
@@ -189,6 +191,7 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
     assigneeAgentId: string | null;
     assigneeAgentName: string | null;
     goalCount: number;
+    modelBackend: string;
     roles: string[];
   }) {
     const timestamp = now();
@@ -198,7 +201,7 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       description: inputTask.description,
       status: "Backlog",
       priority: "Medium",
-      modelBackend: null,
+      modelBackend: inputTask.modelBackend,
       assigneeAgentId: inputTask.assigneeAgentId,
       autoAssign: input.autoAssign !== false,
       reporter: "pm-agent",

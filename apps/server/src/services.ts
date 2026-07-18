@@ -465,7 +465,7 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       description: input.description?.trim() || "",
       status,
       priority: input.priority || "Medium",
-      modelBackend: input.modelBackend?.trim() || null,
+      modelBackend: input.modelBackend?.trim() || settings.defaultModelBackend,
       assigneeAgentId: initialAssigneeId,
       autoAssign,
       reporter: input.reporter?.trim() || "human",

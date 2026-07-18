@@ -58,6 +58,7 @@ test("credentials cannot be stored in provider settings and provider output is r
     const task = createTaskService(project, {
       title: "Redact provider output",
       assigneeAgentId: agent.id,
+      modelBackend: "shell",
       status: "Selected",
       workspaceMode: "harness"
     });

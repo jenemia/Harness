@@ -1,9 +1,31 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { getPlanningProviderDefinition, previewPlan } from "../src/planner.js";
+import { updateProjectSettings } from "../src/db.js";
+import { getProjectOverview } from "../src/overview-repository.js";
+import { createPlan, getPlanningProviderDefinition, previewPlan } from "../src/planner.js";
+import { registerProjectService } from "../src/services.js";
 
 test("planning provider advertises structured ticket block support", () => {
   assert.equal(getPlanningProviderDefinition().capabilities.structuredTicketBlocks, true);
+});
+
+test("new planned work captures the project's selected default model", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-plan-model-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: true });
+    updateProjectSettings(project.path, { defaultModelBackend: "ollama", autoStartPlans: false });
+    const plan = createPlan(project, { goal: "Use the selected local model", autoAssign: false });
+    assert.equal(getProjectOverview(project).tasks.find((task) => task.id === plan.tasks[0]?.id)?.modelBackend, "ollama");
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("structured ticket blocks preserve fields, roles, and earlier dependencies", () => {

@@ -6,7 +6,7 @@ import test from "node:test";
 import { getProjectSettings } from "../src/db.js";
 import { invokeApplicationCommand } from "../src/application.js";
 import { getProjectOverview } from "../src/overview-repository.js";
-import { registerProjectService } from "../src/services.js";
+import { registerProjectService, updateAgentService } from "../src/services.js";
 
 test("automatic work starts with PM and hands through programmer and reviewer while work stays in progress", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-pm-workflow-"));
@@ -21,21 +21,26 @@ test("automatic work starts with PM and hands through programmer and reviewer wh
     const programmer = overview.agents.find((agent) => agent.role === "programmer");
     const reviewer = overview.agents.find((agent) => agent.role === "reviewer");
     assert.ok(pm && programmer && reviewer);
+    updateAgentService(project, pm.id, { modelBackend: "codex" });
+    updateAgentService(project, programmer.id, { modelBackend: "codex" });
+    updateAgentService(project, reviewer.id, { modelBackend: "codex" });
 
     const created = await invokeApplicationCommand("tasks:create", { projectId: project.id, payload: {
       title: "Implement through the PM workflow",
       assigneeAgentId: programmer.id,
       status: "Backlog",
       workspaceMode: "harness"
-    } }) as { task: { id: string; assigneeAgentId: string | null } };
+    } }) as { task: { id: string; assigneeAgentId: string | null; modelBackend: string | null } };
     const task = created.task;
     assert.equal(task.assigneeAgentId, pm.id);
+    assert.equal(task.modelBackend, "mock");
 
     const completed = await waitForOverview(project, (value) =>
       value.tasks.some((item) => item.id === task.id && item.status === "Development Complete")
     );
     const runs = completed.runs.filter((run) => run.taskId === task.id).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     assert.deepEqual(runs.map((run) => run.agentId), [pm.id, programmer.id, reviewer.id]);
+    assert.deepEqual(runs.map((run) => run.modelBackend), ["mock", "mock", "mock"]);
     assert.deepEqual(completed.handoffs.filter((handoff) => handoff.taskId === task.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((handoff) => [handoff.fromAgentId, handoff.toAgentId]), [
       [pm.id, programmer.id],
       [programmer.id, reviewer.id]

@@ -47,19 +47,22 @@ test("application services apply the same validation and mutations for every tra
     assert.equal(createTaskService(project, { title: "Default isolated task" }).useNewWorktree, true);
     const completionGuardTask = createTaskService(project, { title: "Completion guard", status: "Development Complete", useNewWorktree: true });
     assert.throws(() => updateTaskService(project, completionGuardTask.id, { status: "Done" }), /완료 확인 절차/);
-    updateProjectSettings(project.path, { defaultUseNewWorktree: false });
+    updateProjectSettings(project.path, { defaultUseNewWorktree: false, defaultModelBackend: "ollama" });
     const sharedWorkspaceTask = createTaskService(project, { title: "Project default task" });
     assert.equal(sharedWorkspaceTask.useNewWorktree, false);
     assert.equal(sharedWorkspaceTask.workspaceMode, "harness");
+    assert.equal(sharedWorkspaceTask.modelBackend, "ollama");
     const task = createTaskService(project, {
       title: "  Shared task  ",
       status: "Blocked",
+      modelBackend: "codex",
       assigneeAgentId: agent.id,
       dependencyTaskIds: ["dependency", "dependency"],
       labels: ["shared", "shared"],
       linkedFiles: ["src/a.ts", "src/a.ts"]
     });
     assert.equal(task.title, "Shared task");
+    assert.equal(task.modelBackend, "codex");
     assert.deepEqual(task.labels, ["shared"]);
     assert.deepEqual(task.linkedFiles, ["src/a.ts"]);
     assert.match(task.blockedReason || "", /Waiting on dependencies/);

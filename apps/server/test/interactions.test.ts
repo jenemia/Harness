@@ -255,6 +255,7 @@ test("interactions persist all kinds, suspend structured provider runs, recover,
     const approvalTask = createTaskService(project, {
       title: "Create a linked approval",
       assigneeAgentId: approvalAgent.id,
+      modelBackend: "shell",
       status: "Selected",
       workspaceMode: "harness"
     });
