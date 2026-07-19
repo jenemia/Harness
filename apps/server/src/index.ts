@@ -283,6 +283,11 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, await invokeApplicationCommand("drafts:update", { projectId: project.id, draftId: draftMatch[1], ...body }));
         return;
       }
+      const draftReviewMatch = childPath.match(/^drafts\/([^/]+)\/review$/);
+      if (draftReviewMatch && req.method === "POST") {
+        sendJson(res, await invokeApplicationCommand("drafts:request-review", { projectId: project.id, draftId: draftReviewMatch[1] }), 201);
+        return;
+      }
 
       const draftReplyMatch = childPath.match(/^drafts\/([^/]+)\/replies$/);
       if (draftReplyMatch && req.method === "POST") {

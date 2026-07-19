@@ -91,6 +91,7 @@ import {
   decideDraftApply,
   getDraftSnapshot,
   recordDraftApplyAttempt,
+  requestDraftReview,
   recoverDraftReviewRequests,
   replayDraftEvents,
   restoreDraftRevision,
@@ -491,6 +492,10 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "drafts:update": {
       const value = input(payload) as HarnessCommandInputs["drafts:update"];
       return { draft: updateDraftRevision(requiredProject(value.projectId), value.draftId, value) };
+    }
+    case "drafts:request-review": {
+      const value = input(payload) as HarnessCommandInputs["drafts:request-review"];
+      return { review: requestDraftReview(requiredProject(value.projectId), value.draftId) };
     }
     case "drafts:claim-review": {
       const value = input(payload) as HarnessCommandInputs["drafts:claim-review"];
