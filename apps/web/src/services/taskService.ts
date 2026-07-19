@@ -2,6 +2,15 @@ import { api } from "../api/client";
 import type { CommentRecord, PlanResult, Task } from "../api/contracts";
 import { desktopOrHttp } from "../api/desktop";
 
+type TaskStartResponse = { result: { accepted: boolean; reason?: string } };
+
+export function requireAcceptedTaskStart(response: TaskStartResponse) {
+  if (!response.result.accepted) {
+    throw new Error(response.result.reason?.trim() || "Task start was not accepted.");
+  }
+  return response;
+}
+
 export const taskService = {
   createFromPrompt: (projectId: string, prompt: string, autoAssign = true) => desktopOrHttp("tasks:create-from-prompt", { projectId, prompt, autoAssign }, () =>
     api<{ plan: PlanResult }>(`/api/projects/${projectId}/tasks/from-prompt`, {
@@ -20,8 +29,8 @@ export const taskService = {
       method: "PATCH",
       body: JSON.stringify(payload),
     })),
-  start: (projectId: string, taskId: string) => desktopOrHttp("tasks:start", { projectId, taskId }, () =>
-    api(`/api/projects/${projectId}/tasks/${taskId}/start`, { method: "POST" })),
+  start: (projectId: string, taskId: string) => desktopOrHttp<TaskStartResponse, "tasks:start">("tasks:start", { projectId, taskId }, () =>
+    api<TaskStartResponse>(`/api/projects/${projectId}/tasks/${taskId}/start`, { method: "POST" })).then(requireAcceptedTaskStart),
   pause: (projectId: string, taskId: string, reason: string) => desktopOrHttp("tasks:pause", { projectId, taskId, reason }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}/pause`, {
       method: "POST",

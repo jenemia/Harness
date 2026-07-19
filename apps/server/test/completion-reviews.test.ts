@@ -205,6 +205,15 @@ test("completion reports preserve snapshot diffs, review state, inline comments,
     assert.match(remediationStart.reason || "", /dependenc/i);
     assert.doesNotMatch(remediationStart.reason || "", /Review backlog limit/);
 
+    const completedRemediationDb = openProjectDb(project.path);
+    completedRemediationDb.prepare("UPDATE code_review_jobs SET status = 'clean' WHERE id = ?")
+      .run("autoreview-remediation-job");
+    completedRemediationDb.prepare("UPDATE tasks SET dependency_task_ids = '[]' WHERE id = ?").run(queued.id);
+    completedRemediationDb.close();
+    const completedRemediationStart = await startTask(project, queued.id);
+    assert.equal(completedRemediationStart.accepted, false);
+    assert.match(completedRemediationStart.reason || "", /Review backlog limit/);
+
     const fallbackDb = openProjectDb(project.path);
     fallbackDb.prepare("UPDATE completion_reports SET html_path = ? WHERE id = ?").run(path.join(root, "missing.html"), report.id);
     fallbackDb.close();
