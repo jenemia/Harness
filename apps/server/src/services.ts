@@ -602,8 +602,6 @@ function deleteTaskMutation(project: ProjectRecord, taskId: string) {
     const task = mapTask(row);
     const activeRun = db.prepare("SELECT id FROM runs WHERE task_id = ? AND status IN ('running', 'suspended') LIMIT 1").get(taskId);
     if (activeRun) throw new Error("Stop or finish the active task run before deleting the task.");
-    const pendingInteraction = db.prepare("SELECT id FROM interactions WHERE task_id = ? AND status = 'pending' LIMIT 1").get(taskId);
-    if (pendingInteraction) throw new Error("Resolve pending task interactions before deleting the task.");
     const activeReview = db.prepare("SELECT id FROM code_review_jobs WHERE task_id = ? AND status IN ('queued', 'running') LIMIT 1").get(taskId);
     if (activeReview) throw new Error("Finish the active code review before deleting the task.");
     const activePreview = db.prepare("SELECT id FROM previews WHERE task_id = ? AND (status IN ('booting', 'live') OR pid IS NOT NULL) LIMIT 1").get(taskId);
@@ -614,6 +612,7 @@ function deleteTaskMutation(project: ProjectRecord, taskId: string) {
 
     db.exec("BEGIN IMMEDIATE");
     try {
+      resolvePendingTaskInteractionsForDeletion(db, taskId);
       const otherTasks = db.prepare("SELECT * FROM tasks WHERE id != ?").all(taskId).map(mapTask);
       const updateReferences = db.prepare(`
         UPDATE tasks SET parent_task_id = ?, dependency_task_ids = ?, waived_dependency_task_ids = ?,
@@ -652,6 +651,24 @@ function deleteTaskMutation(project: ProjectRecord, taskId: string) {
   } finally {
     db.close();
   }
+}
+
+function resolvePendingTaskInteractionsForDeletion(db: ReturnType<typeof openProjectDb>, taskId: string) {
+  const timestamp = now();
+  db.prepare(`
+    UPDATE approvals
+    SET status = 'rejected', decided_at = ?
+    WHERE task_id = ? AND status = 'pending'
+  `).run(timestamp, taskId);
+  db.prepare(`
+    UPDATE interactions
+    SET status = 'rejected',
+        response_payload = ?,
+        response_key = COALESCE(response_key, 'task-deletion:' || id),
+        resume_state = 'none',
+        resolved_at = ?
+    WHERE task_id = ? AND status = 'pending'
+  `).run(JSON.stringify({ reason: "Task deleted by the user." }), timestamp, taskId);
 }
 
 function createTaskCommentMutation(

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { getProject, openProjectDb, updateProjectSettings } from "../src/db.js";
+import { createApprovalRecordInDb } from "../src/interactions.js";
 import { getProjectOverview } from "../src/overview-repository.js";
 import {
   createAgentService,
@@ -141,6 +142,20 @@ test("task deletion removes task history and clears parent and dependency refere
     });
     createTaskCommentService(project, target.id, { author: "human", body: "Delete this history too." });
     decomposeTaskService(project, target.id, { text: "- First goal\n- Second goal", mode: "sequential" });
+    const agent = createAgentService(project, { name: "Delete interaction agent" });
+    const interactionDb = openProjectDb(project.path);
+    const approvalId = "delete-task-approval";
+    const interactionId = createApprovalRecordInDb(interactionDb, {
+      approvalId,
+      taskId: target.id,
+      agentId: agent.id,
+      approvalKind: "command_execution",
+      reason: "Pending approval should not prevent task deletion.",
+      commandPreview: "echo test",
+      createdAt: new Date().toISOString()
+    });
+    assert.equal(interactionDb.prepare("SELECT status FROM interactions WHERE id = ?").get(interactionId)?.status, "pending");
+    interactionDb.close();
 
     assert.deepEqual(deleteTaskService(project, target.id), { removed: true, taskId: target.id });
     const overview = getProjectOverview(project);
@@ -152,6 +167,10 @@ test("task deletion removes task history and clears parent and dependency refere
     assert.deepEqual(overview.tasks.find((task) => task.id === dependent.id)?.waivedDependencyTaskIds, []);
     assert.equal(overview.tasks.find((task) => task.id === dependent.id)?.status, "Selected");
     assert.equal(overview.tasks.find((task) => task.id === dependent.id)?.blockedReason, null);
+    const deletionDb = openProjectDb(project.path);
+    assert.equal(deletionDb.prepare("SELECT id FROM interactions WHERE id = ?").get(interactionId), undefined);
+    assert.equal(deletionDb.prepare("SELECT id FROM approvals WHERE id = ?").get(approvalId), undefined);
+    deletionDb.close();
     assert.throws(() => deleteTaskService(project, target.id), /Task not found/);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
