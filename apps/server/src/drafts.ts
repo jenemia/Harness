@@ -155,6 +155,10 @@ export function requestDraftReview(project: ProjectRecord, draftId: string, sche
     try {
       const session = requiredDraftSession(db, draftId);
       if (session.status !== "open") throw new Error("Only open drafts can be reviewed.");
+      const revision = mapDraftRevision(db.prepare(
+        "SELECT * FROM draft_revisions WHERE draft_id = ? AND revision = ?"
+      ).get(draftId, session.currentRevision));
+      if (!revision.content.trim()) throw new Error("Draft content is required before requesting a review.");
       const reviewers = db.prepare("SELECT * FROM draft_reviewers WHERE draft_id = ? AND role = 'planner'").all(draftId).map(mapDraftReviewer);
       if (!reviewers.length) throw new Error("This draft has no Planner reviewer.");
       const requests = reviewers.flatMap((reviewer) =>

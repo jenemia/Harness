@@ -401,7 +401,7 @@ export function TaskPromptModal(props: {
             <div className="draft-review-heading">
               <div><span className="modal-kicker">{t("draft.discussion")}</span><h3>{t("draft.discussPlanner")}</h3></div>
               <div className="draft-review-heading-actions">
-                <button className="primary-button compact" disabled={!snapshot || isRequestingReview} type="button" onClick={() => void requestReview()}>
+                <button className="primary-button compact" disabled={!snapshot || !prompt.trim() || isRequestingReview} type="button" onClick={() => void requestReview()}>
                   <Sparkles size={14} /> {t("draft.requestReview")}
                 </button>
                 <button className="secondary-button compact" type="button" disabled={!latestPlannerComment} onClick={applyLatestPlan}>

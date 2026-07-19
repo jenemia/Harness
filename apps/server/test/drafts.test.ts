@@ -219,6 +219,31 @@ test("draft edits do not start Planner reviews until explicitly requested", () =
   }
 });
 
+test("empty drafts cannot request a Planner review", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-empty-draft-review-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  let projectPath = "";
+  let draftId = "";
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: false });
+    projectPath = project.path;
+    const created = createDraftSession(project, { reviewers: [{ role: "planner" }] });
+    draftId = created.session.id;
+
+    assert.throws(
+      () => requestDraftReview(project, draftId),
+      /Draft content is required before requesting a review/
+    );
+    assert.equal(getDraftSnapshot(project, draftId).requests.length, 0);
+  } finally {
+    if (projectPath) cancelDraftReviewTimers(projectPath, draftId || undefined);
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("legacy draft review request uniqueness migrates to support reply turns", () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-draft-migration-"));
   const previousHome = process.env.HARNESS_HOME;
