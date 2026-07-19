@@ -110,6 +110,7 @@ import { recoverPreviewProcesses, restartPreview, startPreview, stopPreview } fr
 import { listCodeReviews, retryCodeReview, startCodeReviewRuntime, updateCodeReviewFinding } from "./code-reviews.js";
 import { openPreviewTarget } from "./preview-opener.js";
 import { createChatSession, getChatSession, listChatSessions, sendChatMessage } from "./chat.js";
+import { materializeDueRoutines } from "./routines.js";
 
 ensureDraftReviewAgentRuntime();
 
@@ -218,7 +219,8 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     }
     case "projects:schedule": {
       const project = requiredProject(input(payload).projectId);
-      return { schedule: await startReadyTasks(project), overview: getProjectOverview(project) };
+      const routines = materializeDueRoutines(project);
+      return { routines, schedule: await startReadyTasks(project), overview: getProjectOverview(project) };
     }
     case "providers:list": return listRuntimeProviders();
     case "providers:probe": {

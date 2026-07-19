@@ -15,6 +15,7 @@ import { startCodeReviewRuntime } from "./code-reviews.js";
 import { ensureDraftReviewAgentRuntime } from "./draft-review-agents.js";
 import { invokeApplicationCommand } from "./application.js";
 import { initializeTelemetry, shutdownTelemetry, withTelemetrySpan } from "./telemetry.js";
+import { materializeDueRoutines } from "./routines.js";
 import type {
   AgentTemplateRecord,
   ProjectTemplateRecord,
@@ -703,6 +704,11 @@ const server = http.createServer(async (req, res) => {
 initializeTelemetry();
 ensureDraftReviewAgentRuntime();
 await recoverRegisteredProjects();
+setInterval(() => {
+  for (const project of listProjects()) {
+    try { materializeDueRoutines(project); } catch (error) { console.error(`Failed to materialize routines for ${project.name}: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+}, 60_000).unref();
 
 server.listen(port, () => {
   console.log(`Harness server listening on http://localhost:${port}`);
