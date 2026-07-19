@@ -600,38 +600,56 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
 }
 
 async function deleteTaskMutation(project: ProjectRecord, taskId: string) {
-  const initialDb = openProjectDb(project.path);
-  let task: TaskRecord;
-  try {
-    const row = initialDb.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
-    if (!row) throw new Error("Task not found.");
-    task = mapTask(row);
-    const activeRun = initialDb.prepare("SELECT id FROM runs WHERE task_id = ? AND status IN ('running', 'suspended') LIMIT 1").get(taskId);
-    if (activeRun) throw new Error("Stop or finish the active task run before deleting the task.");
-    const activeReview = initialDb.prepare("SELECT id FROM code_review_jobs WHERE task_id = ? AND status IN ('queued', 'running') LIMIT 1").get(taskId);
-    if (activeReview) throw new Error("Finish the active code review before deleting the task.");
-    const activePreview = initialDb.prepare("SELECT id FROM previews WHERE task_id = ? AND (status IN ('booting', 'live') OR pid IS NOT NULL) LIMIT 1").get(taskId);
-    if (activePreview) throw new Error("Stop active task previews before deleting the task.");
-  } finally {
-    initialDb.close();
-  }
+  const result = await deleteTasksMutation(project, [taskId]);
+  return { removed: true, taskId: result.taskIds[0] };
+}
 
-  await removeTaskWorktreeForDeletion(project, task);
+async function deleteCompletedTasksMutation(project: ProjectRecord) {
+  const db = openProjectDb(project.path);
+  let taskIds: string[];
+  try {
+    taskIds = (db.prepare("SELECT id FROM tasks WHERE status = 'Done' ORDER BY created_at, id").all() as Array<{ id: string }>).map((task) => task.id);
+  } finally {
+    db.close();
+  }
+  return deleteTasksMutation(project, taskIds, { requireDoneStatus: true });
+}
+
+async function deleteTasksMutation(
+  project: ProjectRecord,
+  taskIds: string[],
+  options: { requireDoneStatus?: boolean } = {}
+) {
+  if (taskIds.length === 0) return { removedCount: 0, taskIds: [] };
+  let tasks = readTasksForDeletion(project, taskIds, options.requireDoneStatus);
+
+  for (const task of tasks) await validateTaskWorktreeForDeletion(task);
+  // Worktree checks can be slow. Refresh candidates so a task reopened while
+  // waiting cannot be removed as part of the completed-only operation.
+  tasks = readTasksForDeletion(project, taskIds, options.requireDoneStatus);
+  for (const task of tasks) {
+    if (await removeTaskWorktreeForDeletion(project, task)) {
+      clearRemovedTaskWorktreePath(project, task.id);
+    }
+  }
 
   const db = openProjectDb(project.path);
   try {
     db.exec("BEGIN IMMEDIATE");
     try {
-      resolvePendingTaskInteractionsForDeletion(db, taskId);
-      const otherTasks = db.prepare("SELECT * FROM tasks WHERE id != ?").all(taskId).map(mapTask);
+      readTasksForDeletionFromDb(db, taskIds, options.requireDoneStatus);
+      const taskIdSet = new Set(taskIds);
+      for (const taskId of taskIds) resolvePendingTaskInteractionsForDeletion(db, taskId);
+      const placeholders = taskIds.map(() => "?").join(", ");
+      const otherTasks = db.prepare(`SELECT * FROM tasks WHERE id NOT IN (${placeholders})`).all(...taskIds).map(mapTask);
       const updateReferences = db.prepare(`
         UPDATE tasks SET parent_task_id = ?, dependency_task_ids = ?, waived_dependency_task_ids = ?,
           status = ?, blocked_reason = ?, updated_at = ? WHERE id = ?
       `);
       for (const other of otherTasks) {
-        const parentTaskId = other.parentTaskId === taskId ? null : other.parentTaskId;
-        const dependencyTaskIds = other.dependencyTaskIds.filter((id) => id !== taskId);
-        const waivedDependencyTaskIds = other.waivedDependencyTaskIds.filter((id) => id !== taskId);
+        const parentTaskId = other.parentTaskId && taskIdSet.has(other.parentTaskId) ? null : other.parentTaskId;
+        const dependencyTaskIds = other.dependencyTaskIds.filter((id) => !taskIdSet.has(id));
+        const waivedDependencyTaskIds = other.waivedDependencyTaskIds.filter((id) => !taskIdSet.has(id));
         const dependencyRemoved = dependencyTaskIds.length !== other.dependencyTaskIds.length;
         const status = dependencyRemoved && dependencyTaskIds.length === 0 && other.status === "Blocked" ? "Selected" : other.status;
         const blockedReason = status === "Selected" ? null : other.blockedReason;
@@ -641,43 +659,86 @@ async function deleteTaskMutation(project: ProjectRecord, taskId: string) {
         }
       }
 
-      db.prepare("UPDATE inline_review_comments SET follow_up_task_id = NULL, updated_at = ? WHERE follow_up_task_id = ? AND task_id != ?")
-        .run(now(), taskId, taskId);
-      db.prepare("UPDATE agents SET status = 'idle', current_task_id = NULL, updated_at = ? WHERE current_task_id = ?").run(now(), taskId);
+      db.prepare(`UPDATE inline_review_comments SET follow_up_task_id = NULL, updated_at = ? WHERE follow_up_task_id IN (${placeholders}) AND task_id NOT IN (${placeholders})`)
+        .run(now(), ...taskIds, ...taskIds);
+      db.prepare(`UPDATE agents SET status = 'idle', current_task_id = NULL, updated_at = ? WHERE current_task_id IN (${placeholders})`).run(now(), ...taskIds);
       for (const table of [
         "workspace_policy_audits", "code_review_findings", "code_review_jobs", "inline_review_comments",
         "run_file_reviews", "completion_reports", "interactions", "previews", "approvals", "task_goals",
         "comments", "handoffs", "provider_events", "runs", "events"
       ]) {
-        db.prepare(`DELETE FROM ${table} WHERE task_id = ?`).run(taskId);
+        db.prepare(`DELETE FROM ${table} WHERE task_id IN (${placeholders})`).run(...taskIds);
       }
-      db.prepare("DELETE FROM tasks WHERE id = ?").run(taskId);
+      db.prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`).run(...taskIds);
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;
     }
-    return { removed: true, taskId };
+    return { removedCount: taskIds.length, taskIds };
   } finally {
     db.close();
   }
 }
 
-async function removeTaskWorktreeForDeletion(project: ProjectRecord, task: TaskRecord) {
+function readTasksForDeletion(project: ProjectRecord, taskIds: string[], requireDoneStatus?: boolean) {
+  const db = openProjectDb(project.path);
+  try {
+    return readTasksForDeletionFromDb(db, taskIds, requireDoneStatus);
+  } finally {
+    db.close();
+  }
+}
+
+function readTasksForDeletionFromDb(
+  db: ReturnType<typeof openProjectDb>,
+  taskIds: string[],
+  requireDoneStatus?: boolean
+) {
+  const placeholders = taskIds.map(() => "?").join(", ");
+  const taskRows = db.prepare(`SELECT * FROM tasks WHERE id IN (${placeholders})`).all(...taskIds).map(mapTask);
+  const tasksById = new Map(taskRows.map((task) => [task.id, task]));
+  const tasks = taskIds.map((taskId) => tasksById.get(taskId)).filter((task): task is TaskRecord => Boolean(task));
+  if (tasks.length !== taskIds.length) throw new Error("Task not found.");
+  if (requireDoneStatus && tasks.some((task) => task.status !== "Done")) {
+    throw new Error("Only completed tasks can be deleted in bulk.");
+  }
+  for (const task of tasks) validateTaskDeletion(db, task.id);
+  return tasks;
+}
+
+function validateTaskDeletion(db: ReturnType<typeof openProjectDb>, taskId: string) {
+  const activeRun = db.prepare("SELECT id FROM runs WHERE task_id = ? AND status IN ('running', 'suspended') LIMIT 1").get(taskId);
+  if (activeRun) throw new Error("Stop or finish the active task run before deleting the task.");
+  const activeReview = db.prepare("SELECT id FROM code_review_jobs WHERE task_id = ? AND status IN ('queued', 'running') LIMIT 1").get(taskId);
+  if (activeReview) throw new Error("Finish the active code review before deleting the task.");
+  const activePreview = db.prepare("SELECT id FROM previews WHERE task_id = ? AND (status IN ('booting', 'live') OR pid IS NOT NULL) LIMIT 1").get(taskId);
+  if (activePreview) throw new Error("Stop active task previews before deleting the task.");
+}
+
+async function validateTaskWorktreeForDeletion(task: TaskRecord) {
   if (task.workspaceMode !== "worktree" || !task.worktreePath) return;
   if (existsSync(task.worktreePath)) {
     const dirty = await serviceProviders.workspace().workingTreeStatus(task.worktreePath);
     if (dirty.trim()) {
       throw new Error("Task worktree has uncommitted changes. Commit or discard them before deleting the task.");
     }
-    const removed = await serviceProviders.workspace().removeWorktree(project.path, task.worktreePath);
-    if (!removed.ok) {
-      throw new Error(removed.stderr || removed.stdout || "Could not remove task worktree.");
-    }
   }
+}
+
+async function removeTaskWorktreeForDeletion(project: ProjectRecord, task: TaskRecord) {
+  if (task.workspaceMode !== "worktree" || !task.worktreePath || !existsSync(task.worktreePath)) return false;
+  const removed = await serviceProviders.workspace().removeWorktree(project.path, task.worktreePath);
+  if (!removed.ok) {
+    throw new Error(removed.stderr || removed.stdout || "Could not remove task worktree.");
+  }
+  return true;
+}
+
+function clearRemovedTaskWorktreePath(project: ProjectRecord, taskId: string) {
   const db = openProjectDb(project.path);
   try {
-    db.prepare("UPDATE tasks SET worktree_path = NULL, updated_at = ? WHERE id = ?").run(now(), task.id);
+    db.prepare("UPDATE tasks SET worktree_path = NULL, updated_at = ? WHERE id = ?").run(now(), taskId);
   } finally {
     db.close();
   }
@@ -911,6 +972,7 @@ export const cloneAgentService = projectMutation(cloneAgentMutation);
 export const archiveAgentService = projectMutation(archiveAgentMutation);
 export const createTaskService = projectMutation(createTaskMutation);
 export const deleteTaskService = asyncProjectMutation(deleteTaskMutation);
+export const deleteCompletedTasksService = asyncProjectMutation(deleteCompletedTasksMutation);
 export const updateTaskService = projectMutation(updateTaskMutation);
 export const createTaskCommentService = projectMutation(createTaskCommentMutation);
 export const decomposeTaskService = projectMutation(decomposeTaskMutation);

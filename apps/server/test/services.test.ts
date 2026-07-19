@@ -13,6 +13,7 @@ import {
   createMemoryService,
   createTaskCommentService,
   createTaskService,
+  deleteCompletedTasksService,
   deleteTaskService,
   decomposeTaskService,
   registerProjectService,
@@ -220,6 +221,28 @@ test("task deletion removes task history and clears parent and dependency refere
   }
 });
 
+test("completed task deletion removes all Done tasks while preserving other statuses", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-delete-completed-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: false });
+    const doneOne = createTaskService(project, { title: "Done one", status: "Done", autoAssign: false, workspaceMode: "harness" });
+    const doneTwo = createTaskService(project, { title: "Done two", status: "Done", autoAssign: false, workspaceMode: "harness" });
+    const active = createTaskService(project, { title: "Keep me", status: "Selected", dependencyTaskIds: [doneOne.id, doneTwo.id], autoAssign: false, workspaceMode: "harness" });
+
+    assert.deepEqual(await deleteCompletedTasksService(project), { removedCount: 2, taskIds: [doneOne.id, doneTwo.id] });
+    const overview = getProjectOverview(project);
+    assert.deepEqual(overview.tasks.map((task) => task.id), [active.id]);
+    assert.deepEqual(overview.tasks[0].dependencyTaskIds, []);
+    assert.deepEqual(await deleteCompletedTasksService(project), { removedCount: 0, taskIds: [] });
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("task deletion removes clean worktrees, tolerates stale paths, and preserves unsafe worktrees", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-delete-worktree-"));
   const previousHome = process.env.HARNESS_HOME;
@@ -261,6 +284,43 @@ test("task deletion removes clean worktrees, tolerates stale paths, and preserve
     const lockedDb = openProjectDb(project.path);
     assert.equal(lockedDb.prepare("SELECT worktree_path FROM tasks WHERE id = ?").get(locked.taskId)?.worktree_path, locked.worktreePath);
     lockedDb.close();
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("completed task deletion clears earlier worktree paths when a later removal fails", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-delete-completed-worktrees-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const projectPath = path.join(root, "project");
+    mkdirSync(projectPath, { recursive: true });
+    git(projectPath, ["init", "-b", "main"]);
+    git(projectPath, ["config", "user.name", "Harness Test"]);
+    git(projectPath, ["config", "user.email", "harness@test.local"]);
+    writeFileSync(path.join(projectPath, "README.md"), "baseline\n");
+    git(projectPath, ["add", "README.md"]);
+    git(projectPath, ["commit", "-m", "baseline"]);
+    const { project } = registerProjectService({ path: projectPath, seedDefaults: false });
+    const clean = createWorktreeTask(project, "First completed worktree", "first-completed");
+    const locked = createWorktreeTask(project, "Second completed worktree", "second-completed");
+    const db = openProjectDb(project.path);
+    db.prepare("UPDATE tasks SET status = 'Done', created_at = ? WHERE id = ?").run("2026-01-01T00:00:00.000Z", clean.taskId);
+    db.prepare("UPDATE tasks SET status = 'Done', created_at = ? WHERE id = ?").run("2026-01-01T00:00:01.000Z", locked.taskId);
+    db.close();
+    git(projectPath, ["worktree", "lock", locked.worktreePath]);
+
+    await assert.rejects(deleteCompletedTasksService(project), /locked working tree/i);
+
+    const resultDb = openProjectDb(project.path);
+    assert.equal(resultDb.prepare("SELECT worktree_path FROM tasks WHERE id = ?").get(clean.taskId)?.worktree_path, null);
+    assert.equal(resultDb.prepare("SELECT worktree_path FROM tasks WHERE id = ?").get(locked.taskId)?.worktree_path, locked.worktreePath);
+    resultDb.close();
+    assert.equal(existsSync(clean.worktreePath), false);
+    assert.equal(existsSync(locked.worktreePath), true);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
