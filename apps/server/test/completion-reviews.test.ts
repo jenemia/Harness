@@ -178,6 +178,33 @@ test("completion reports preserve snapshot diffs, review state, inline comments,
     assert.equal(blockedStart.accepted, false);
     assert.match(blockedStart.reason || "", /Review backlog limit/);
 
+    const remediationDb = openProjectDb(project.path);
+    const remediationGoalId = "autoreview-remediation-goal";
+    const timestamp = new Date().toISOString();
+    remediationDb.prepare(`
+      INSERT INTO task_goals (
+        id, task_id, title, description, acceptance_criteria, assignee_agent_id,
+        status, goal_order, completed_run_id, created_at, updated_at
+      ) VALUES (?, ?, ?, '', '', ?, 'queued', 0, NULL, ?, ?)
+    `).run(remediationGoalId, queued.id, "Address autoreview finding", agent.id, timestamp, timestamp);
+    remediationDb.prepare(`
+      INSERT INTO code_review_jobs (
+        id, task_id, source_run_id, source_agent_id, reviewer_agent_id, commit_sha,
+        base_sha, head_sha, status, remediation_goal_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'findings', ?, ?, ?)
+    `).run(
+      "autoreview-remediation-job", queued.id, "completed-run", agent.id, agent.id,
+      "autoreview-remediation-commit", snapshotRef, completionRef, remediationGoalId, timestamp, timestamp,
+    );
+    remediationDb.prepare("UPDATE tasks SET dependency_task_ids = ? WHERE id = ?")
+      .run(JSON.stringify(["missing-dependency"]), queued.id);
+    remediationDb.close();
+
+    const remediationStart = await startTask(project, queued.id);
+    assert.equal(remediationStart.accepted, false);
+    assert.match(remediationStart.reason || "", /dependenc/i);
+    assert.doesNotMatch(remediationStart.reason || "", /Review backlog limit/);
+
     const fallbackDb = openProjectDb(project.path);
     fallbackDb.prepare("UPDATE completion_reports SET html_path = ? WHERE id = ?").run(path.join(root, "missing.html"), report.id);
     fallbackDb.close();

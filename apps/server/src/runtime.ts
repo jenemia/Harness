@@ -2462,13 +2462,25 @@ function hasProjectCapacity(db: DatabaseSync, projectPath: string, settings: Pro
 }
 
 function getReviewCapacityBlocker(db: DatabaseSync, task: TaskRecord, settings: ProjectSettings) {
-  if (task.labels.includes("review-follow-up")) return null;
+  if (task.labels.includes("review-follow-up") || hasPendingAutoreviewRemediation(db, task.id)) return null;
   const row = db.prepare(`
     SELECT COUNT(DISTINCT task_id) AS cards, COALESCE(SUM(additions + deletions), 0) AS lines
     FROM run_file_reviews WHERE status = 'unreviewed'
   `).get() as { cards: number; lines: number };
   if (row.cards < settings.maxReviewBacklog && row.lines < settings.maxUnreviewedDiffLines) return null;
   return `Review backlog limit reached (${row.cards} cards / ${row.lines} unreviewed lines).`;
+}
+
+function hasPendingAutoreviewRemediation(db: DatabaseSync, taskId: string) {
+  return Boolean(db.prepare(`
+    SELECT 1
+    FROM code_review_jobs AS job
+    JOIN task_goals AS goal ON goal.id = job.remediation_goal_id
+    WHERE job.task_id = ?
+      AND job.status = 'findings'
+      AND goal.status IN ('queued', 'active')
+    LIMIT 1
+  `).get(taskId));
 }
 
 function getAgentLoad(db: DatabaseSync, agentId: string) {
