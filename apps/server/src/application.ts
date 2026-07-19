@@ -567,7 +567,7 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const value = input(payload) as HarnessCommandInputs["tasks:delete"];
       const project = requiredProject(value.projectId);
       if (isTaskExecutionActive(value.taskId)) throw new Error("Stop or finish the active task run before deleting the task.");
-      return { result: deleteTaskService(project, value.taskId), overview: getProjectOverview(project) };
+      return { result: await deleteTaskService(project, value.taskId), overview: getProjectOverview(project) };
     }
     case "tasks:update": {
       const value = input(payload) as HarnessCommandInputs["tasks:update"];

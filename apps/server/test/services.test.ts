@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -21,6 +22,7 @@ import {
   updateTaskService
 } from "../src/services.js";
 import { activateNextTaskGoal } from "../src/task-goals.js";
+import type { ProjectRecord } from "../src/types.js";
 
 test("application services apply the same validation and mutations for every transport", () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-services-"));
@@ -124,7 +126,7 @@ test("application services apply the same validation and mutations for every tra
   }
 });
 
-test("task deletion removes task history and clears parent and dependency references", () => {
+test("task deletion removes task history and clears parent and dependency references", async () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-delete-task-"));
   const previousHome = process.env.HARNESS_HOME;
   process.env.HARNESS_HOME = path.join(root, "home");
@@ -173,7 +175,7 @@ test("task deletion removes task history and clears parent and dependency refere
     `);
     interactionDb.close();
 
-    assert.deepEqual(deleteTaskService(project, target.id), { removed: true, taskId: target.id });
+    assert.deepEqual(await deleteTaskService(project, target.id), { removed: true, taskId: target.id });
     const overview = getProjectOverview(project);
     assert.equal(overview.tasks.some((task) => task.id === target.id), false);
     assert.equal(overview.comments.some((comment) => comment.taskId === target.id), false);
@@ -188,10 +190,80 @@ test("task deletion removes task history and clears parent and dependency refere
     assert.equal(deletionDb.prepare("SELECT id FROM interactions WHERE id = ?").get(questionInteraction.id), undefined);
     assert.equal(deletionDb.prepare("SELECT id FROM approvals WHERE id = ?").get(approvalId), undefined);
     deletionDb.close();
-    assert.throws(() => deleteTaskService(project, target.id), /Task not found/);
+    await assert.rejects(deleteTaskService(project, target.id), /Task not found/);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("task deletion removes clean worktrees, tolerates stale paths, and preserves unsafe worktrees", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-delete-worktree-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const projectPath = path.join(root, "project");
+    mkdirSync(projectPath, { recursive: true });
+    git(projectPath, ["init", "-b", "main"]);
+    git(projectPath, ["config", "user.name", "Harness Test"]);
+    git(projectPath, ["config", "user.email", "harness@test.local"]);
+    writeFileSync(path.join(projectPath, "README.md"), "baseline\n");
+    git(projectPath, ["add", "README.md"]);
+    git(projectPath, ["commit", "-m", "baseline"]);
+    const { project } = registerProjectService({ path: projectPath, seedDefaults: false });
+
+    const clean = createWorktreeTask(project, "Clean worktree", "clean");
+    assert.equal(existsSync(clean.worktreePath), true);
+    assert.deepEqual(await deleteTaskService(project, clean.taskId), { removed: true, taskId: clean.taskId });
+    assert.equal(existsSync(clean.worktreePath), false);
+    assert.equal(git(projectPath, ["branch", "--list", clean.branchName]).includes(clean.branchName), true);
+
+    const stale = createTaskService(project, { title: "Stale worktree", autoAssign: false, workspaceMode: "worktree" });
+    const stalePath = path.join(projectPath, ".harness", "worktrees", "already-removed");
+    setTaskWorktree(project.path, stale.id, "test/stale", stalePath);
+    assert.equal(existsSync(stalePath), false);
+    assert.deepEqual(await deleteTaskService(project, stale.id), { removed: true, taskId: stale.id });
+
+    const dirty = createWorktreeTask(project, "Dirty worktree", "dirty");
+    writeFileSync(path.join(dirty.worktreePath, "dirty.txt"), "not committed\n");
+    await assert.rejects(deleteTaskService(project, dirty.taskId), /uncommitted changes/);
+    assert.equal(existsSync(dirty.worktreePath), true);
+    const dirtyDb = openProjectDb(project.path);
+    assert.ok(dirtyDb.prepare("SELECT id FROM tasks WHERE id = ?").get(dirty.taskId));
+    dirtyDb.close();
+
+    const locked = createWorktreeTask(project, "Locked worktree", "locked");
+    git(projectPath, ["worktree", "lock", locked.worktreePath]);
+    await assert.rejects(deleteTaskService(project, locked.taskId), /locked working tree/i);
+    const lockedDb = openProjectDb(project.path);
+    assert.equal(lockedDb.prepare("SELECT worktree_path FROM tasks WHERE id = ?").get(locked.taskId)?.worktree_path, locked.worktreePath);
+    lockedDb.close();
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function createWorktreeTask(project: ProjectRecord, title: string, suffix: string) {
+  const projectPath = project.path;
+  const task = createTaskService(project, { title, autoAssign: false, workspaceMode: "worktree" });
+  const branchName = `test/${suffix}`;
+  const worktreePath = path.join(projectPath, ".harness", "worktrees", task.id);
+  mkdirSync(path.dirname(worktreePath), { recursive: true });
+  git(projectPath, ["worktree", "add", "-b", branchName, worktreePath]);
+  setTaskWorktree(projectPath, task.id, branchName, worktreePath);
+  return { taskId: task.id, branchName, worktreePath };
+}
+
+function setTaskWorktree(projectPath: string, taskId: string, branchName: string, worktreePath: string) {
+  const db = openProjectDb(projectPath);
+  db.prepare("UPDATE tasks SET branch_name = ?, worktree_path = ?, workspace_mode = 'worktree', use_new_worktree = 1 WHERE id = ?")
+    .run(branchName, worktreePath, taskId);
+  db.close();
+}
+
+function git(cwd: string, args: string[]) {
+  return execFileSync("git", args, { cwd, encoding: "utf8" });
+}

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
   getProjectSettings,
@@ -15,6 +15,7 @@ import {
   nextTaskOrder,
   now,
   openProjectDb,
+  projectHarnessDir,
   registerProject,
   seedDefaultAgents,
   seedProjectFromTemplate,
@@ -24,7 +25,8 @@ import {
 import { getProjectOverview } from "./overview-repository.js";
 import { parseWorkspaceModeOption, resolveTaskWorkspaceMode } from "./workspace-mode.js";
 import { openLocalFolder } from "./folder-opener.js";
-import { withProjectWriterLock } from "./project-store.js";
+import { withProjectWriterLock, withProjectWriterLockAsync } from "./project-store.js";
+import { createDefaultProviders } from "./providers.js";
 import {
   archiveAgentDefinition,
   cloneAgentDefinition,
@@ -44,6 +46,8 @@ import {
 } from "./agent-store.js";
 import type { AgentRecord, ProjectRecord, TaskRecord, TaskStatus } from "./types.js";
 import { activateNextTaskGoal, activeTaskGoal, appendTaskGoals, listTaskGoals, recordTaskHandoff } from "./task-goals.js";
+
+const serviceProviders = createDefaultProviders(projectHarnessDir);
 
 export type RegisterProjectInput = {
   path: string;
@@ -594,22 +598,27 @@ function updateTaskMutation(project: ProjectRecord, taskId: string, input: Parti
   }
 }
 
-function deleteTaskMutation(project: ProjectRecord, taskId: string) {
+async function deleteTaskMutation(project: ProjectRecord, taskId: string) {
+  const initialDb = openProjectDb(project.path);
+  let task: TaskRecord;
+  try {
+    const row = initialDb.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    if (!row) throw new Error("Task not found.");
+    task = mapTask(row);
+    const activeRun = initialDb.prepare("SELECT id FROM runs WHERE task_id = ? AND status IN ('running', 'suspended') LIMIT 1").get(taskId);
+    if (activeRun) throw new Error("Stop or finish the active task run before deleting the task.");
+    const activeReview = initialDb.prepare("SELECT id FROM code_review_jobs WHERE task_id = ? AND status IN ('queued', 'running') LIMIT 1").get(taskId);
+    if (activeReview) throw new Error("Finish the active code review before deleting the task.");
+    const activePreview = initialDb.prepare("SELECT id FROM previews WHERE task_id = ? AND (status IN ('booting', 'live') OR pid IS NOT NULL) LIMIT 1").get(taskId);
+    if (activePreview) throw new Error("Stop active task previews before deleting the task.");
+  } finally {
+    initialDb.close();
+  }
+
+  await removeTaskWorktreeForDeletion(project, task);
+
   const db = openProjectDb(project.path);
   try {
-    const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
-    if (!row) throw new Error("Task not found.");
-    const task = mapTask(row);
-    const activeRun = db.prepare("SELECT id FROM runs WHERE task_id = ? AND status IN ('running', 'suspended') LIMIT 1").get(taskId);
-    if (activeRun) throw new Error("Stop or finish the active task run before deleting the task.");
-    const activeReview = db.prepare("SELECT id FROM code_review_jobs WHERE task_id = ? AND status IN ('queued', 'running') LIMIT 1").get(taskId);
-    if (activeReview) throw new Error("Finish the active code review before deleting the task.");
-    const activePreview = db.prepare("SELECT id FROM previews WHERE task_id = ? AND (status IN ('booting', 'live') OR pid IS NOT NULL) LIMIT 1").get(taskId);
-    if (activePreview) throw new Error("Stop active task previews before deleting the task.");
-    if (task.workspaceMode === "worktree" && task.worktreePath) {
-      throw new Error("Remove the task worktree before deleting the task.");
-    }
-
     db.exec("BEGIN IMMEDIATE");
     try {
       resolvePendingTaskInteractionsForDeletion(db, taskId);
@@ -648,6 +657,26 @@ function deleteTaskMutation(project: ProjectRecord, taskId: string) {
       throw error;
     }
     return { removed: true, taskId };
+  } finally {
+    db.close();
+  }
+}
+
+async function removeTaskWorktreeForDeletion(project: ProjectRecord, task: TaskRecord) {
+  if (task.workspaceMode !== "worktree" || !task.worktreePath) return;
+  if (existsSync(task.worktreePath)) {
+    const dirty = await serviceProviders.workspace().workingTreeStatus(task.worktreePath);
+    if (dirty.trim()) {
+      throw new Error("Task worktree has uncommitted changes. Commit or discard them before deleting the task.");
+    }
+    const removed = await serviceProviders.workspace().removeWorktree(project.path, task.worktreePath);
+    if (!removed.ok) {
+      throw new Error(removed.stderr || removed.stdout || "Could not remove task worktree.");
+    }
+  }
+  const db = openProjectDb(project.path);
+  try {
+    db.prepare("UPDATE tasks SET worktree_path = NULL, updated_at = ? WHERE id = ?").run(now(), task.id);
   } finally {
     db.close();
   }
@@ -863,6 +892,13 @@ function projectMutation<TArgs extends unknown[], TResult>(
     withProjectWriterLock(project.path, () => operation(project, ...args));
 }
 
+function asyncProjectMutation<TArgs extends unknown[], TResult>(
+  operation: (project: ProjectRecord, ...args: TArgs) => Promise<TResult>
+) {
+  return (project: ProjectRecord, ...args: TArgs) =>
+    withProjectWriterLockAsync(project.path, () => operation(project, ...args));
+}
+
 export const createAgentService = projectMutation(createAgentMutation);
 export const updateAgentService = projectMutation(updateAgentMutation);
 export const saveAgentRawService = projectMutation(saveAgentRawMutation);
@@ -873,7 +909,7 @@ export const reorderAgentInstructionsService = projectMutation(reorderAgentInstr
 export const cloneAgentService = projectMutation(cloneAgentMutation);
 export const archiveAgentService = projectMutation(archiveAgentMutation);
 export const createTaskService = projectMutation(createTaskMutation);
-export const deleteTaskService = projectMutation(deleteTaskMutation);
+export const deleteTaskService = asyncProjectMutation(deleteTaskMutation);
 export const updateTaskService = projectMutation(updateTaskMutation);
 export const createTaskCommentService = projectMutation(createTaskCommentMutation);
 export const decomposeTaskService = projectMutation(decomposeTaskMutation);
