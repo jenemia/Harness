@@ -1133,6 +1133,15 @@ export function openProjectDb(projectPath: string) {
     CREATE INDEX IF NOT EXISTS usage_ledger_project_recorded
       ON usage_ledger(project_id, recorded_at);
 
+    CREATE TABLE IF NOT EXISTS execution_leases (
+      task_id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS execution_leases_expiry ON execution_leases(expires_at);
+
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,

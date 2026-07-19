@@ -56,6 +56,8 @@ const commandApprovalKind = "command_execution";
 const mergeApprovalKind = "merge";
 const handoffApprovalKind = "handoff";
 const previewApprovalKind = "preview";
+const executionLeaseOwner = randomUUID();
+const executionLeaseMs = 120_000;
 
 type ResumeRunContext = {
   interactionId: string;
@@ -392,6 +394,9 @@ async function startTaskMutation(project: ProjectRecord, taskId: string) {
     if (approvalBlocker) {
       return { accepted: false, reason: approvalBlocker };
     }
+    if (!claimExecutionLease(db, task.id, agent.id)) {
+      return { accepted: false, reason: "Task is already claimed by another execution." };
+    }
 
     reservedAgentId = agent.id;
     reserveAgent(agent.id);
@@ -406,6 +411,7 @@ async function startTaskMutation(project: ProjectRecord, taskId: string) {
       runningTasks.delete(taskId);
       releaseAgent(reservedAgentId);
       releaseProject(project.path);
+      releaseExecutionLease(project, taskId);
     });
   });
   return { accepted: true };
@@ -556,6 +562,10 @@ async function startReadyTasksMutation(project: ProjectRecord) {
         skipped.push({ taskId: task.id, reason: approvalBlocker });
         continue;
       }
+      if (!claimExecutionLease(db, task.id, agent.id)) {
+        skipped.push({ taskId: task.id, reason: "Task is already claimed by another execution." });
+        continue;
+      }
 
       reservedAgentRuns.set(agent.id, (reservedAgentRuns.get(agent.id) || 0) + 1);
       reserveProject(project.path);
@@ -566,6 +576,7 @@ async function startReadyTasksMutation(project: ProjectRecord) {
           runningTasks.delete(task.id);
           releaseAgent(agent.id);
           releaseProject(project.path);
+          releaseExecutionLease(project, task.id);
         });
       });
     }
@@ -1051,6 +1062,7 @@ async function resumeInteractionMutation(project: ProjectRecord, interactionId: 
     }
     reserveAgent(agent.id);
     reserveProject(project.path);
+    if (!claimExecutionLease(db, task.id, agent.id)) return { queued: false, interactionId, runId: null };
     resume = {
       interactionId: interaction.id,
       parentRunId: parentRun.id,
@@ -1067,6 +1079,7 @@ async function resumeInteractionMutation(project: ProjectRecord, interactionId: 
         resumingInteractions.delete(interaction.id);
         releaseAgent(agent.id);
         releaseProject(project.path);
+        releaseExecutionLease(project, task.id);
       });
     });
     return { queued: true, interactionId, runId: null };
@@ -2509,6 +2522,20 @@ function getAgentLoad(db: DatabaseSync, agentId: string) {
     .prepare("SELECT COUNT(*) AS count FROM runs WHERE agent_id = ? AND status = ?")
     .get(agentId, "running") as { count: number };
   return running.count + (reservedAgentRuns.get(agentId) || 0);
+}
+
+function claimExecutionLease(db: DatabaseSync, taskId: string, agentId: string) {
+  const timestamp = now();
+  db.prepare("DELETE FROM execution_leases WHERE expires_at <= ?").run(timestamp);
+  const expiresAt = new Date(Date.now() + executionLeaseMs).toISOString();
+  return db.prepare("INSERT OR IGNORE INTO execution_leases (task_id, agent_id, owner_id, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
+    .run(taskId, agentId, executionLeaseOwner, expiresAt, timestamp).changes === 1;
+}
+
+function releaseExecutionLease(project: ProjectRecord, taskId: string) {
+  const db = openProjectDb(project.path);
+  try { db.prepare("DELETE FROM execution_leases WHERE task_id = ? AND owner_id = ?").run(taskId, executionLeaseOwner); }
+  finally { db.close(); }
 }
 
 function getProjectLoad(db: DatabaseSync, projectPath: string) {
