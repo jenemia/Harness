@@ -200,3 +200,77 @@ Test plan:
 - Typecheck, production build, CLI provider smoke, and local server smoke.
 Dependencies:
 - T01, T06, T09
+
+## Operational improvements (without a company/org model)
+
+These tickets take the useful operational patterns from multi-agent control planes while keeping Harness focused on a single project board, accountable task cards, and local-first execution.
+
+### T11: Measured provider usage and project budget gate
+Role: programmer
+Depends on: T06, T08, T09
+User story:
+- As a project owner, I can see measured provider usage and prevent new agent runs after a project budget is consumed.
+Scope:
+- Persist normalized, delta-based `usage` provider events in an immutable local ledger.
+- Add an optional monthly project cost ceiling; zero means disabled.
+- Block new runs once measured spend reaches the ceiling, while leaving existing run history and approvals intact.
+Acceptance criteria:
+- A provider usage event can record input, output, total tokens, and an explicitly reported USD cost without storing prompts or credentials.
+- Retention pruning of live provider events cannot erase the budget ledger.
+- The scheduler and direct task start both reject new work at the measured budget hard stop and record an audit event.
+- Providers that do not report cost remain visibly unmeasured; Harness must not invent an estimated cost.
+Implementation direction:
+- Treat every usage payload as a delta, keyed by run and event sequence for idempotency.
+- Add provider adapters incrementally; ship the shared ledger and gate before declaring a provider cost-aware.
+
+### T12: Goal context packet and explicit task ancestry
+Role: programmer
+Depends on: T03, T05, T08
+User story:
+- As an assigned agent, I receive the task's concise purpose, active sub-goal, parent chain, dependencies, and completion criteria in one consistent context packet.
+Scope:
+- Introduce project goals and links from cards/sub-goals to those goals.
+- Render a bounded ancestry section in execution prompts, task detail, handoffs, and completion reports.
+Acceptance criteria:
+- A task can be traced from its active goal to an optional project goal without duplicating free-form text.
+- Prompt construction limits ancestry depth and redacts non-execution context.
+- Hand-offs preserve the next goal and acceptance evidence.
+
+### T13: Durable execution leases and recovery policy
+Role: programmer
+Depends on: T08
+User story:
+- As an operator, I never lose track of work after a crash or accidentally run the same task twice.
+Scope:
+- Replace process-local reservations with DB-backed execution leases, lease expiry, single-owner claiming, and recovery decisions.
+- Differentiate safe retry, human review required, and cleanup-only recovery outcomes.
+Acceptance criteria:
+- Concurrent start attempts produce one owner and one audit trail.
+- Recovery neither silently restarts a destructive run nor leaves stale capacity permanently consumed.
+- Lease state is exposed with runs and scheduler diagnostics.
+
+### T14: Policy profiles for approvals and execution controls
+Role: security-reviewer
+Depends on: T09, T11
+User story:
+- As a project owner, I can apply named, versioned policies to task risk instead of remembering ad-hoc settings.
+Scope:
+- Define local policy profiles for command approval, workspace protection, budget response, review limits, and merge requirements.
+- Snapshot the policy version used by each decision and retain an undo-safe change history.
+Acceptance criteria:
+- A task/run audit identifies the policy profile and revision that allowed, paused, or blocked it.
+- Policy changes affect new executions only unless explicitly re-evaluated.
+- The UI explains the applicable gate and how to resolve it.
+
+### T15: Scheduled maintenance cards
+Role: programmer
+Depends on: T08, T13
+User story:
+- As an operator, I can schedule recurring review, health, and maintenance work as normal, auditable task cards.
+Scope:
+- Add local cron/interval triggers, deduplication keys, concurrency/catch-up policy, and an execution history.
+- Materialize every trigger as a card rather than a hidden background prompt.
+Acceptance criteria:
+- Missed triggers follow an explicit skip, coalesce, or catch-up policy.
+- A routine cannot create overlapping copies beyond its configured limit.
+- Generated work respects the same approval, workspace, budget, and review gates as manual work.

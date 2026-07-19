@@ -91,6 +91,8 @@ export function ProjectHealthPanel({
     healthReport?.providerCommandIssues || fallbackProviderCommandIssues;
   const schedulerIssues =
     healthReport?.schedulerIssues || fallbackSchedulerIssues;
+  const measuredCostUsd = healthReport?.usage.measuredCostUsd ?? 0;
+  const costBudgetUsd = overview.settings.monthlyCostBudgetUsd;
   const recommendation =
     providerCommandIssues.length > 0
       ? t("health.recommend.configureProviderCommands")
@@ -164,6 +166,10 @@ export function ProjectHealthPanel({
         <div className="compact-row">
           <strong>{schedulerIssues.length}</strong>
           <span>{t("health.scheduler")}</span>
+        </div>
+        <div className="compact-row">
+          <strong>${measuredCostUsd.toFixed(2)}</strong>
+          <span>{costBudgetUsd > 0 ? t("health.costBudget", { budget: costBudgetUsd.toFixed(2) }) : t("health.measuredCost")}</span>
         </div>
         <div className="compact-row">
           <strong>{recommendation}</strong>

@@ -4,7 +4,7 @@ import type { ProviderEventEnvelope, ProviderEventType } from "@harness/core";
 import { providerEventVersion } from "@harness/core";
 import { redactCredentialMaterial } from "./credential-security.js";
 import { getProjectSettingsFromDb, openProjectDb } from "./db.js";
-import type { ProjectRecord, ProjectSettings } from "./types.js";
+import type { ProjectRecord, ProjectSettings, ProjectUsageSummary } from "./types.js";
 import { withTelemetrySpan } from "./telemetry.js";
 
 const eventBus = new EventEmitter();
@@ -42,13 +42,14 @@ export function appendProviderEvent(project: ProjectRecord, input: AppendProvide
         ? { originalEventType: redactCredentialMaterial(input.metadata.originalEventType).slice(0, 200) }
         : undefined
     };
+    const eventId = randomUUID();
     const result = db.prepare(`
       INSERT OR IGNORE INTO provider_events (
         id, version, sequence, project_id, task_id, run_id, provider_id, timestamp,
         correlation_id, type, payload, metadata, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      randomUUID(), event.version, event.sequence, event.projectId, event.taskId, event.runId,
+      eventId, event.version, event.sequence, event.projectId, event.taskId, event.runId,
       event.providerId, event.timestamp, event.correlationId, event.type, JSON.stringify(event.payload),
       JSON.stringify(event.metadata || {}), new Date().toISOString()
     );
@@ -56,6 +57,7 @@ export function appendProviderEvent(project: ProjectRecord, input: AppendProvide
       pruneProviderEvents(db, project.id, settings);
       return { inserted: false, event: getProviderEvent(db, event.runId, event.sequence) || getTerminalProviderEvent(db, event.runId) };
     }
+    if (event.type === "usage") recordMeasuredUsage(db, event, eventId);
     pruneProviderEvents(db, project.id, settings);
   } finally {
     db.close();
@@ -63,6 +65,73 @@ export function appendProviderEvent(project: ProjectRecord, input: AppendProvide
   eventBus.emit("event", event);
   return { inserted: true, event };
   });
+}
+
+/**
+ * Returns only provider-reported deltas. Harness intentionally does not infer
+ * token counts or dollar cost for providers that do not emit usage events.
+ */
+export function getProjectUsageSummaryFromDb(db: ReturnType<typeof openProjectDb>, at = new Date()): ProjectUsageSummary {
+  const periodStart = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), 1)).toISOString();
+  const row = db.prepare(`
+    SELECT
+      COALESCE(SUM(cost_usd), 0) AS measured_cost_usd,
+      COALESCE(SUM(input_tokens), 0) AS measured_input_tokens,
+      COALESCE(SUM(output_tokens), 0) AS measured_output_tokens,
+      COALESCE(SUM(total_tokens), 0) AS measured_total_tokens,
+      COUNT(*) AS usage_event_count
+    FROM usage_ledger WHERE recorded_at >= ?
+  `).get(periodStart) as Record<string, number>;
+  return {
+    periodStart,
+    measuredCostUsd: Number(row.measured_cost_usd || 0),
+    measuredInputTokens: Number(row.measured_input_tokens || 0),
+    measuredOutputTokens: Number(row.measured_output_tokens || 0),
+    measuredTotalTokens: Number(row.measured_total_tokens || 0),
+    usageEventCount: Number(row.usage_event_count || 0)
+  };
+}
+
+export function getProjectUsageSummary(project: ProjectRecord, at = new Date()) {
+  const db = openProjectDb(project.path);
+  try {
+    return getProjectUsageSummaryFromDb(db, at);
+  } finally {
+    db.close();
+  }
+}
+
+function recordMeasuredUsage(db: ReturnType<typeof openProjectDb>, event: ProviderEventEnvelope, eventId: string) {
+  const usage = normalizeUsageDelta(event.payload);
+  if (!usage) return;
+  db.prepare(`
+    INSERT OR IGNORE INTO usage_ledger (
+      id, project_id, task_id, run_id, provider_id, event_sequence,
+      input_tokens, output_tokens, total_tokens, cost_usd, recorded_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    eventId, event.projectId, event.taskId, event.runId, event.providerId, event.sequence,
+    usage.inputTokens, usage.outputTokens, usage.totalTokens, usage.costUsd, event.timestamp
+  );
+}
+
+export function normalizeUsageDelta(payload: Record<string, unknown>) {
+  const inputTokens = nonNegativeInteger(payload.inputTokens ?? payload.input_tokens ?? payload.promptTokens ?? payload.prompt_tokens);
+  const outputTokens = nonNegativeInteger(payload.outputTokens ?? payload.output_tokens ?? payload.completionTokens ?? payload.completion_tokens);
+  const totalTokens = nonNegativeInteger(payload.totalTokens ?? payload.total_tokens ?? payload.tokens) || inputTokens + outputTokens;
+  const costUsd = nonNegativeNumber(payload.costUsd ?? payload.cost_usd ?? payload.usdCost ?? payload.usd_cost);
+  if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0 && costUsd === 0) return null;
+  return { inputTokens, outputTokens, totalTokens, costUsd };
+}
+
+function nonNegativeInteger(value: unknown) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0;
+}
+
+function nonNegativeNumber(value: unknown) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
 }
 
 export function replayProviderEvents(project: ProjectRecord, input: { runId?: string; afterSequence?: number; limit?: number } = {}) {

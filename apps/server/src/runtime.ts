@@ -28,6 +28,7 @@ import { withProjectWriterLock, withProjectWriterLockAsync, withoutProjectWriter
 import { createAgentRunSnapshot } from "./agent-store.js";
 import { assertNoCredentialMaterial, redactCredentialMaterial } from "./credential-security.js";
 import { appendProviderEvent, nextProviderEventSequence } from "./provider-events.js";
+import { getProjectUsageSummaryFromDb } from "./provider-events.js";
 import { createApprovalRecordInDb, recoverInteractions, respondInteractionInDb, suspendRunForInteractionInDb, type RespondInteractionInput } from "./interactions.js";
 import { generateCompletionReport } from "./completion-reviews.js";
 import { activeTaskGoal, activateNextTaskGoal, appendTaskGoals, listTaskGoals, recordTaskHandoff } from "./task-goals.js";
@@ -330,6 +331,11 @@ async function startTaskMutation(project: ProjectRecord, taskId: string) {
     }
 
     const settings = getProjectSettingsFromDb(db);
+    const budgetBlocker = getBudgetBlocker(db, settings);
+    if (budgetBlocker) {
+      insertEvent(db, { taskId: task.id, agentId: task.assigneeAgentId, type: "task.queued", message: budgetBlocker, metadata: { budgetHardStop: true } });
+      return { accepted: false, reason: budgetBlocker };
+    }
     const reviewBlocker = getReviewCapacityBlocker(db, task, settings);
     if (reviewBlocker) {
       insertEvent(db, { taskId: task.id, agentId: task.assigneeAgentId, type: "task.queued", message: reviewBlocker, metadata: { reviewBacklog: true } });
@@ -498,6 +504,13 @@ async function startReadyTasksMutation(project: ProjectRecord) {
     for (const task of tasks) {
       if (runningTasks.has(task.id)) {
         skipped.push({ taskId: task.id, reason: "Task is already running." });
+        continue;
+      }
+
+      const budgetBlocker = getBudgetBlocker(db, settings);
+      if (budgetBlocker) {
+        insertEvent(db, { taskId: task.id, agentId: task.assigneeAgentId, type: "task.queued", message: budgetBlocker, metadata: { budgetHardStop: true } });
+        skipped.push({ taskId: task.id, reason: budgetBlocker });
         continue;
       }
 
@@ -2469,6 +2482,13 @@ function getReviewCapacityBlocker(db: DatabaseSync, task: TaskRecord, settings: 
   `).get() as { cards: number; lines: number };
   if (row.cards < settings.maxReviewBacklog && row.lines < settings.maxUnreviewedDiffLines) return null;
   return `Review backlog limit reached (${row.cards} cards / ${row.lines} unreviewed lines).`;
+}
+
+function getBudgetBlocker(db: DatabaseSync, settings: ProjectSettings) {
+  if (settings.monthlyCostBudgetUsd <= 0) return null;
+  const usage = getProjectUsageSummaryFromDb(db);
+  if (usage.measuredCostUsd < settings.monthlyCostBudgetUsd) return null;
+  return `Monthly measured cost budget reached ($${usage.measuredCostUsd.toFixed(2)} / $${settings.monthlyCostBudgetUsd.toFixed(2)}).`;
 }
 
 function hasPendingAutoreviewRemediation(db: DatabaseSync, taskId: string) {

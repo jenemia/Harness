@@ -71,6 +71,7 @@ export type ProjectHealthReport = {
     taskId: string | null;
     candidateKeys: string[];
   }>;
+  usage: ProjectUsageSummary;
   recommendations: string[];
 };
 
@@ -151,6 +152,7 @@ export type ProjectSettings = {
   providerEventMaxCount: number;
   providerEventRetentionDays: number;
   providerToolOutputMaxChars: number;
+  monthlyCostBudgetUsd: number;
   workspaceProtectionMode: "warn" | "pause" | "block";
   handoffRules: Record<string, string>;
   providerCommands: Record<string, string>;
@@ -397,6 +399,15 @@ export type EventRecord = {
   message: string;
   metadata: Record<string, unknown>;
   createdAt: string;
+};
+
+export type ProjectUsageSummary = {
+  periodStart: string;
+  measuredCostUsd: number;
+  measuredInputTokens: number;
+  measuredOutputTokens: number;
+  measuredTotalTokens: number;
+  usageEventCount: number;
 };
 
 export type DraftSessionRecord = {

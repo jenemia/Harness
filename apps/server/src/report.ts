@@ -1,5 +1,6 @@
 import { now, projectHarnessDir } from "./db.js";
 import { createDefaultProviders, resolveProviderCommand } from "./providers.js";
+import { getProjectUsageSummary } from "./provider-events.js";
 import type { AgentRecord, ProjectHealthReport, ProjectOverview, TaskRecord, TaskStatus } from "./types.js";
 
 const taskStatuses: TaskStatus[] = ["Backlog", "Selected", "In Progress", "In Review", "Paused", "Blocked", "Done"];
@@ -30,6 +31,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
   const idleAgents = overview.agents.filter((agent) => agent.status === "idle").length;
   const schedulerIssues = buildSchedulerIssues(overview);
   const providerCommandIssues = buildProviderCommandIssues(overview);
+  const usage = getProjectUsageSummary(overview.project);
 
   return {
     projectId: overview.project.id,
@@ -51,6 +53,7 @@ export function createProjectHealthReport(overview: ProjectOverview): ProjectHea
     idleAgents,
     schedulerIssues,
     providerCommandIssues,
+    usage,
     recommendations: buildRecommendations({
       readyTasks,
       blockedTasks: blockedTasks.length,

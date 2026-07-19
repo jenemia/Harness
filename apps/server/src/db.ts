@@ -1104,6 +1104,23 @@ export function openProjectDb(projectPath: string) {
     CREATE INDEX IF NOT EXISTS provider_events_project_created
       ON provider_events(project_id, created_at, sequence);
 
+    CREATE TABLE IF NOT EXISTS usage_ledger (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      event_sequence INTEGER NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd REAL NOT NULL DEFAULT 0,
+      recorded_at TEXT NOT NULL,
+      UNIQUE(run_id, event_sequence)
+    );
+    CREATE INDEX IF NOT EXISTS usage_ledger_project_recorded
+      ON usage_ledger(project_id, recorded_at);
+
     CREATE TABLE IF NOT EXISTS runs (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
@@ -1641,6 +1658,7 @@ export function defaultProjectSettings(): ProjectSettings {
     providerEventMaxCount: 10_000,
     providerEventRetentionDays: 30,
     providerToolOutputMaxChars: 8_000,
+    monthlyCostBudgetUsd: 0,
     workspaceProtectionMode: "pause",
     handoffRules: {
       programmer: "reviewer",
@@ -1702,6 +1720,7 @@ export function getProjectSettingsFromDb(db: DatabaseSync): ProjectSettings {
     if (row.key === "providerEventMaxCount") settings.providerEventMaxCount = Math.max(1, Number(row.value || settings.providerEventMaxCount));
     if (row.key === "providerEventRetentionDays") settings.providerEventRetentionDays = Math.max(1, Number(row.value || settings.providerEventRetentionDays));
     if (row.key === "providerToolOutputMaxChars") settings.providerToolOutputMaxChars = Math.max(256, Number(row.value || settings.providerToolOutputMaxChars));
+    if (row.key === "monthlyCostBudgetUsd") settings.monthlyCostBudgetUsd = Math.max(0, Number(row.value || 0));
     if (row.key === "workspaceProtectionMode" && ["warn", "pause", "block"].includes(row.value)) {
       settings.workspaceProtectionMode = row.value as ProjectSettings["workspaceProtectionMode"];
     }
@@ -1752,6 +1771,9 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
       providerEventMaxCount: Math.max(1, Number(input.providerEventMaxCount || current.providerEventMaxCount)),
       providerEventRetentionDays: Math.max(1, Number(input.providerEventRetentionDays || current.providerEventRetentionDays)),
       providerToolOutputMaxChars: Math.max(256, Number(input.providerToolOutputMaxChars || current.providerToolOutputMaxChars)),
+      monthlyCostBudgetUsd: input.monthlyCostBudgetUsd === undefined
+        ? current.monthlyCostBudgetUsd
+        : Math.max(0, Number(input.monthlyCostBudgetUsd) || 0),
       workspaceProtectionMode: input.workspaceProtectionMode === "warn" || input.workspaceProtectionMode === "block" || input.workspaceProtectionMode === "pause"
         ? input.workspaceProtectionMode
         : current.workspaceProtectionMode,
@@ -1779,6 +1801,7 @@ function updateProjectSettingsMutation(projectPath: string, input: Partial<Proje
     stmt.run("providerEventMaxCount", String(next.providerEventMaxCount), timestamp);
     stmt.run("providerEventRetentionDays", String(next.providerEventRetentionDays), timestamp);
     stmt.run("providerToolOutputMaxChars", String(next.providerToolOutputMaxChars), timestamp);
+    stmt.run("monthlyCostBudgetUsd", String(next.monthlyCostBudgetUsd), timestamp);
     stmt.run("workspaceProtectionMode", next.workspaceProtectionMode, timestamp);
     stmt.run("handoffRules", JSON.stringify(next.handoffRules), timestamp);
     stmt.run("providerCommands", JSON.stringify(providerCommandOverrides), timestamp);

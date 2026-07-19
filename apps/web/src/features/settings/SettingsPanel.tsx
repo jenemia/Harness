@@ -391,6 +391,7 @@ export function SettingsPanel(props: {
         <NumberSettingField label={t("settings.providerEventCount")} description={t("settings.providerEventCountHelp")} unit={locale === "ko" ? "개" : "events"} min={1} max={1000000} value={projectSettings.providerEventMaxCount} onChange={(value) => updateProjectSetting("providerEventMaxCount", value)} />
         <NumberSettingField label={t("settings.providerEventDays")} description={locale === "ko" ? "provider 이벤트를 보관할 기간" : "How long provider events are retained"} unit={locale === "ko" ? "일" : "days"} min={1} max={3650} value={projectSettings.providerEventRetentionDays} onChange={(value) => updateProjectSetting("providerEventRetentionDays", value)} />
         <NumberSettingField label={t("settings.toolOutputChars")} description={locale === "ko" ? "저장할 도구 출력 요약의 최대 길이" : "Maximum stored tool-output summary length"} unit={locale === "ko" ? "문자" : "characters"} min={256} max={100000} value={projectSettings.providerToolOutputMaxChars} onChange={(value) => updateProjectSetting("providerToolOutputMaxChars", value)} />
+        <NumberSettingField label={t("settings.monthlyCostBudget")} description={t("settings.monthlyCostBudgetHelp")} unit="USD" min={0} max={1000000} value={projectSettings.monthlyCostBudgetUsd} onChange={(value) => updateProjectSetting("monthlyCostBudgetUsd", value)} />
         <select
           value={projectSettings.workspaceProtectionMode}
           onChange={(event) => updateProjectSetting("workspaceProtectionMode", event.target.value as ProjectSettings["workspaceProtectionMode"])}

@@ -5,12 +5,15 @@ import path from "node:path";
 import test from "node:test";
 import {
   appendProviderEvent,
+  getProjectUsageSummaryFromDb,
+  normalizeUsageDelta,
   replayProviderEvents,
   subscribeProviderEvents
 } from "../src/provider-events.js";
 import { openProjectDb, updateProjectSettings } from "../src/db.js";
 import { invokeApplicationCommand } from "../src/application.js";
-import { registerProjectService } from "../src/services.js";
+import { startTask } from "../src/runtime.js";
+import { createAgentService, createTaskService, registerProjectService } from "../src/services.js";
 
 test("provider events are redacted, deduplicated, terminal-idempotent, and replayable", () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-provider-events-"));
@@ -102,6 +105,68 @@ test("provider events are redacted, deduplicated, terminal-idempotent, and repla
     }
     disconnect();
     assert.deepEqual(reconnected, [2]);
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("measured usage is normalized into a durable monthly ledger without estimating absent cost", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-usage-ledger-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: false });
+    const base = {
+      projectId: project.id, taskId: "task-usage", runId: "run-usage", providerId: "usage-provider", correlationId: "usage-correlation"
+    };
+    appendProviderEvent(project, {
+      ...base, sequence: 1, type: "usage",
+      payload: { inputTokens: 120, output_tokens: 30, costUsd: 0.42 }
+    });
+    appendProviderEvent(project, {
+      ...base, sequence: 2, type: "usage",
+      payload: { totalTokens: 50 }
+    });
+    const db = openProjectDb(project.path);
+    try {
+      const usage = getProjectUsageSummaryFromDb(db);
+      assert.equal(usage.measuredInputTokens, 120);
+      assert.equal(usage.measuredOutputTokens, 30);
+      assert.equal(usage.measuredTotalTokens, 200);
+      assert.equal(usage.measuredCostUsd, 0.42);
+      assert.equal(usage.usageEventCount, 2);
+    } finally {
+      db.close();
+    }
+    assert.equal(normalizeUsageDelta({}), null);
+    assert.deepEqual(normalizeUsageDelta({ input_tokens: 3, outputTokens: 2 }), {
+      inputTokens: 3, outputTokens: 2, totalTokens: 5, costUsd: 0
+    });
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("project measured-cost budget blocks a direct task start before provider execution", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-usage-budget-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: false });
+    const agent = createAgentService(project, { name: "Budget worker", modelBackend: "mock" });
+    const task = createTaskService(project, { title: "Blocked by budget", status: "Selected", assigneeAgentId: agent.id, workspaceMode: "harness" });
+    updateProjectSettings(project.path, { monthlyCostBudgetUsd: 1 });
+    appendProviderEvent(project, {
+      projectId: project.id, taskId: "previous-task", runId: "previous-run", providerId: "usage-provider",
+      correlationId: "previous-correlation", sequence: 1, type: "usage", payload: { costUsd: 1 }
+    });
+    const result = await startTask(project, task.id);
+    assert.equal(result.accepted, false);
+    assert.match(result.reason || "", /Monthly measured cost budget reached/);
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
