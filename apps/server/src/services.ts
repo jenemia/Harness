@@ -607,33 +607,36 @@ async function deleteCompletedTasksMutation(project: ProjectRecord) {
   const db = openProjectDb(project.path);
   let taskIds: string[];
   try {
-    taskIds = (db.prepare("SELECT id FROM tasks WHERE status = 'Done'").all() as Array<{ id: string }>).map((task) => task.id);
+    taskIds = (db.prepare("SELECT id FROM tasks WHERE status = 'Done' ORDER BY created_at, id").all() as Array<{ id: string }>).map((task) => task.id);
   } finally {
     db.close();
   }
-  return deleteTasksMutation(project, taskIds);
+  return deleteTasksMutation(project, taskIds, { requireDoneStatus: true });
 }
 
-async function deleteTasksMutation(project: ProjectRecord, taskIds: string[]) {
+async function deleteTasksMutation(
+  project: ProjectRecord,
+  taskIds: string[],
+  options: { requireDoneStatus?: boolean } = {}
+) {
   if (taskIds.length === 0) return { removedCount: 0, taskIds: [] };
-  const initialDb = openProjectDb(project.path);
-  let tasks: TaskRecord[] = [];
-  try {
-    const placeholders = taskIds.map(() => "?").join(", ");
-    tasks = initialDb.prepare(`SELECT * FROM tasks WHERE id IN (${placeholders})`).all(...taskIds).map(mapTask);
-    if (tasks.length !== taskIds.length) throw new Error("Task not found.");
-    for (const task of tasks) validateTaskDeletion(initialDb, task.id);
-  } finally {
-    initialDb.close();
-  }
+  let tasks = readTasksForDeletion(project, taskIds, options.requireDoneStatus);
 
   for (const task of tasks) await validateTaskWorktreeForDeletion(task);
-  for (const task of tasks) await removeTaskWorktreeForDeletion(project, task);
+  // Worktree checks can be slow. Refresh candidates so a task reopened while
+  // waiting cannot be removed as part of the completed-only operation.
+  tasks = readTasksForDeletion(project, taskIds, options.requireDoneStatus);
+  for (const task of tasks) {
+    if (await removeTaskWorktreeForDeletion(project, task)) {
+      clearRemovedTaskWorktreePath(project, task.id);
+    }
+  }
 
   const db = openProjectDb(project.path);
   try {
     db.exec("BEGIN IMMEDIATE");
     try {
+      readTasksForDeletionFromDb(db, taskIds, options.requireDoneStatus);
       const taskIdSet = new Set(taskIds);
       for (const taskId of taskIds) resolvePendingTaskInteractionsForDeletion(db, taskId);
       const placeholders = taskIds.map(() => "?").join(", ");
@@ -677,6 +680,32 @@ async function deleteTasksMutation(project: ProjectRecord, taskIds: string[]) {
   }
 }
 
+function readTasksForDeletion(project: ProjectRecord, taskIds: string[], requireDoneStatus?: boolean) {
+  const db = openProjectDb(project.path);
+  try {
+    return readTasksForDeletionFromDb(db, taskIds, requireDoneStatus);
+  } finally {
+    db.close();
+  }
+}
+
+function readTasksForDeletionFromDb(
+  db: ReturnType<typeof openProjectDb>,
+  taskIds: string[],
+  requireDoneStatus?: boolean
+) {
+  const placeholders = taskIds.map(() => "?").join(", ");
+  const taskRows = db.prepare(`SELECT * FROM tasks WHERE id IN (${placeholders})`).all(...taskIds).map(mapTask);
+  const tasksById = new Map(taskRows.map((task) => [task.id, task]));
+  const tasks = taskIds.map((taskId) => tasksById.get(taskId)).filter((task): task is TaskRecord => Boolean(task));
+  if (tasks.length !== taskIds.length) throw new Error("Task not found.");
+  if (requireDoneStatus && tasks.some((task) => task.status !== "Done")) {
+    throw new Error("Only completed tasks can be deleted in bulk.");
+  }
+  for (const task of tasks) validateTaskDeletion(db, task.id);
+  return tasks;
+}
+
 function validateTaskDeletion(db: ReturnType<typeof openProjectDb>, taskId: string) {
   const activeRun = db.prepare("SELECT id FROM runs WHERE task_id = ? AND status IN ('running', 'suspended') LIMIT 1").get(taskId);
   if (activeRun) throw new Error("Stop or finish the active task run before deleting the task.");
@@ -697,12 +726,20 @@ async function validateTaskWorktreeForDeletion(task: TaskRecord) {
 }
 
 async function removeTaskWorktreeForDeletion(project: ProjectRecord, task: TaskRecord) {
-  if (task.workspaceMode !== "worktree" || !task.worktreePath || !existsSync(task.worktreePath)) return;
-  {
-    const removed = await serviceProviders.workspace().removeWorktree(project.path, task.worktreePath);
-    if (!removed.ok) {
-      throw new Error(removed.stderr || removed.stdout || "Could not remove task worktree.");
-    }
+  if (task.workspaceMode !== "worktree" || !task.worktreePath || !existsSync(task.worktreePath)) return false;
+  const removed = await serviceProviders.workspace().removeWorktree(project.path, task.worktreePath);
+  if (!removed.ok) {
+    throw new Error(removed.stderr || removed.stdout || "Could not remove task worktree.");
+  }
+  return true;
+}
+
+function clearRemovedTaskWorktreePath(project: ProjectRecord, taskId: string) {
+  const db = openProjectDb(project.path);
+  try {
+    db.prepare("UPDATE tasks SET worktree_path = NULL, updated_at = ? WHERE id = ?").run(now(), taskId);
+  } finally {
+    db.close();
   }
 }
 

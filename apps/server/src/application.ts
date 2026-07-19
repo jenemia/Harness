@@ -573,6 +573,12 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
     case "tasks:delete-completed": {
       const value = input(payload) as HarnessCommandInputs["tasks:delete-completed"];
       const project = requiredProject(value.projectId);
+      const completedTaskIds = getProjectOverview(project).tasks
+        .filter((task) => task.status === "Done")
+        .map((task) => task.id);
+      if (completedTaskIds.some(isTaskExecutionActive)) {
+        throw new Error("Stop or finish the active task run before deleting the task.");
+      }
       return { result: await deleteCompletedTasksService(project), overview: getProjectOverview(project) };
     }
     case "tasks:update": {
