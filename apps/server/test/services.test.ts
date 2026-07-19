@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { getProject, openProjectDb, updateProjectSettings } from "../src/db.js";
-import { createApprovalRecordInDb } from "../src/interactions.js";
+import { createApprovalRecordInDb, createInteraction } from "../src/interactions.js";
 import { getProjectOverview } from "../src/overview-repository.js";
 import {
   createAgentService,
@@ -143,6 +143,13 @@ test("task deletion removes task history and clears parent and dependency refere
     createTaskCommentService(project, target.id, { author: "human", body: "Delete this history too." });
     decomposeTaskService(project, target.id, { text: "- First goal\n- Second goal", mode: "sequential" });
     const agent = createAgentService(project, { name: "Delete interaction agent" });
+    const questionInteraction = createInteraction(project, {
+      taskId: target.id,
+      agentId: agent.id,
+      correlationId: "delete-task-question",
+      kind: "question",
+      requestPayload: { prompt: "This pending question should close with task deletion." }
+    });
     const interactionDb = openProjectDb(project.path);
     const approvalId = "delete-task-approval";
     const interactionId = createApprovalRecordInDb(interactionDb, {
@@ -155,6 +162,15 @@ test("task deletion removes task history and clears parent and dependency refere
       createdAt: new Date().toISOString()
     });
     assert.equal(interactionDb.prepare("SELECT status FROM interactions WHERE id = ?").get(interactionId)?.status, "pending");
+    assert.equal(interactionDb.prepare("SELECT status FROM interactions WHERE id = ?").get(questionInteraction.id)?.status, "pending");
+    interactionDb.exec(`
+      CREATE TRIGGER require_terminal_interaction_before_delete
+      BEFORE DELETE ON interactions WHEN OLD.status = 'pending'
+      BEGIN SELECT RAISE(ABORT, 'pending interaction deleted'); END;
+      CREATE TRIGGER require_terminal_approval_before_delete
+      BEFORE DELETE ON approvals WHEN OLD.status = 'pending'
+      BEGIN SELECT RAISE(ABORT, 'pending approval deleted'); END;
+    `);
     interactionDb.close();
 
     assert.deepEqual(deleteTaskService(project, target.id), { removed: true, taskId: target.id });
@@ -169,6 +185,7 @@ test("task deletion removes task history and clears parent and dependency refere
     assert.equal(overview.tasks.find((task) => task.id === dependent.id)?.blockedReason, null);
     const deletionDb = openProjectDb(project.path);
     assert.equal(deletionDb.prepare("SELECT id FROM interactions WHERE id = ?").get(interactionId), undefined);
+    assert.equal(deletionDb.prepare("SELECT id FROM interactions WHERE id = ?").get(questionInteraction.id), undefined);
     assert.equal(deletionDb.prepare("SELECT id FROM approvals WHERE id = ?").get(approvalId), undefined);
     deletionDb.close();
     assert.throws(() => deleteTaskService(project, target.id), /Task not found/);
