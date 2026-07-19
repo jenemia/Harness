@@ -258,6 +258,7 @@ export type TaskRecord = {
   autoAssign: boolean;
   reporter: string;
   parentTaskId: string | null;
+  projectGoalId: string | null;
   dependencyTaskIds: string[];
   waivedDependencyTaskIds: string[];
   labels: string[];
@@ -273,6 +274,22 @@ export type TaskRecord = {
   mergeError: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProjectGoalRecord = {
+  id: string;
+  title: string;
+  description: string;
+  acceptanceCriteria: string;
+  status: "active" | "archived";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GoalContextPacket = {
+  projectGoal: ProjectGoalRecord | null;
+  taskAncestry: Array<{ id: string; title: string; acceptanceCriteria: string }>;
+  activeGoal: TaskGoalRecord | null;
 };
 
 export type TaskGoalRecord = {
@@ -650,6 +667,7 @@ export type ProjectOverview = {
   settings: ProjectSettings;
   agents: AgentRecord[];
   tasks: TaskRecord[];
+  projectGoals: ProjectGoalRecord[];
   taskGoals: TaskGoalRecord[];
   documents: DocumentRecord[];
   memories: MemoryRecord[];

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { getProject, openProjectDb, updateProjectSettings } from "../src/db.js";
+import { getProject, mapTask, openProjectDb, updateProjectSettings } from "../src/db.js";
 import { createApprovalRecordInDb, createInteraction } from "../src/interactions.js";
 import { getProjectOverview } from "../src/overview-repository.js";
 import {
@@ -21,7 +21,7 @@ import {
   updateProjectService,
   updateTaskService
 } from "../src/services.js";
-import { activateNextTaskGoal } from "../src/task-goals.js";
+import { activateNextTaskGoal, buildGoalContextPacket } from "../src/task-goals.js";
 import type { ProjectRecord } from "../src/types.js";
 
 test("application services apply the same validation and mutations for every transport", () => {
@@ -64,6 +64,28 @@ test("application services apply the same validation and mutations for every tra
       labels: ["shared", "shared"],
       linkedFiles: ["src/a.ts", "src/a.ts"]
     });
+    const projectGoalDb = openProjectDb(project.path);
+    try {
+      projectGoalDb.prepare("INSERT INTO project_goals VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+        "project-goal", "Reliable releases", "Keep release work traceable.", "Release evidence is recorded.", "active", "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z"
+      );
+    } finally {
+      projectGoalDb.close();
+    }
+    const parent = createTaskService(project, { title: "Release preparation", projectGoalId: "project-goal", acceptanceCriteria: "Preparation is complete." });
+    const contextualTask = createTaskService(project, { title: "Release verification", parentTaskId: parent.id, projectGoalId: "project-goal", acceptanceCriteria: "Checks pass." });
+    decomposeTaskService(project, contextualTask.id, { text: "- Run release checks", mode: "sequential" });
+    const contextDb = openProjectDb(project.path);
+    try {
+      activateNextTaskGoal(contextDb, contextualTask.id, null);
+      const current = contextDb.prepare("SELECT * FROM tasks WHERE id = ?").get(contextualTask.id);
+      const context = buildGoalContextPacket(contextDb, mapTask(current));
+      assert.equal(context.projectGoal?.title, "Reliable releases");
+      assert.deepEqual(context.taskAncestry.map((item) => item.title), ["Release preparation"]);
+      assert.equal(context.activeGoal?.title, "Run release checks");
+    } finally {
+      contextDb.close();
+    }
     assert.equal(task.title, "Shared task");
     assert.equal(task.modelBackend, "codex");
     assert.deepEqual(task.labels, ["shared"]);
@@ -110,8 +132,8 @@ test("application services apply the same validation and mutations for every tra
     const renamed = updateProjectService(project.id, { name: "Renamed" });
     assert.equal(renamed.name, "Renamed");
     const overview = getProjectOverview(renamed);
-    assert.equal(overview.tasks.length, 4);
-    assert.equal(overview.taskGoals.length, 2);
+    assert.equal(overview.tasks.length, 6);
+    assert.equal(overview.taskGoals.length, 3);
     assert.equal(overview.comments.length, 2);
     assert.match(overview.comments[0].body, /담당자 변경: Worker → Replacement/);
     assert.match(overview.comments[0].body, /확인된 변경 없음/);

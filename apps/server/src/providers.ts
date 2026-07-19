@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { spawnSync } from "node:child_process";
 import type { ProviderCapabilities, ProviderEventType } from "@harness/core";
 import type { DirectProviderOAuthDefinition } from "./direct-provider-auth.js";
-import type { AgentRecord, ApprovalRecord, CommentRecord, MemoryRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
+import type { AgentRecord, ApprovalRecord, CommentRecord, GoalContextPacket, MemoryRecord, ProjectSettings, RunRecord, TaskRecord } from "./types.js";
 import { parseCursorStreamLine } from "./cursor-provider.js";
 
 export type CommandResult = {
@@ -34,6 +34,7 @@ export type LlmRunContext = {
   skipGitRepoCheck?: boolean;
   taskComments?: CommentRecord[];
   taskRuns?: RunRecord[];
+  goalContext?: GoalContextPacket;
   agentDefinitionSnapshot?: string;
   timeoutMs?: number;
   resume?: {
@@ -1514,6 +1515,9 @@ function writePromptFiles(
     `## Acceptance Criteria`,
     task.acceptanceCriteria || "(none)",
     ``,
+    `## Goal Context`,
+    formatGoalContext(context?.goalContext),
+    ``,
     `## Linked Files`,
     formatList(task.linkedFiles),
     ``,
@@ -1562,6 +1566,20 @@ function writePromptFiles(
     taskCommentsText,
     taskRunSummaryText
   };
+}
+
+function formatGoalContext(context: GoalContextPacket | undefined) {
+  if (!context) return "(no linked project goal)";
+  const projectGoal = context.projectGoal
+    ? [`Project goal: ${context.projectGoal.title}`, context.projectGoal.description, `Project goal completion: ${context.projectGoal.acceptanceCriteria}`].filter(Boolean).join("\n")
+    : "Project goal: (none)";
+  const ancestry = context.taskAncestry.length
+    ? context.taskAncestry.map((task, index) => `${index + 1}. ${task.title}${task.acceptanceCriteria ? ` — ${task.acceptanceCriteria}` : ""}`).join("\n")
+    : "(this task has no parent chain)";
+  const activeGoal = context.activeGoal
+    ? `Active sub-goal: ${context.activeGoal.title}${context.activeGoal.description ? ` — ${context.activeGoal.description}` : ""}\nSub-goal completion: ${context.activeGoal.acceptanceCriteria}`
+    : "Active sub-goal: (none)";
+  return [projectGoal, `Task ancestry:\n${ancestry}`, activeGoal].join("\n\n");
 }
 
 function formatList(items: string[]) {

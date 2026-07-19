@@ -34,6 +34,7 @@ import type {
   ProjectImportCandidate,
   ProjectImportResult,
   ProjectImportSkipped,
+  ProjectGoalRecord,
   ProjectOAuthAccountLink,
   PreviewRecord,
   PreviewRuntime,
@@ -1056,6 +1057,7 @@ export function openProjectDb(projectPath: string) {
       assignee_agent_id TEXT,
       reporter TEXT NOT NULL,
       parent_task_id TEXT,
+      project_goal_id TEXT,
       dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       waived_dependency_task_ids TEXT NOT NULL DEFAULT '[]',
       labels TEXT NOT NULL,
@@ -1069,6 +1071,16 @@ export function openProjectDb(projectPath: string) {
       blocked_reason TEXT,
       merge_status TEXT NOT NULL DEFAULT 'none',
       merge_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS project_goals (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      acceptance_criteria TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -1533,6 +1545,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "approvals", "interaction_id", "TEXT");
   ensureColumn(db, "runs", "correlation_id", "TEXT");
   ensureColumn(db, "runs", "parent_run_id", "TEXT");
+  ensureColumn(db, "tasks", "project_goal_id", "TEXT");
   ensureColumn(db, "runs", "resumed_from_interaction_id", "TEXT");
   ensureColumn(db, "interactions", "response_key", "TEXT");
   ensureColumn(db, "interactions", "resumed_run_id", "TEXT");
@@ -2727,6 +2740,7 @@ export function mapTask(row: unknown): TaskRecord {
     autoAssign: Number(r.auto_assign ?? 1) !== 0,
     reporter: String(r.reporter),
     parentTaskId: r.parent_task_id ? String(r.parent_task_id) : null,
+    projectGoalId: r.project_goal_id ? String(r.project_goal_id) : null,
     dependencyTaskIds: JSON.parse(String(r.dependency_task_ids || "[]")) as string[],
     waivedDependencyTaskIds: JSON.parse(String(r.waived_dependency_task_ids || "[]")) as string[],
     labels: JSON.parse(String(r.labels)) as string[],
@@ -2744,6 +2758,15 @@ export function mapTask(row: unknown): TaskRecord {
     mergeError: r.merge_error ? String(r.merge_error) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at)
+  };
+}
+
+export function mapProjectGoal(row: unknown): ProjectGoalRecord {
+  const r = row as Record<string, string | null>;
+  return {
+    id: String(r.id), title: String(r.title), description: String(r.description),
+    acceptanceCriteria: String(r.acceptance_criteria), status: r.status === "archived" ? "archived" : "active",
+    createdAt: String(r.created_at), updatedAt: String(r.updated_at)
   };
 }
 

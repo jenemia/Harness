@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { insertEvent, mapAgent, mapRun, mapTaskGoal, now } from "./db.js";
-import type { AgentRecord, RunRecord, TaskGoalRecord, TaskRecord } from "./types.js";
+import { insertEvent, mapAgent, mapProjectGoal, mapRun, mapTask, mapTaskGoal, now } from "./db.js";
+import type { AgentRecord, GoalContextPacket, RunRecord, TaskGoalRecord, TaskRecord } from "./types.js";
 
 export type TaskGoalInput = {
   title: string;
@@ -46,6 +46,24 @@ export function appendTaskGoals(db: DatabaseSync, task: TaskRecord, inputs: Task
 export function activeTaskGoal(db: DatabaseSync, taskId: string) {
   const row = db.prepare("SELECT * FROM task_goals WHERE task_id = ? AND status = 'active' ORDER BY goal_order LIMIT 1").get(taskId);
   return row ? mapTaskGoal(row) : null;
+}
+
+export function buildGoalContextPacket(db: DatabaseSync, task: TaskRecord): GoalContextPacket {
+  const ancestry: GoalContextPacket["taskAncestry"] = [];
+  const seen = new Set<string>([task.id]);
+  let parentId = task.parentTaskId;
+  while (parentId && ancestry.length < 5 && !seen.has(parentId)) {
+    const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(parentId);
+    if (!row) break;
+    const parent = mapTask(row);
+    ancestry.unshift({ id: parent.id, title: parent.title, acceptanceCriteria: parent.acceptanceCriteria });
+    seen.add(parent.id);
+    parentId = parent.parentTaskId;
+  }
+  const projectGoalRow = task.projectGoalId
+    ? db.prepare("SELECT * FROM project_goals WHERE id = ? AND status = 'active'").get(task.projectGoalId)
+    : null;
+  return { projectGoal: projectGoalRow ? mapProjectGoal(projectGoalRow) : null, taskAncestry: ancestry, activeGoal: activeTaskGoal(db, task.id) };
 }
 
 export function activateNextTaskGoal(db: DatabaseSync, taskId: string, completedRunId: string | null) {

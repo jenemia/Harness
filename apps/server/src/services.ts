@@ -474,6 +474,7 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
       autoAssign,
       reporter: input.reporter?.trim() || "human",
       parentTaskId: input.parentTaskId || null,
+      projectGoalId: input.projectGoalId || null,
       dependencyTaskIds,
       waivedDependencyTaskIds: normalizeStringList(input.waivedDependencyTaskIds),
       labels,
@@ -493,13 +494,13 @@ function createTaskMutation(project: ProjectRecord, input: Partial<TaskRecord>) 
     db.prepare(`
       INSERT INTO tasks (
         id, title, description, status, priority, model_backend, assignee_agent_id, auto_assign, reporter,
-        parent_task_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths,
+        parent_task_id, project_goal_id, dependency_task_ids, waived_dependency_task_ids, labels, linked_file_paths,
         acceptance_criteria, workspace_mode, use_new_worktree, task_order, branch_name, worktree_path, blocked_reason,
         merge_status, merge_error, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       task.id, task.title, task.description, task.status, task.priority, task.modelBackend,
-      task.assigneeAgentId, task.autoAssign ? 1 : 0, task.reporter, task.parentTaskId, JSON.stringify(task.dependencyTaskIds),
+      task.assigneeAgentId, task.autoAssign ? 1 : 0, task.reporter, task.parentTaskId, task.projectGoalId, JSON.stringify(task.dependencyTaskIds),
       JSON.stringify(task.waivedDependencyTaskIds), JSON.stringify(task.labels), JSON.stringify(task.linkedFiles),
       task.acceptanceCriteria, task.workspaceMode, task.useNewWorktree ? 1 : 0, task.taskOrder, task.branchName, task.worktreePath,
       task.blockedReason, task.mergeStatus, task.mergeError, task.createdAt, task.updatedAt

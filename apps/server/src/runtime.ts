@@ -31,7 +31,7 @@ import { appendProviderEvent, nextProviderEventSequence } from "./provider-event
 import { getProjectUsageSummaryFromDb } from "./provider-events.js";
 import { createApprovalRecordInDb, recoverInteractions, respondInteractionInDb, suspendRunForInteractionInDb, type RespondInteractionInput } from "./interactions.js";
 import { generateCompletionReport } from "./completion-reviews.js";
-import { activeTaskGoal, activateNextTaskGoal, appendTaskGoals, listTaskGoals, recordTaskHandoff } from "./task-goals.js";
+import { activeTaskGoal, activateNextTaskGoal, appendTaskGoals, buildGoalContextPacket, listTaskGoals, recordTaskHandoff } from "./task-goals.js";
 import { enqueueCodeReviewForRun } from "./code-reviews.js";
 import {
   canonicalWorkspacePath,
@@ -162,7 +162,7 @@ export async function probeRuntimeProvider(project: ProjectRecord | null, modelB
   const task: TaskRecord = {
     id: "provider-probe", title: "Reply with OK", description: "Reply exactly OK. Do not use tools or modify files.",
     status: "In Progress", priority: "Low", modelBackend, assigneeAgentId: agent.id, autoAssign: true, reporter: "Harness",
-    parentTaskId: null, dependencyTaskIds: [], waivedDependencyTaskIds: [], labels: ["diagnostic"], linkedFiles: [],
+    parentTaskId: null, projectGoalId: null, dependencyTaskIds: [], waivedDependencyTaskIds: [], labels: ["diagnostic"], linkedFiles: [],
     acceptanceCriteria: "A short response is returned.", workspaceMode: "harness", useNewWorktree: false, taskOrder: 0, branchName: null,
     worktreePath: workspacePath, blockedReason: null, mergeStatus: "none", mergeError: null, createdAt: timestamp, updatedAt: timestamp
   };
@@ -1407,6 +1407,7 @@ async function executeTask(
           projectMemory,
           taskComments,
           taskRuns,
+          goalContext: buildGoalContextPacket(db, freshTask),
           agentDefinitionSnapshot: agentSnapshot.content,
           timeoutMs: settings.maxRunSeconds * 1000,
           resume: resumeContext ? {

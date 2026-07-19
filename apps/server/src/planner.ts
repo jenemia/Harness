@@ -206,6 +206,7 @@ function createPlanMutation(project: ProjectRecord, input: PlanRequest) {
       autoAssign: input.autoAssign !== false,
       reporter: "pm-agent",
       parentTaskId: null,
+      projectGoalId: null,
       dependencyTaskIds: [],
       waivedDependencyTaskIds: [],
       labels: ["pm-plan", ...inputTask.roles.map((role) => `role:${role}`)],
