@@ -1264,8 +1264,8 @@ async function executeTask(
         id, task_id, agent_id, status, branch_name, worktree_path, snapshot_ref,
         model_backend, provider_id, command_preview, output, error, changed_files,
         started_at, completed_at, agent_definition_hash, agent_definition_schema_version,
-        agent_definition_snapshot, correlation_id, parent_run_id, resumed_from_interaction_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        agent_definition_snapshot, correlation_id, parent_run_id, resumed_from_interaction_id, policy_snapshot
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       runId,
       task.id,
@@ -1287,7 +1287,8 @@ async function executeTask(
       agentSnapshot.content,
       providerEventContext.correlationId,
       resumeContext?.parentRunId || reviewResumeRow?.resume_parent_run_id || null,
-      resumeContext?.interactionId || null
+      resumeContext?.interactionId || null,
+      JSON.stringify({ version: 1, workspaceProtectionMode: settings.workspaceProtectionMode, requireCommandApproval: settings.requireCommandApproval, maxRunSeconds: settings.maxRunSeconds, maxProjectParallel: settings.maxProjectParallel, monthlyCostBudgetUsd: settings.monthlyCostBudgetUsd, maxReviewBacklog: settings.maxReviewBacklog, maxUnreviewedDiffLines: settings.maxUnreviewedDiffLines })
     );
     if (resumeContext) {
       db.prepare(`

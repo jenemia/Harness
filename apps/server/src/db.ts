@@ -1554,6 +1554,7 @@ export function openProjectDb(projectPath: string) {
   ensureColumn(db, "approvals", "interaction_id", "TEXT");
   ensureColumn(db, "runs", "correlation_id", "TEXT");
   ensureColumn(db, "runs", "parent_run_id", "TEXT");
+  ensureColumn(db, "runs", "policy_snapshot", "TEXT");
   ensureColumn(db, "tasks", "project_goal_id", "TEXT");
   ensureColumn(db, "runs", "resumed_from_interaction_id", "TEXT");
   ensureColumn(db, "interactions", "response_key", "TEXT");
@@ -2955,7 +2956,8 @@ export function mapRun(row: unknown): RunRecord {
     resumedFromInteractionId: r.resumed_from_interaction_id ? String(r.resumed_from_interaction_id) : null,
     commitSha: r.commit_sha ? String(r.commit_sha) : null,
     commitParentSha: r.commit_parent_sha ? String(r.commit_parent_sha) : null,
-    providerSessionId: r.provider_session_id ? String(r.provider_session_id) : null
+    providerSessionId: r.provider_session_id ? String(r.provider_session_id) : null,
+    policySnapshot: r.policy_snapshot ? JSON.parse(String(r.policy_snapshot)) as Record<string, unknown> : null
   };
 }
 

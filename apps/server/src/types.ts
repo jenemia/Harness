@@ -548,6 +548,7 @@ export type RunRecord = {
   commitSha: string | null;
   commitParentSha: string | null;
   providerSessionId: string | null;
+  policySnapshot: Record<string, unknown> | null;
 };
 
 export type CodeReviewJobStatus = "queued" | "running" | "findings" | "clean" | "failed" | "blocked";
