@@ -286,6 +286,19 @@ export type ProjectGoalRecord = {
   updatedAt: string;
 };
 
+export type RoutineRecord = {
+  id: string;
+  title: string;
+  description: string;
+  intervalMinutes: number;
+  assigneeAgentId: string | null;
+  enabled: boolean;
+  catchUpPolicy: "skip" | "coalesce";
+  lastMaterializedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type GoalContextPacket = {
   projectGoal: ProjectGoalRecord | null;
   taskAncestry: Array<{ id: string; title: string; acceptanceCriteria: string }>;

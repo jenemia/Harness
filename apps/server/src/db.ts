@@ -44,6 +44,7 @@ import type {
   ProjectTemplateAgent,
   ProjectTemplateRecord,
   RunRecord,
+  RoutineRecord,
   RunFileReviewRecord,
   TaskRecord,
   TaskMoveDirection,
@@ -1081,6 +1082,19 @@ export function openProjectDb(projectPath: string) {
       description TEXT NOT NULL,
       acceptance_criteria TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS routines (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      interval_minutes INTEGER NOT NULL,
+      assignee_agent_id TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      catch_up_policy TEXT NOT NULL DEFAULT 'coalesce',
+      last_materialized_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -2778,6 +2792,11 @@ export function mapProjectGoal(row: unknown): ProjectGoalRecord {
     acceptanceCriteria: String(r.acceptance_criteria), status: r.status === "archived" ? "archived" : "active",
     createdAt: String(r.created_at), updatedAt: String(r.updated_at)
   };
+}
+
+export function mapRoutine(row: unknown): RoutineRecord {
+  const r = row as Record<string, string | number | null>;
+  return { id: String(r.id), title: String(r.title), description: String(r.description), intervalMinutes: Number(r.interval_minutes), assigneeAgentId: r.assignee_agent_id ? String(r.assignee_agent_id) : null, enabled: Number(r.enabled) === 1, catchUpPolicy: r.catch_up_policy === "skip" ? "skip" : "coalesce", lastMaterializedAt: r.last_materialized_at ? String(r.last_materialized_at) : null, createdAt: String(r.created_at), updatedAt: String(r.updated_at) };
 }
 
 export function mapDocument(row: unknown): DocumentRecord {
