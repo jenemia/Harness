@@ -113,28 +113,49 @@ export function RunPanel({ overview }: { overview: Overview }) {
       <span className="panel-count">
         {filteredRuns.length} / {overview.runs.length}
       </span>
-      <div className="compact-list">
-        {filteredRuns.slice(0, 8).map((run) => (
-          <div className="compact-row" key={run.id}>
-            <span className={`run-state ${run.status}`}>
-              {run.status === "completed" ? (
-                <CheckCircle2 size={14} />
-              ) : (
-                <Activity size={14} />
-              )}
-              {t(runStatusMessageKey(run.status))}
-            </span>
-            <span>{run.branchName || run.taskId.slice(0, 8)}</span>
-            <span>
-              {agentsById.get(run.agentId)?.name || run.agentId.slice(0, 8)}
-            </span>
-            {run.modelBackend && <span>{run.modelBackend}</span>}
-          </div>
-        ))}
-        {filteredRuns.length === 0 && (
-          <div className="compact-empty">{t("runs.noMatch")}</div>
-        )}
-      </div>
+      {filteredRuns.length === 0 ? (
+        <div className="compact-empty">{t("runs.noMatch")}</div>
+      ) : (
+        <div className="run-table-wrap">
+          <table className="run-table">
+            <thead>
+              <tr>
+                <th scope="col">{t("runs.column.status")}</th>
+                <th scope="col">{t("runs.column.task")}</th>
+                <th scope="col">{t("runs.column.agent")}</th>
+                <th scope="col">{t("runs.column.model")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRuns.slice(0, 8).map((run) => (
+                <tr key={run.id}>
+                  <td>
+                    <span className={`run-state ${run.status}`}>
+                      {run.status === "completed" ? (
+                        <CheckCircle2 size={14} />
+                      ) : (
+                        <Activity size={14} />
+                      )}
+                      {t(runStatusMessageKey(run.status))}
+                    </span>
+                  </td>
+                  <td title={run.branchName || run.taskId}>
+                    {run.branchName || run.taskId.slice(0, 8)}
+                  </td>
+                  <td
+                    title={agentsById.get(run.agentId)?.name || run.agentId}
+                  >
+                    {agentsById.get(run.agentId)?.name || run.agentId.slice(0, 8)}
+                  </td>
+                  <td title={run.modelBackend || "-"}>
+                    {run.modelBackend || "-"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

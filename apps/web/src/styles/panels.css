@@ -588,19 +588,52 @@ textarea {
 .instruction-rename-row input { flex: 1 1 180px; }
 .danger { color: #a3312b; }
 
-.compact-row {
-  justify-content: space-between;
-  min-height: 30px;
-  color: #44546f;
-  font-size: 12px;
+.run-table-wrap {
+  overflow-x: auto;
 }
 
-.compact-row > span {
+.run-table {
+  border-collapse: collapse;
+  color: #44546f;
+  font-size: 12px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.run-table th,
+.run-table td {
   min-width: 0;
   overflow: hidden;
+  padding: 9px 8px;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.run-table th {
+  border-bottom: 1px solid #dfe3eb;
+  color: #626f86;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.run-table td {
+  border-bottom: 1px solid #eef0f4;
+}
+
+.run-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.run-table tbody tr:hover {
+  background: #f7f9fc;
+}
+
+.run-table th:nth-child(1) { width: 25%; }
+.run-table th:nth-child(2) { width: 29%; }
+.run-table th:nth-child(3) { width: 25%; }
+.run-table th:nth-child(4) { width: 21%; }
 
 .compact-empty {
   border: 1px dashed #d0d4dc;
