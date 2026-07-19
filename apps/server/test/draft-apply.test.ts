@@ -37,7 +37,7 @@ test("draft apply proposes structured changes, requires approval, preserves ques
       snapshot.requests.filter((request) => request.revision === 1 && request.status === "pending").length === 2
     );
     const planningRequest = ready.requests.find((request) =>
-      ready.reviewers.find((reviewer) => reviewer.id === request.reviewerId)?.role === "planning-reviewer"
+      ready.reviewers.find((reviewer) => reviewer.id === request.reviewerId)?.role === "planner"
     );
     const edgeRequest = ready.requests.find((request) =>
       ready.reviewers.find((reviewer) => reviewer.id === request.reviewerId)?.role === "edge-case-reviewer"
@@ -59,7 +59,7 @@ test("draft apply proposes structured changes, requires approval, preserves ques
     });
     createDraftReply(project, draftId, {
       parentCommentId: planning.comments[1].id,
-      body: "@planning-reviewer 첫 버전은 CSV만 지원합니다.",
+      body: "@planner 첫 버전은 CSV만 지원합니다.",
       idempotencyKey: "format-answer"
     }, scheduling);
 

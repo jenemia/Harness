@@ -121,11 +121,7 @@ function buildPlanningReview(content: string) {
         "고정 체크리스트 문구를 `구현 방향`, `사이드 이펙트`, `보완할 명세`로 구성된 구조화된 검토 결과로 교체하고, 일감 본문의 대상·동작·제약을 각 항목에 반영합니다.",
         "기존 댓글 상태, 재검토, 최신 계획안 적용 흐름은 유지한 채 대표 일감으로 결과 형식과 중복 생성 방지를 검증합니다."
       ]
-    : [
-        "관련 기능의 진입점, 데이터 흐름, 기존 계약을 확인해 실제 변경 지점을 확정합니다.",
-        "변경을 작은 구현 단위로 나누고, 각 단위가 현재 동작과 호환되는지 확인합니다.",
-        "대표 성공 경로와 실패 경로를 테스트로 고정해 배포 전 회귀를 확인합니다."
-      ];
+    : implementationDirection(content);
   const risks = [
     isReviewFlow
       ? "검토 문구의 형식이나 길이를 바꾸면 최신 계획안 적용, 댓글 중복 제거, UI 줄바꿈 표시가 깨질 수 있습니다. 기존 소비 경로와 이전 댓글을 함께 확인하세요."
@@ -151,6 +147,24 @@ function buildPlanningReview(content: string) {
     "보완할 내용",
     ...missing.map((item) => `- ${item}`)
   ].join("\n");
+}
+
+function implementationDirection(content: string) {
+  const subject = content.replace(/\s+/g, " ").trim().slice(0, 120) || "요청한 기능";
+  const directions: string[] = [
+    `“${subject}”의 현재 진입점과 호출 흐름을 확인해 변경 대상 모듈과 기존 계약을 확정합니다.`
+  ];
+  if (/(ui|ux|화면|버튼|모달|폼|페이지|웹|frontend|front-end)/i.test(content)) {
+    directions.push("UI 상태·입력 검증·로딩/오류 표시를 함께 설계하고, 기존 화면 흐름을 깨지 않도록 컴포넌트와 API 계약을 맞춥니다.");
+  } else if (/(api|서버|backend|back-end|엔드포인트|db|데이터베이스|저장|migration)/i.test(content)) {
+    directions.push("요청/응답 및 저장 모델의 변경을 먼저 정의한 뒤, 검증·권한·마이그레이션을 포함해 서버 경계를 구현합니다.");
+  } else if (/(테스트|test|버그|오류|에러|fix|수정)/i.test(content)) {
+    directions.push("문제를 재현하는 최소 사례를 먼저 고정하고, 원인 경로를 수정한 뒤 성공·실패·회귀 사례를 테스트에 추가합니다.");
+  } else {
+    directions.push("변경을 데이터/도메인 처리, 외부 인터페이스, 검증의 작은 단위로 나누고 각 단위의 입력과 출력을 명확히 합니다.");
+  }
+  directions.push("수정 전후의 대표 사용 흐름과 실패 경로를 자동 테스트 또는 재현 가능한 수동 절차로 검증합니다.");
+  return directions;
 }
 
 function abortableDelay(ms: number, signal: AbortSignal) {

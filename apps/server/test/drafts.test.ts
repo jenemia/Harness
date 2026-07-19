@@ -219,6 +219,28 @@ test("draft edits do not start Planner reviews until explicitly requested", () =
   }
 });
 
+test("new draft sessions attach the content review to the project's Planner agent", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-default-planner-review-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  let projectPath = "";
+  let draftId = "";
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: true });
+    projectPath = project.path;
+    const created = createDraftSession(project, { content: "새 일감" });
+    draftId = created.session.id;
+    const planner = created.reviewers.find((reviewer) => reviewer.role === "planner");
+    assert.ok(planner?.agentId);
+    assert.equal(requestDraftReview(project, draftId, { debounceMs: 60_000 }).requests.length, 1);
+  } finally {
+    if (projectPath) cancelDraftReviewTimers(projectPath, draftId || undefined);
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("empty drafts cannot request a Planner review", () => {
   const root = mkdtempSync(path.join(tmpdir(), "harness-empty-draft-review-"));
   const previousHome = process.env.HARNESS_HOME;

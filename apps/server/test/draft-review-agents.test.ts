@@ -36,10 +36,11 @@ test("local draft reviewer agents stream progress, stop, retry, and answer user 
     assert.ok(snapshot.events.some((event) => event.type === "draft.review.progress"));
     assert.ok(snapshot.comments.some((comment) => comment.kind === "question"));
     assert.ok(snapshot.comments.some((comment) => comment.kind === "risk"));
-    const plannerReview = snapshot.comments.find((comment) => comment.reviewerId === snapshot.reviewers.find((reviewer) => reviewer.role === "planning-reviewer")?.id);
+    const plannerReview = snapshot.comments.find((comment) => comment.reviewerId === snapshot.reviewers.find((reviewer) => reviewer.role === "planner")?.id);
     assert.match(plannerReview?.body || "", /구현 방향/);
     assert.match(plannerReview?.body || "", /사이드 이펙트/);
     assert.match(plannerReview?.body || "", /보완할 내용/);
+    assert.match(plannerReview?.body || "", /요청\/응답 및 저장 모델/);
     assert.doesNotMatch(plannerReview?.body || "", /작업 범위, 제외 범위, 의존성, 담당 역할을 구분하면/);
 
     const revision2 = updateDraftRevision(project, draftId, {
