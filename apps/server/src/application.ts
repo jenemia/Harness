@@ -61,6 +61,7 @@ import {
   createMemoryService,
   createTaskCommentService,
   createTaskService,
+  deleteCompletedTasksService,
   deleteTaskService,
   decomposeTaskService,
   getDocumentService,
@@ -568,6 +569,11 @@ async function invokeApplicationCommandInner<C extends HarnessCommand>(
       const project = requiredProject(value.projectId);
       if (isTaskExecutionActive(value.taskId)) throw new Error("Stop or finish the active task run before deleting the task.");
       return { result: await deleteTaskService(project, value.taskId), overview: getProjectOverview(project) };
+    }
+    case "tasks:delete-completed": {
+      const value = input(payload) as HarnessCommandInputs["tasks:delete-completed"];
+      const project = requiredProject(value.projectId);
+      return { result: await deleteCompletedTasksService(project), overview: getProjectOverview(project) };
     }
     case "tasks:update": {
       const value = input(payload) as HarnessCommandInputs["tasks:update"];

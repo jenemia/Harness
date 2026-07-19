@@ -559,6 +559,11 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (req.method === "DELETE" && childPath === "tasks/completed") {
+        sendJson(res, await invokeApplicationCommand("tasks:delete-completed", { projectId: project.id }));
+        return;
+      }
+
       const taskActionMatch = childPath.match(/^tasks\/([^/]+)(?:\/([^/]+))?$/);
       if (taskActionMatch) {
         const taskId = taskActionMatch[1];

@@ -24,6 +24,8 @@ export const taskService = {
     })),
   remove: (projectId: string, taskId: string) => desktopOrHttp("tasks:delete", { projectId, taskId }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" })),
+  removeCompleted: (projectId: string) => desktopOrHttp("tasks:delete-completed", { projectId }, () =>
+    api(`/api/projects/${projectId}/tasks/completed`, { method: "DELETE" })),
   update: (projectId: string, taskId: string, payload: Partial<Task>) => desktopOrHttp("tasks:update", { projectId, taskId, payload }, () =>
     api(`/api/projects/${projectId}/tasks/${taskId}`, {
       method: "PATCH",

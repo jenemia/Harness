@@ -14,3 +14,15 @@ test("task detail drawer exposes a confirmed delete action", () => {
   assert.match(service, /desktopOrHttp\("tasks:delete"/);
   assert.match(service, /method: "DELETE"/);
 });
+
+test("board exposes a confirmed completed-task deletion action", () => {
+  const root = path.resolve(process.cwd());
+  const app = readFileSync(path.join(root, "src/app/AppView.tsx"), "utf8");
+  const service = readFileSync(path.join(root, "src/services/taskService.ts"), "utf8");
+
+  assert.match(app, /column === "Done"/);
+  assert.match(app, /window\.confirm\(t\("board\.deleteCompletedConfirm"/);
+  assert.match(app, /taskService\.removeCompleted/);
+  assert.match(service, /desktopOrHttp\("tasks:delete-completed"/);
+  assert.match(service, /tasks\/completed/);
+});

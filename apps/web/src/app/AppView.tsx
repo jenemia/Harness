@@ -1,4 +1,4 @@
-import { BrainCircuit, FolderOpen, MessageCircle, Play, Plus, RefreshCcw, Wifi } from "lucide-react";
+import { BrainCircuit, FolderOpen, MessageCircle, Play, Plus, RefreshCcw, Trash2, Wifi } from "lucide-react";
 import { lazy, startTransition, Suspense, useEffect, useState } from "react";
 import { ScheduleResultLine } from "../features/activity/ScheduleResultLine";
 import { AgentSidebarList } from "../features/agents/AgentSidebarList";
@@ -10,6 +10,7 @@ import { ModelSelectionPanel } from "../features/settings/ModelSelectionPanel";
 import { TaskCardSettingsPanel } from "../features/settings/TaskCardSettingsPanel";
 import { taskStatuses } from "../shared/taskStatus";
 import { formatActiveModelLabel } from "../shared/providerCommands";
+import { taskService } from "../services/taskService";
 import { AppNavigation } from "./AppNavigation";
 import type { AppController } from "./useAppController";
 
@@ -102,6 +103,16 @@ export function AppView({ controller }: { controller: AppController }) {
   const activeModelLabel = overview
     ? formatActiveModelLabel(overview.settings, providerCatalog)
     : null;
+  const completedTaskCount = overview?.tasks.filter((task) => task.status === "Done").length || 0;
+
+  async function deleteCompletedTasks() {
+    if (!overview || completedTaskCount === 0) return;
+    if (!window.confirm(t("board.deleteCompletedConfirm", { count: completedTaskCount }))) return;
+    await runAction(async () => {
+      await taskService.removeCompleted(overview.project.id);
+      await refreshOverview();
+    });
+  }
 
   return (
     <div className="app-shell">
@@ -251,6 +262,17 @@ export function AppView({ controller }: { controller: AppController }) {
                         >
                           <div className="column-header">
                             <span>{t(statusMessageKey(column))}</span>
+                            {column === "Done" && (
+                              <button
+                                aria-label={t("board.deleteCompleted")}
+                                className="icon-button small"
+                                type="button"
+                                disabled={completedTaskCount === 0}
+                                onClick={() => void deleteCompletedTasks()}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
                             <b>
                               {
                                 (visibleTasksByStatus.get(column) || []).length

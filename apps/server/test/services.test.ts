@@ -13,6 +13,7 @@ import {
   createMemoryService,
   createTaskCommentService,
   createTaskService,
+  deleteCompletedTasksService,
   deleteTaskService,
   decomposeTaskService,
   registerProjectService,
@@ -191,6 +192,28 @@ test("task deletion removes task history and clears parent and dependency refere
     assert.equal(deletionDb.prepare("SELECT id FROM approvals WHERE id = ?").get(approvalId), undefined);
     deletionDb.close();
     await assert.rejects(deleteTaskService(project, target.id), /Task not found/);
+  } finally {
+    if (previousHome === undefined) delete process.env.HARNESS_HOME;
+    else process.env.HARNESS_HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("completed task deletion removes all Done tasks while preserving other statuses", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "harness-delete-completed-"));
+  const previousHome = process.env.HARNESS_HOME;
+  process.env.HARNESS_HOME = path.join(root, "home");
+  try {
+    const { project } = registerProjectService({ path: path.join(root, "project"), seedDefaults: false });
+    const doneOne = createTaskService(project, { title: "Done one", status: "Done", autoAssign: false, workspaceMode: "harness" });
+    const doneTwo = createTaskService(project, { title: "Done two", status: "Done", autoAssign: false, workspaceMode: "harness" });
+    const active = createTaskService(project, { title: "Keep me", status: "Selected", dependencyTaskIds: [doneOne.id, doneTwo.id], autoAssign: false, workspaceMode: "harness" });
+
+    assert.deepEqual(await deleteCompletedTasksService(project), { removedCount: 2, taskIds: [doneOne.id, doneTwo.id] });
+    const overview = getProjectOverview(project);
+    assert.deepEqual(overview.tasks.map((task) => task.id), [active.id]);
+    assert.deepEqual(overview.tasks[0].dependencyTaskIds, []);
+    assert.deepEqual(await deleteCompletedTasksService(project), { removedCount: 0, taskIds: [] });
   } finally {
     if (previousHome === undefined) delete process.env.HARNESS_HOME;
     else process.env.HARNESS_HOME = previousHome;
