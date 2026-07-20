@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildLineDiff, parseAgentMarkdownDraft, updateAgentMarkdownDraft } from "../src/features/agents/agentMarkdownDraft.js";
-import { connectedAgentModels } from "../src/features/agents/agentModelOptions.js";
+import { connectedAgentModelChoices, connectedAgentModels, selectedAgentModelChoice } from "../src/features/agents/agentModelOptions.js";
 import type { Overview, ProviderCatalog } from "../src/api/contracts.js";
 import { messages } from "../src/i18n/messages.js";
 import { defaultLocale, resolveSupportedLocale } from "../src/i18n/provider.js";
@@ -95,6 +95,23 @@ test("connected model options include authenticated or configured providers only
     { id: "configured", label: "Configured" },
     { id: "defaulted", label: "Defaulted" },
   ]);
+});
+
+test("agent model choices expand installed Ollama models and retain Codex variants", () => {
+  const catalog = {
+    llmProviders: [
+      { id: "codex-5.6-terra", label: "Codex · GPT-5.6 Terra", authenticationStatus: { authenticated: true } },
+      { id: "ollama", label: "Ollama", authenticationStatus: { authenticated: true }, ollamaStatus: { models: [{ name: "qwen3:8b" }] } },
+    ],
+    providerCommandKeys: { examples: [] },
+  } as unknown as ProviderCatalog;
+  const settings = { providerCommands: {} } as unknown as Overview["settings"];
+  const choices = connectedAgentModelChoices(catalog, settings);
+  assert.deepEqual(choices, [
+    { id: "codex-5.6-terra", label: "Codex · GPT-5.6 Terra", modelBackend: "codex-5.6-terra", cliCommand: null },
+    { id: "ollama:qwen3:8b", label: "Ollama · qwen3:8b", modelBackend: "ollama", cliCommand: "ollama run \"qwen3:8b\" < \"$HARNESS_PROMPT_FILE\"" },
+  ]);
+  assert.equal(selectedAgentModelChoice("ollama", choices[1].cliCommand, choices)?.id, "ollama:qwen3:8b");
 });
 
 test("invalid raw Markdown reports a structured parse location instead of mutating the form", () => {

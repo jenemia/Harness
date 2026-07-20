@@ -4,7 +4,7 @@ import type { Agent, AgentTemplate, Overview, ProviderCatalog } from "../../api/
 import { agentService, type AgentDocumentBundle } from "../../services/agentService";
 import { serverTokenLabel, useI18n } from "../../i18n";
 import { AgentMarkdownEditor } from "./AgentMarkdownEditor";
-import { connectedAgentModels } from "./agentModelOptions";
+import { connectedAgentModelChoices, selectedAgentModelChoice } from "./agentModelOptions";
 
 export function AgentPanel(props: {
   overview: Overview;
@@ -33,7 +33,7 @@ export function AgentPanel(props: {
   const [maxParallel, setMaxParallel] = useState(props.overview.settings.defaultAgentMaxParallel);
   const [enabled, setEnabled] = useState(true);
   const connectedModels = useMemo(
-    () => connectedAgentModels(props.providerCatalog, props.overview.settings),
+    () => connectedAgentModelChoices(props.providerCatalog, props.overview.settings),
     [props.providerCatalog, props.overview.settings],
   );
 
@@ -70,8 +70,9 @@ export function AgentPanel(props: {
     setMobileDetail(true);
     setName(""); setRole("worker"); setPersona(""); setCliCommand("");
     setCapabilitiesText(""); setAllowedToolsText(""); setBoundaries("");
-    setModelBackend(connectedModels.some((model) => model.id === props.overview.settings.defaultModelBackend)
-      ? props.overview.settings.defaultModelBackend : connectedModels[0]?.id || "mock");
+    const defaultChoice = connectedModels.find((model) => model.modelBackend === props.overview.settings.defaultModelBackend) || connectedModels[0];
+    setModelBackend(defaultChoice?.modelBackend || "mock");
+    setCliCommand(defaultChoice?.cliCommand || "");
     setMaxParallel(props.overview.settings.defaultAgentMaxParallel); setEnabled(true);
   }
 
@@ -133,7 +134,7 @@ export function AgentPanel(props: {
           <header><div><span className="modal-kicker">{t("agents.new")}</span><h2>{t("agents.createTitle")}</h2></div><button className="icon-button" type="button" onClick={() => { setCreating(false); setMobileDetail(false); }}><X size={16} /></button></header>
           <select value="" onChange={(event) => applyTemplate(event.target.value)}><option value="">{t("agents.applyTemplate")}</option>{props.templates.map((template) => <option key={template.id} value={template.id}>{template.name} · {serverTokenLabel(template.role, locale)}</option>)}</select>
           <div className="agent-form-grid"><input required value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.name")} /><select value={role} onChange={(event) => setRole(event.target.value)}><option value="worker">{serverTokenLabel("worker", locale)}</option><option value="programmer">{serverTokenLabel("programmer", locale)}</option><option value="reviewer">{serverTokenLabel("reviewer", locale)}</option><option value="code-reviewer">{serverTokenLabel("code-reviewer", locale)}</option><option value="project-manager">{serverTokenLabel("project-manager", locale)}</option></select></div>
-          <select value={modelBackend} onChange={(event) => setModelBackend(event.target.value)}>{connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
+          <select value={selectedAgentModelChoice(modelBackend, cliCommand, connectedModels)?.id || ""} onChange={(event) => { const choice = connectedModels.find((model) => model.id === event.target.value); if (choice) { setModelBackend(choice.modelBackend); setCliCommand(choice.cliCommand || ""); } }}>{!selectedAgentModelChoice(modelBackend, cliCommand, connectedModels) && <option value="">{modelBackend}</option>}{connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select>
           <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.persona")} />
           <details><summary>{t("agents.advanced")}</summary><div className="stack-form"><input aria-label={t("agents.maxParallel")} type="number" min={1} max={8} value={maxParallel} onChange={(event) => setMaxParallel(Math.max(1, Number(event.target.value || 1)))} /><label className="checkbox-row"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>{t("agents.enabled")}</span></label><input value={capabilitiesText} onChange={(event) => setCapabilitiesText(event.target.value)} placeholder={t("agents.capabilities")} /><input value={allowedToolsText} onChange={(event) => setAllowedToolsText(event.target.value)} placeholder={t("agents.allowedTools")} /><textarea value={boundaries} onChange={(event) => setBoundaries(event.target.value)} placeholder={t("agents.boundaries")} /><input value={cliCommand} onChange={(event) => setCliCommand(event.target.value)} placeholder={t("agents.cliCommand")} /></div></details>
           <div className="agent-create-actions"><button className="secondary-button" type="button" disabled={!name.trim()} onClick={() => void saveTemplate()}><FileText size={16} />{t("agents.saveTemplate")}</button><button className="primary-button" type="submit" disabled={!name.trim() || !connectedModels.length}><Plus size={16} />{t("agents.create")}</button></div>

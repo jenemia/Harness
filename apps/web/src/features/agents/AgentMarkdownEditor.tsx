@@ -4,7 +4,7 @@ import type { Agent, Overview, ProviderCatalog } from "../../api/contracts";
 import { serverTokenLabel, statusMessageKey, useI18n, type MessageKey } from "../../i18n";
 import { agentService, type AgentDocumentBundle, type AgentInstructionDocument } from "../../services/agentService";
 import { buildLineDiff, parseAgentMarkdownDraft, type ParsedAgentMarkdownDraft, updateAgentMarkdownDraft } from "./agentMarkdownDraft";
-import { connectedAgentModels, modelIsConnected } from "./agentModelOptions";
+import { connectedAgentModelChoices, selectedAgentModelChoice } from "./agentModelOptions";
 
 type ValidationState = { status: "idle" | "pending" | "valid" | "invalid"; message: string };
 export function AgentMarkdownEditor(props: {
@@ -49,8 +49,18 @@ export function AgentMarkdownEditor(props: {
   const assignedOpenTasks = props.overview.tasks.filter((task) => task.assigneeAgentId === agentId && task.status !== "Done");
   const replacementAgents = props.overview.agents.filter((agent) => agent.id !== agentId && !agent.archivedAt && agent.enabled);
   const liveAgent = props.overview.agents.find((agent) => agent.id === agentId) || props.bundle.agent;
-  const connectedModels = connectedAgentModels(props.providerCatalog, props.overview.settings);
-  const currentModelConnected = modelIsConnected(parsed.value?.modelBackend || props.bundle.agent.modelBackend, props.providerCatalog, props.overview.settings);
+  const connectedModels = connectedAgentModelChoices(props.providerCatalog, props.overview.settings);
+  const selectedModel = selectedAgentModelChoice(
+    parsed.value?.modelBackend || props.bundle.agent.modelBackend,
+    parsed.value ? parsed.value.cliCommand : props.bundle.agent.cliCommand,
+    connectedModels,
+  );
+  const currentModelConnected = Boolean(selectedModel);
+
+  function selectModel(choiceId: string) {
+    const choice = connectedModels.find((model) => model.id === choiceId);
+    if (choice) updateStructured({ modelBackend: choice.modelBackend, cliCommand: choice.cliCommand || "" });
+  }
 
   useEffect(() => {
     props.onDirtyChange(dirty);
@@ -317,8 +327,8 @@ export function AgentMarkdownEditor(props: {
       </header>
 
       <section className="agent-primary-editor">
-        <label><span>{t("agents.model")}</span><select aria-label={t("agents.connectedModel")} value={parsed.value?.modelBackend || props.bundle.agent.modelBackend} disabled={!parsed.value || connectedModels.length === 0} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>
-          {!currentModelConnected && <option value={parsed.value?.modelBackend || props.bundle.agent.modelBackend}>{parsed.value?.modelBackend || props.bundle.agent.modelBackend} · {t("agents.disconnected")}</option>}
+        <label><span>{t("agents.model")}</span><select aria-label={t("agents.connectedModel")} value={selectedModel?.id || ""} disabled={!parsed.value || connectedModels.length === 0} onChange={(event) => selectModel(event.target.value)}>
+          {!currentModelConnected && <option value="">{parsed.value?.modelBackend || props.bundle.agent.modelBackend} · {t("agents.disconnected")}</option>}
           {connectedModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
         </select>{!currentModelConnected && <small className="agent-model-warning">{t("agents.disconnectedModelWarning")}</small>}</label>
         <label><span>{t("agents.personaLabel")}</span><textarea className="agent-main-textarea" aria-label={t("agents.personaEditor")} value={parsed.value?.persona || ""} disabled={!parsed.value} onChange={(event) => updateStructured({ persona: event.target.value })} placeholder={t("agents.personaPlaceholder")} /></label>
@@ -364,7 +374,7 @@ export function AgentMarkdownEditor(props: {
           <select aria-label={t("agents.editorRole")} value={parsed.value?.role || "worker"} disabled={!parsed.value} onChange={(event) => updateStructured({ role: event.target.value })}>
             <option value="worker">{serverTokenLabel("worker", locale)}</option><option value="programmer">{serverTokenLabel("programmer", locale)}</option><option value="reviewer">{serverTokenLabel("reviewer", locale)}</option><option value="code-reviewer">{serverTokenLabel("code-reviewer", locale)}</option><option value="project-manager">{serverTokenLabel("project-manager", locale)}</option>
           </select>
-          <select aria-label={t("agents.editorProvider")} value={parsed.value?.modelBackend || "mock"} disabled={!parsed.value} onChange={(event) => updateStructured({ modelBackend: event.target.value })}>{!currentModelConnected && <option value={parsed.value?.modelBackend || "mock"}>{parsed.value?.modelBackend || "mock"} · {t("agents.disconnected")}</option>}{connectedModels.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select>
+          <select aria-label={t("agents.editorProvider")} value={selectedModel?.id || ""} disabled={!parsed.value} onChange={(event) => selectModel(event.target.value)}>{!currentModelConnected && <option value="">{parsed.value?.modelBackend || "mock"} · {t("agents.disconnected")}</option>}{connectedModels.map((provider) => <option key={provider.id} value={provider.id}>{provider.label}</option>)}</select>
           <input aria-label={t("agents.maxParallel")} type="number" min={1} max={8} value={parsed.value?.maxParallel || 1} disabled={!parsed.value} onChange={(event) => updateStructured({ maxParallel: Math.max(1, Number(event.target.value || 1)) })} />
           <label className="checkbox-row"><input type="checkbox" checked={parsed.value?.enabled || false} disabled={!parsed.value} onChange={(event) => updateStructured({ enabled: event.target.checked })} /><span>{t("agents.enabled")}</span></label>
           {(parsed.value?.role === "code-reviewer" || parsed.value?.capabilities.includes("autoreview")) && (() => {
